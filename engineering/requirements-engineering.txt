@@ -1,0 +1,16 @@
+# Optional dependencies for engineering scripts (metasurface routing + inverse design).
+# Core repo only needs: numpy (see ../requirements.txt).
+
+numpy>=1.20.0
+
+# QUBO routing (routing_qubo_qaoa.py) — Qiskit 2.x + qiskit-optimization 0.7
+qiskit>=2.0
+qiskit-optimization>=0.7.0
+hashable-list>=0.2.0
+ordered-set>=4.0.0
+
+# Optional: run QAOA on real IBM Quantum hardware (python routing_qubo_qaoa.py --hardware)
+# qiskit-ibm-runtime
+
+# Inverse design (metasurface_inverse_net.py)
+torch>=1.9.0

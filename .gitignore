@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+.venv/
+venv/
+.env
+
+# Engineering run outputs (user-specific)
+engineering/*.json
+engineering/*_phases.npy
