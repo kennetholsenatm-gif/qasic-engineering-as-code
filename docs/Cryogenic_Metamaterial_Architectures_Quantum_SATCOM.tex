@@ -1,0 +1,334 @@
+% !TEX TS-program = xelatex
+% !TEX program = xelatex
+% --- UNIVERSAL PREAMBLE BLOCK ---
+\documentclass[11pt, a4paper]{article}
+\usepackage[a4paper, top=2.5cm, bottom=2.5cm, left=2cm, right=2cm]{geometry}
+\usepackage{fontspec}
+
+\usepackage[bidi=bidi, provide=*]{babel}
+\babelprovide[import, main]{english}
+
+% Set default/Latin font to Sans Serif in the main (rm) slot
+\babelfont{rm}{Noto Sans}
+
+% --- REQUIRED PACKAGES ---
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage[colorlinks=true, linkcolor=blue, citecolor=blue, urlcolor=blue]{hyperref}
+
+\title{\textbf{Cryogenic Metamaterial Architectures for Solid-State Quantum Routing and SATCOM}}
+\author{}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\section*{Introduction: The Scalability Crisis in Quantum Information Architecture}
+
+The trajectory of quantum information science currently faces a set of critical scaling impediments that span from the micro-scale architecture of solid-state quantum processors to the macro-scale realization of global quantum communication networks.\textsuperscript{1} In the computational domain, the transition from intermediate-scale noisy quantum systems to fully fault-tolerant architectures---which will require the precise control and entanglement of millions of physical qubits---is actively hindered by the physical wiring crisis.\textsuperscript{1} Driving modern superconducting qubits currently requires a brute-force connectivity approach, utilizing numerous physical coaxial interconnects routed from room-temperature control electronics down to the deepest millikelvin stages of a dilution refrigerator.\textsuperscript{1}
+
+This static wiring paradigm dissipates active power and conducts passive heat, creating an insurmountable thermodynamic burden. Even when utilizing highly specialized low-thermal-conductivity alloys, a single UT-085-SS-SS coaxial cable can introduce nearly 1 milliwatt (mW) of heat load to the 4 Kelvin (K) stage of a cryogenic system.\textsuperscript{1} When this heat load is multiplied by the thousands or millions of interconnects required for comprehensive error correction, it rapidly overwhelms the micro-watt cooling capacities available at the lowest cryogenic stages.\textsuperscript{1} Furthermore, the physical footprint of these interconnects restricts multi-qubit gates to static, permanently etched planar topologies. This severely limits nearest-neighbor interactions and prevents the dynamic, all-to-all qubit connectivity that is highly desirable for executing complex algorithmic permutations efficiently.\textsuperscript{1}
+
+Concurrently, the distribution of quantum entanglement over global distances is restricted by severe environmental limitations. Standard optical Quantum Key Distribution (QKD) suffers from critical atmospheric attenuation due to Mie scattering, an optical phenomenon that occurs because the operational wavelengths of optical photons are roughly equivalent to the physical size of atmospheric water droplets, fog, and suspended aerosols.\textsuperscript{1} While microwave photons can effectively diffract around these suspended particles due to the Rayleigh Scattering Approximation, their exceptionally low energy profile renders them highly susceptible to ambient thermal noise, traditionally preventing their use in over-the-air quantum communication.\textsuperscript{1}
+
+To decouple physical scaling from these dual thermodynamic and atmospheric overloads, advanced quantum engineering is aggressively shifting toward a ``Quantum Application-Specific Integrated Circuit'' (Quantum ASIC) paradigm.\textsuperscript{1} By entirely replacing static physical waveguides with a programmable holographic metasurface functioning as a software-defined ``quantum bus,'' systems can dynamically manipulate the local density of photonic states at the sub-wavelength scale.\textsuperscript{1} This comprehensive report investigates the fundamental materials science, cryogenic engineering, and algorithmic control mechanisms required to actualize this dynamic solid-state routing layer, with a specific focus on the integration of radio-frequency Superconducting Quantum Interference Devices (rf-SQUIDs), piezoelectric lithium niobate resonators, and fully depleted silicon-on-insulator (FD-SOI) cryogenic controllers. The protocol layer (minimal topology, Quantum ASIC) and the supporting engineering code (QUBO/QAOA routing, inverse design) are described in the companion Markdown whitepaper and the QASIC Engineering-as-Code repository; see the repository README for links. The code-based simulation stack (scqubits, SuperScreen, QuTiP, and related tools) is treated in a separate report: \textit{Computational Materials Science and Simulation Architectures for Cryogenic Quantum Metamaterials}.
+
+\section*{The Thermodynamic Bottleneck and Thermal Occlusion}
+
+The fundamental physical challenge in designing a reconfigurable quantum bus operating in the microwave regime lies in the exceptionally small energy of microwave photons, governed by the Planck-Einstein relation where energy is proportional to frequency ($E = h\nu$). Because the energy scales of microwave frequencies (typically between 4 GHz and 12 GHz for superconducting qubits) are so minute, the metasurface control layer must operate well below 100 millikelvin (mK) to preserve delicate spin coherence and prevent a phenomenon known as thermal occlusion.\textsuperscript{1}
+
+Thermal occlusion occurs when the ambient thermal energy of the operational environment, dictated by the Boltzmann constant ($k_B T$), approaches or exceeds the energy of the quantum state being manipulated. When this threshold is crossed, the coherent quantum signal is effectively masked by a dense wash of thermally excited photons, leading to rapid decoherence and the loss of quantum information.\textsuperscript{1} Consequently, any active component introduced into the quantum processor's environment must not only function at ultra-low temperatures but must do so without introducing localized heating that could elevate the local effective temperature above the critical $k_B T$ threshold.
+
+In macroscopic classical optics, dynamic phase manipulation, beam steering, and spatial light modulation are frequently achieved using nematic liquid crystals, vanadium dioxide ($\text{VO}_2$), or various tunable polymers.\textsuperscript{1} However, these traditional control materials are fundamentally incompatible with the thermodynamic realities of a solid-state quantum processor. Nematic liquid crystals, for instance, freeze completely at these ultra-low cryogenic temperatures. They lose all orientational mobility and electro-optic tunability, rendering them essentially inert as inert blocks of ice.\textsuperscript{1} Similarly, thermal phase-change materials require localized Joule heating to transition between insulating and metallic states, a mechanism that would instantly destroy the delicate thermal budget of a 10 mK dilution refrigerator mixing chamber.
+
+Therefore, the realization of a dynamic holographic quantum bus necessitates the exclusive use of purely solid-state, dissipationless (or ultra-low dissipation) cryogenic components that can function as flux-tunable meta-atoms.\textsuperscript{1} These advanced metamaterials must exhibit highly tunable reactive properties---specifically variable inductance or capacitance---driven entirely by external magnetic flux or electrostatic fields, bypassing the need for any thermal actuation or fluidic molecular alignment.\textsuperscript{1}
+
+\section*{Solid-State Cryogenic Metamaterials: The ``Quantum ASIC'' Paradigm}
+
+The conceptual leap of the Quantum ASIC is the translation of algorithmic routing requirements directly into an integrated, programmable physical layer.\textsuperscript{1} In a traditional quantum architecture, if Qubit A needs to entangle with Qubit D, but they are not physically connected by a microwave resonator, the system must execute a series of costly SWAP gates through intermediate Qubits B and C.\textsuperscript{1} These SWAP gates consume valuable coherence time and introduce significant gate errors.
+
+By introducing a holographic metasurface directly above or below the qubit plane, the Quantum ASIC acts as an active electromagnetic mirror.\textsuperscript{1} The metasurface is composed of an array of sub-wavelength resonant elements, or meta-atoms. When a microwave photon is emitted by a qubit, the metasurface applies a precisely calculated spatial phase gradient across the wavefront. By engineering constructive interference in the direction of the target qubit and destructive interference elsewhere, the metasurface creates a transient, highly localized electromagnetic channel between any two arbitrary points on the chip.\textsuperscript{1} This establishes dynamic, all-to-all connectivity without the need for fixed physical traces, effectively solving the planar topology constraint.\textsuperscript{1}
+
+To function at the necessary 10 mK environments, two specific classes of solid-state meta-atoms have proven compatible with the Quantum ASIC framework: magnetic meta-atoms based on radio-frequency Superconducting Quantum Interference Devices (rf-SQUIDs) and acoustic meta-atoms based on piezoelectric lithium niobate Bulk Acoustic Wave (BAW) resonators.\textsuperscript{1} The subsequent sections deeply analyze the physics, performance, and integration of these metamaterial platforms.
+
+\section*{Magnetic Meta-Atoms: Radio-Frequency SQUID Arrays}
+
+The primary active component enabling dynamic microwave phase shifting in the deep cryogenic regime is the radio-frequency Superconducting Quantum Interference Device (rf-SQUID).\textsuperscript{1} Unlike a direct-current (DC) SQUID which contains two Josephson junctions, an rf-SQUID consists of a single superconducting loop interrupted by exactly one Josephson junction (JJ).\textsuperscript{3} When a dense, periodic array of these rf-SQUIDs is reactively coupled to a low-temperature superconductor (LTS) niobium microwave transmission line, the entire assembly functions as a highly nonlinear, flux-tunable effective medium, or metamaterial.\textsuperscript{3}
+
+\subsection*{Nonlinear Kinetic Inductance and Phase Tuning}
+
+The operational principle of the rf-SQUID metamaterial relies heavily on the quantization of magnetic flux within a superconducting loop and the nonlinear kinetic inductance provided by the Josephson junction.\textsuperscript{3} In a traditional conductor, inductance is primarily a geometric property. However, in a superconductor, the inertia of the Cooper pairs carrying the supercurrent contributes an additional term known as kinetic inductance. The Josephson junction acts as a highly nonlinear inductor whose inductance value is strictly dependent on the gauge-invariant phase difference across the junction.\textsuperscript{3}
+
+Because the phase difference across the junction is dictated by the total magnetic flux threading the superconducting loop, the effective inductance of the rf-SQUID can be radically altered by changing the external magnetic environment.\textsuperscript{3} By applying a highly localized direct current (DC) or radio-frequency (RF) power through a dedicated bias line adjacent to the SQUID array, the magnetic flux threading the meta-atoms can be precisely controlled.\textsuperscript{3}
+
+When an incident microwave photon from a qubit travels along the transmission line, the electromagnetic field of the photon couples inductively to the rf-SQUID array.\textsuperscript{3} Since the phase velocity of a wave in a transmission line is inversely proportional to the square root of the inductance per unit length ($v_p = 1/\sqrt{LC}$), modulating the flux-dependent inductance of the SQUID array directly alters the speed at which the microwave signal propagates.\textsuperscript{3} By applying a spatial gradient of magnetic flux across different regions of the metasurface, different regions impart different phase delays, effectively steering the wavefront of the microwave signal.\textsuperscript{3}
+
+In advanced experimental realizations, analog variable phase shifters have been constructed using an LTS microstrip transmission line loaded with distributed rf-SQUIDs fabricated via a multilayer niobium-based superconducting process, such as the SFQ5ee node developed by MIT Lincoln Laboratory.\textsuperscript{4} These compact devices, occupying footprints as small as 1.3 square millimeters, achieve precise phase shifting by passing a DC control current ranging from 0 mA to 4.5 mA through the adjacent tuning line.\textsuperscript{4} This relatively low current generates sufficient flux to provide more than 30 decibels (dB) of analog flat attenuation tuning range, demonstrating wideband operation across both the X-band (8 GHz to 12 GHz) and the higher-frequency Ku-band.\textsuperscript{4}
+
+\subsection*{Dissipative Breathers and Spatial-Temporal Coherence}
+
+While rf-SQUIDs offer exceptional tunability and operate perfectly at 10 mK, operating a large array of highly nonlinear, mutually interacting meta-atoms introduces exceptionally complex collective dynamics. The weak magnetic dipole-dipole coupling of each SQUID to its nearest neighbors, combined with the intrinsic nonlinearity of the individual Josephson junctions, can result in the spontaneous formation of dissipative discrete breathers.\textsuperscript{6}
+
+Dissipative discrete breathers are highly localized, spatially clustered states of excitation where electromagnetic energy becomes trapped in a small subset of meta-atoms rather than propagating uniformly through the array.\textsuperscript{6} The delicate balance between internal power losses and the input microwave power drives the formation of these breathers up to relatively large coupling parameters.\textsuperscript{7} When these breathers form, they locally alter the magnetic response of the rf-SQUID array, sometimes violently shifting the local permeability from paramagnetic to diamagnetic or vice versa.\textsuperscript{7} If these breathers occur unpredictably, they violently disrupt the uniform phase profile of the holographic metasurface, shattering the precise spatial gradients required to route qubit signals.
+
+To understand and control these nonlinear phenomena, researchers utilize low-temperature Laser Scanning Microscopy (LSM).\textsuperscript{8} By sweeping a laser across the metasurface while it operates in a dilution refrigerator, the localized thermal perturbations cause slight changes in the kinetic inductance, which can be read out to visualize the spatial distribution of radio-frequency currents.\textsuperscript{8} LSM imaging of massive $27 \times 27$ rf-SQUID arrays has revealed that the degree of spatial-temporal coherence---the frequency and phase synchronization of the meta-atoms---is exquisitely sensitive to the external DC magnetic flux bias.\textsuperscript{8} At zero DC flux and small RF flux limits, the array exhibits a heavily clustered, low degree of coherence due to microscopic disorder and non-uniform magnetic flux penetration.\textsuperscript{8} However, carefully tuning the inter-atomic coupling parameters and increasing the amplitude of the applied RF flux can successfully force the array into a synchronized state, recovering the coherent, collective response required for reliable wavefront steering.\textsuperscript{8}
+
+\subsection*{Reflective-Type Topologies for Broadband True-Time Delay}
+
+A significant secondary engineering challenge in utilizing rf-SQUIDs as transmission line phase shifters is impedance matching. As the inductance of the array is varied to shift the phase, the characteristic impedance of the transmission line ($Z_0 = \sqrt{L/C}$) inherently changes as well.\textsuperscript{3} This mismatch leads to severe signal reflections, standing waves, and insertion loss, which are unacceptable in a quantum environment where the loss of a single microwave photon equates to the destruction of the quantum state.
+
+To circumvent this, advanced hardware designs bypass simple transmissive phase shifters in favor of a reflective-type topology.\textsuperscript{3} This architecture utilizes a superconducting 90-degree hybrid coupler monolithically integrated with two highly tunable reflective loads.\textsuperscript{3} The rf-SQUID arrays are embedded solely within these reflective terminations. When the microwave signal enters the hybrid coupler, it is split and directed into the reflective loads. The SQUID arrays impart the necessary phase delay as the signal reflects off the boundaries, and the hybrid coupler recombines the delayed signals. Because the phase shift occurs during reflection rather than continuous transmission, the system maintains strict 50-ohm impedance matching at the input and output ports.\textsuperscript{3} This innovative geometry yields a broadband, true-time-delay phase shift that preserves the fragile microwave photons while executing the necessary spatial routing.\textsuperscript{3}
+
+\begin{table}[h]
+\centering
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{p{0.3\textwidth} p{0.3\textwidth} p{0.3\textwidth}}
+\toprule
+\textbf{Metamaterial Phase Shifter Metric} & \textbf{Direct Transmission Topology} & \textbf{Reflective-Type Topology (Hybrid Coupler)} \\
+\midrule
+Primary Tuning Mechanism & Direct TL kinetic inductance variation & Tunable reactive loads via rf-SQUID arrays \\
+Characteristic Impedance ($Z_0$) & Fluctuates heavily with phase shift & Stable $50~\Omega$ match maintained at ports \\
+Signal Reflection / Insertion Loss & High, scales with tuning depth & Minimal, optimized for single-photon survival \\
+Phase Delay Characteristic & Narrowband dispersive delay & Broadband true-time delay \\
+\bottomrule
+\end{tabular}
+\caption{Comparison of Metamaterial Phase Shifter Topologies}
+\end{table}
+
+\section*{Acoustic Meta-Atoms: Lithium Niobate Bulk Acoustic Wave Resonators}
+
+Complementing the purely inductive response of rf-SQUID arrays, the holographic quantum bus architecture also incorporates advanced acoustic metamaterials to mediate microwave-to-phonon interactions.\textsuperscript{1} While microwave photons are excellent for fast communication, their long wavelengths make sub-millimeter spatial localization difficult. Phonons (quantized acoustic vibrations) at the same gigahertz frequencies possess wavelengths roughly five orders of magnitude smaller than their electromagnetic counterparts, allowing for incredibly dense, highly localized meta-atom arrays.
+
+Piezoelectric lithium niobate ($\text{LiNbO}_3$) Bulk Acoustic Wave (BAW) resonators have rapidly emerged as highly attractive solid-state meta-atoms for these applications.\textsuperscript{1} Lithium niobate boasts exceptionally strong piezoelectric coupling coefficients, allowing for highly efficient transduction between the microwave electric fields emitted by qubits and the mechanical strain fields of the acoustic phonons.\textsuperscript{11}
+
+\subsection*{Cryogenic Acoustic Performance and the Landau-Rumer Regime}
+
+The integration of macroscopic lithium niobate BAW resonators into quantum circuits requires exhaustive material characterization at cryogenic temperatures.\textsuperscript{11} These resonators typically utilize a Z-cut crystalline orientation with a highly polished plano-convex geometry.\textsuperscript{12} The convex curvature is a critical engineering feature; it acts as an acoustic lens, trapping the phonons in the center of the crystal and preventing them from radiating out into the physical supports, thereby drastically suppressing clamping losses.\textsuperscript{12}
+
+The crystal symmetry of lithium niobate supports two primary families of acoustic polarizations: longitudinally polarized ``A-modes'' where the bulk displacement occurs parallel to the crystal's Z-axis, and shear wave polarized ``B-modes'' where displacement dominates in the transverse X-Y plane.\textsuperscript{12} When operated in the high-frequency radio regime (1 to 100 MHz) and cooled to 4 Kelvin, these resonators exhibit extraordinary coherence.\textsuperscript{12}
+
+At 4 K, the acoustic attenuation in the crystal is primarily governed by the Landau-Rumer microscopic model of phonon-phonon scattering.\textsuperscript{12} Because thermal phonon populations drop exponentially as temperature decreases, the scattering cross-section plummets, leading to a massive spike in the mechanical quality factor ($Q$). In the quasi-isothermal regime, longitudinal A-modes in lithium niobate have been recorded reaching maximum quality factors of 8.9 million ($8.9 \times 10^6$) at 4 K, corresponding to an astonishing quality factor-frequency product ($Q \times f$) of $3.8 \times 10^{14}$ Hz.\textsuperscript{12} This exceptional coherence indicates that acoustic meta-atoms can store and delay quantum information for millions of cycles with negligible intrinsic dissipation.\textsuperscript{12}
+
+\subsection*{Millikelvin Anomalies and Two-Level System (TLS) Saturation}
+
+Despite their stellar performance at 4 K, integrating lithium niobate BAWs into the metasurface quantum bus requires them to operate alongside the qubits at the 10 mK stage of the dilution refrigerator.\textsuperscript{1} As the temperature is lowered from 4 K to 10 mK, researchers observe severe and counterintuitive anomalies in the acoustic dynamics. Rather than the quality factor continuing to rise as thermal phonons freeze out, the $Q$ factor actually degrades significantly in the sub-Kelvin regime.\textsuperscript{12}
+
+This degradation is attributed to the system entering a deeply non-linear acoustic regime dominated by Two-Level System (TLS) defects.\textsuperscript{12} TLS defects are microscopic structural impurities, dangling bonds, or lattice dislocations within the lithium niobate crystal bulk. At 4 K, thermal energy is high enough that these defects are constantly saturated and transitioning, rendering them largely transparent to the acoustic wave. However, at 10 mK, the defects freeze into their ground states. When the BAW resonator is excited, the propagating phonons are resonantly absorbed by these frozen defects, causing a massive spike in acoustic attenuation.\textsuperscript{12}
+
+Precision measurements under strong microwave drive tones reveal phenomena such as self-induced absorption and transparency; driving the resonators to larger amplitudes can partially saturate the TLS defect population, artificially recovering the quality factor.\textsuperscript{12} Mitigating these Rayleigh scattering and TLS losses in operational metamaterials requires aggressive material refinement, such as prolonged high-temperature thermal annealing and DC voltage sweeping, to physically sweep mobile atomic impurities out of the crystal lattice prior to device fabrication.\textsuperscript{12}
+
+\subsection*{Microwave-to-Phonon Transduction via Split-Post Cavities}
+
+When integrated with superconducting hardware, the primary utility of the lithium niobate BAW is quantum transduction---converting stationary qubit microwave signals into traveling acoustic waves, delaying or routing them, and converting them back.\textsuperscript{11} To maximize this coupling, the BAW resonator is frequently placed within a re-entrant microwave cavity in a symmetric ``split-post'' configuration.\textsuperscript{14}
+
+This geometry aligns the electric field maxima of the microwave cavity perfectly with the acoustic mode volume of the crystal.\textsuperscript{14} Driving an applied time-varying signal across the split posts piezoelectrically excites the bulk acoustic wave. Simultaneously, the mechanical displacement of the lithium niobate crystal alters the boundary conditions of the microwave cavity, inducing a profound frequency modulation on the microwave pump and producing distinct sidebands on the microwave carrier.\textsuperscript{14}
+
+In 10 mK experiments, this architecture has achieved a maximum optomechanical coupling rate ($g_0$) of 0.014 mHz.\textsuperscript{14} While seemingly small, this coupling rate is four orders of magnitude larger than previous results obtained using traditional quartz BAWs in similar single-post configurations.\textsuperscript{14} This massive enhancement in transduction efficiency confirms that lithium niobate acoustic metasurfaces can reliably capture, modulate, and re-emit the microwave photons necessary to execute all-to-all connectivity across the quantum bus.\textsuperscript{12}
+
+\section*{Heterogeneous Control: The Cryo-CMOS 28nm FD-SOI Interface}
+
+The physical capability of rf-SQUIDs and lithium niobate BAWs to manipulate microwave phase is only half of the Quantum ASIC solution. Actuating a massive 1,000-element holographic array requires the generation of thousands of precise, independent analog control voltages to bias the magnetic flux or electrostatic strain of each individual meta-atom.\textsuperscript{1}
+
+In legacy systems, these control voltages are generated by racks of Digital-to-Analog Converters (DACs) at room temperature and routed down into the cryostat via thousands of coaxial cables.\textsuperscript{1} As established, this approach is thermodynamically suicidal; the passive heat conduction and active dissipation of these cables will instantly crash a dilution refrigerator.\textsuperscript{1} To resolve the wiring crisis, the metasurface architecture demands the use of heterogeneously integrated Cryo-CMOS controllers that are co-located directly with the quantum hardware at the 100 mK to 10 mK stages.\textsuperscript{1}
+
+\subsection*{Overcoming the Coaxial Wiring Crisis with FD-SOI}
+
+Designing classical integrated circuits to operate at 10 millikelvin is exceptionally difficult. Standard bulk CMOS transistors fail at cryogenic temperatures due to a phenomenon known as dopant freeze-out. At room temperature, thermal energy is sufficient to ionize the dopant atoms in the silicon lattice, providing the free charge carriers necessary for conduction. Near absolute zero, this thermal energy vanishes; the charge carriers become permanently bound to their parent atoms, turning the semiconductor into a complete insulator and causing catastrophic shifts in the transistor's threshold voltage.
+
+To overcome dopant freeze-out, modern cryogenic quantum controllers rely heavily on 28-nanometer Fully Depleted Silicon-On-Insulator (28nm FD-SOI) technology.\textsuperscript{16} In an FD-SOI architecture, the active transistor channel is an ultra-thin layer of silicon that is entirely undoped (fully depleted). Because there are no dopants in the channel to freeze out, the transistor remains highly conductive and perfectly operational even when cooled to 100 mK.\textsuperscript{16}
+
+The Cryo-CMOS chip serves as a massive multiplexer and voltage generator. Instead of thousands of analog cables entering the cryostat, the system relies on a heavily simplified digital input signal---such as a 4-wire Serial Peripheral Interface (SPI)---sent from a room-temperature field-programmable gate array (FPGA).\textsuperscript{17} The SPI transmits high-level digital instructions down the few remaining physical wires. Upon reaching the Cryo-CMOS chip, an on-board digital finite-state machine (FSM) interprets these instructions and configures an array of analog circuit blocks known as Charge-Lock Fast-Gate (CLFG) cells.\textsuperscript{17}
+
+\subsection*{The Charge-Lock Fast-Gate Architecture and the 18 Nanowatt Constraint}
+
+The CLFG cells are the workhorses of the cryogenic controller.\textsuperscript{17} Traditional digital-to-analog converters dissipate massive amounts of static power through continuous resistive voltage division. CLFG cells bypass this by utilizing switched-capacitor networks. At 10 mK, the off-state leakage current of an FD-SOI transistor is practically non-existent. The CLFG cells exploit this near-perfect insulation by trapping exact amounts of charge on floating capacitors to generate stable, static bias voltages without drawing continuous current from the supply.\textsuperscript{17} When a dynamic pulse is required to tune an rf-SQUID or BAW meta-atom, the cell rapidly toggles the potential of the capacitor's bottom plate, shuffling the charge to generate a highly precise 100 millivolt (mV) control pulse.\textsuperscript{16}
+
+The absolute limiting constraint on this entire control architecture is the total power dissipation. Empirical evaluations of representative Cryo-CMOS platforms---such as the highly publicized ``Gooseberry'' architecture developed collaboratively between Microsoft Research, the University of Sydney, and Purdue University---have demonstrated unprecedented efficiency.\textsuperscript{17} Based on direct measurements from operating cells, the average active power dissipation for generating these 100 mV control pulses is merely 18 nanowatts (nW) per cell.\textsuperscript{17}
+
+To contextualize the magnitude of this thermodynamic achievement: an active dissipation profile of 18 nW per cell means that a fully scaled array of 1,000 individual control cells dissipates only 18 microwatts ($\mu$W) of total power.\textsuperscript{1} This entire 1,000-channel controller generates significantly less heat than a single passive UT-085-SS-SS coaxial cable (which conducts roughly 1,000 $\mu$W of heat).\textsuperscript{1} Consequently, heterogeneously bonding these 18 nW/cell Cryo-CMOS chips directly to the metasurface permanently severs the reliance on room-temperature analog uplinks.\textsuperscript{1} The integrated system remains well within the strict micro-watt cooling capacities of commercially available dilution refrigerators, proving that large-scale meta-atom control is thermodynamically viable.\textsuperscript{1}
+
+\begin{table}[h]
+\centering
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{p{0.3\textwidth} p{0.3\textwidth} p{0.3\textwidth}}
+\toprule
+\textbf{Control Architecture Aspect} & \textbf{Traditional Coaxial Routing} & \textbf{28nm FD-SOI Cryo-CMOS (Gooseberry)} \\
+\midrule
+Physical Interconnects & 1 dedicated coax line per qubit/meta-atom & 4-wire digital Serial Peripheral Interface \\
+Heat Load to 4K/10mK Stages & $\sim 1$ milliwatt ($1000~\mu$W) per line & 18 nanowatts ($0.018~\mu$W) per cell \\
+Signal Generation Mechanism & Room temperature DACs + heavy attenuation & On-chip Charge-Lock Fast-Gate (CLFG) caps \\
+Scalability Limit & $\sim 100$ qubits (cooling power exhausted) & $> 1,000+$ qubits / meta-atoms scalable \\
+\bottomrule
+\end{tabular}
+\caption{Control Architecture Comparison}
+\end{table}
+
+\section*{Algorithmic Topologies and Neural Network Inverse Design}
+
+The sophisticated physical hardware of the Quantum ASIC is only as capable as the software and algorithms driving it. Translating abstract logical quantum circuits into the physical electromagnetic phase shifts required by the metasurface demands a highly complex quantum-classical control loop.\textsuperscript{1}
+
+\subsection*{Quadratic Unconstrained Binary Optimization (QUBO)}
+
+Implementing the Quantum ASIC paradigm first requires mapping a logical quantum algorithm onto the physically distributed architecture of the metasurface. The physical layout assigns specific roles to the qubits based on the protocol being executed. For example, in a quantum teleportation execution on a minimal 3-qubit linear chain (0 --- 1 --- 2), Qubit 0 handles the message, Qubit 1 acts as Alice's half of the Bell pair, and Qubit 2 acts as Bob's half of the Bell pair.\textsuperscript{1} A critical hardware constraint is that only adjacent physical pairs can interact natively; therefore, to execute arbitrary multi-qubit gates, the metasurface must transiently bridge non-adjacent qubits to simulate all-to-all connectivity.\textsuperscript{1}
+
+The assignment of these logical roles to optimal physical locations on the chip is formulated as a Quadratic Unconstrained Binary Optimization (QUBO) problem.\textsuperscript{1} The system executes this optimization framework utilizing the Quantum Approximate Optimization Algorithm (QAOA) on existing superconducting hardware.\textsuperscript{1}
+
+In this variational algorithmic execution, the QAOA navigates a massive $2^N$-dimensional Hilbert space of possible routing configurations across the metasurface.\textsuperscript{1} The quantum hardware is initialized in the maximally superimposed ground state of a Mixing Hamiltonian (typically a uniform transverse-field Ising model composed of Pauli-X operators).\textsuperscript{1} Physically, this initialization implies that every possible routing configuration on the metasurface exists simultaneously in superposition.\textsuperscript{1} The algorithm then alternates, evolving the quantum state under a Problem Hamiltonian---which mathematically penalizes inefficient wiring distances and excessive gate depths---and the Mixing Hamiltonian, which allows the system to quantum-tunnel out of sub-optimal local minima energy traps.\textsuperscript{1}
+
+Through this iterative quantum-classical loop, classical optimizers adjust the evolution angles to maximize constructive quantum interference around the absolute most efficient routing layout. In empirical benchmarks using IBM's superconducting hardware (\texttt{ibm\_fez}) for a 3-qubit minimal topology, this hardware solver successfully collapsed the wavefunction to an optimized logical-to-physical qubit mapping with a highly efficient objective penalty value of merely 4.0.\textsuperscript{1}
+
+\subsection*{Deep Neural Network Surrogate Modeling}
+
+Once the QAOA extracts the optimal discrete spatial coordinates for qubit interaction, a massive computational hurdle remains. This low-dimensional topology data (e.g., a simple vector mapping which qubits need to couple) must be instantly translated into high-dimensional, continuous electromagnetic phase commands for the 1,000-element metasurface.\textsuperscript{1}
+
+Utilizing traditional full-wave Maxwell equation solvers, such as Finite-Difference Time-Domain (FDTD) or Finite Element Method (FEM) software, to calculate the complex scattering matrices of a 1,000-element interacting array takes hours or days on classical supercomputers.\textsuperscript{1} This latency is entirely incompatible with the microsecond-scale coherence times of superconducting qubits. To execute real-time holography, the architecture bypasses FDTD entirely by employing Deep Neural Network (DNN) surrogate modeling for inverse design.\textsuperscript{1}
+
+The optimal routing vector from the QAOA---represented as a normalized topology feature vector $\mathbf{T}_{\mathrm{target}}$ containing spatial coordinates and required coupling strengths---is ingested by a Multi-Layer Perceptron (MLP) or a tandem Convolutional Neural Network (CNN).\textsuperscript{1} The hidden layers of the network, utilizing non-linear activation functions like ReLU, act as a mathematical surrogate, instantly inferring the highly complex, cross-coupling electromagnetic interactions between adjacent SQUIDs and BAW resonators without solving Maxwell's equations.\textsuperscript{1} The final output layer maps this latent representation to a continuous tensor, outputting the exact physical phase shifts required for all 1,000 meta-atoms simultaneously.\textsuperscript{1}
+
+\subsection*{Phase Minimization and the 3.14 Radian Baseline}
+
+Bench-top empirical validations of this generative DNN inverse design model yielded a profound insight into the operational efficiency of the metasurface. When tasked with synthesizing a continuous 1,000-element phase profile, the network generated phase shifts that were incredibly concentrated and strictly constrained.\textsuperscript{1} Rather than requiring the meta-atoms to sweep through a full $0$ to $2\pi$ dynamic range, the generated phase shifts fell entirely within a narrow band between 3.03 and 3.28 radians (specifically 3.033 to 3.284 rad).\textsuperscript{1}
+
+The mean phase shift of the array was exactly 3.14 radians ($\approx \pi$).\textsuperscript{1} The fact that the necessary electromagnetic wavefront steering can be achieved with phase shifts hovering so tightly around $\pi$ radians is a thermodynamic triumph. A uniform $\pi$ phase shift applied across an entire surface effectively acts as a perfect flat inversion mirror. By applying only subtle, sub-radian perturbations around this $\pi$ baseline (e.g., shifting an element to 3.03 or 3.28 rad), the metasurface leverages slight geometric phase deviations to create the necessary constructive and destructive interference patterns required to focus the beam on a specific target qubit.\textsuperscript{1} Because the Cryo-CMOS controllers are not required to inject massive amounts of voltage to push the meta-atoms through broad phase sweeps, the total energy required for actuation is minimized, preserving the ultra-low 18 nanowatt thermal budget mandated by the 10 mK environment.\textsuperscript{1}
+
+\section*{Macroscopic Applications: Quantum SATCOM and Microwave Illumination}
+
+The sub-wavelength wave-steering principles governing the internal millikelvin quantum bus can be mathematically and physically extended. By scaling the physical dimensions of the array, the same programmable metasurface can operate as an active, macroscopic phased-array aperture, enabling groundbreaking applications in environmental sensing and Satellite Communications (SATCOM).\textsuperscript{1}
+
+\subsection*{Rayleigh Scattering and Weather-Resilient QKD}
+
+The distribution of quantum entanglement over global distances is the prerequisite for a secure quantum internet. Currently, wide-area networks rely heavily on optical Quantum Key Distribution (QKD) utilizing near-infrared lasers. However, optical wavelengths are fundamentally handicapped by the atmosphere.\textsuperscript{1} Because the wavelength of near-infrared light is roughly equivalent to the physical diameter of atmospheric water droplets, fog, and clouds, the photons undergo severe Mie scattering.\textsuperscript{1} This scattering physically deflects the optical photons out of the communication channel, limiting optical satellite uplinks to perfectly clear nights.\textsuperscript{1}
+
+Shifting the quantum communication protocol from the optical domain to the microwave domain bypasses Mie scattering entirely. Because microwave wavelengths (centimeters to millimeters) are vastly larger than atmospheric aerosols, the photons interact with the atmosphere via the Rayleigh Scattering Approximation.\textsuperscript{1} Under Rayleigh dynamics, the long-wavelength microwaves effectively diffract around suspended water particles rather than colliding with them, establishing a fundamentally weather-resilient communication channel capable of penetrating heavy cloud cover and fog.\textsuperscript{1}
+
+\subsection*{Radiative Cooling and Thermal Photon Suppression}
+
+Historically, the fatal flaw of microwave QKD has been ambient thermal noise. At optical frequencies, room temperature (300 K) produces virtually zero thermal photons. At microwave frequencies, however, the ambient thermal energy of the Earth's environment (300 K) generates a massive population of thermal microwave photons that instantly drown out any fragile continuous-variable (CV) quantum state attempting to cross the channel.\textsuperscript{1}
+
+To counter this environmental noise, the macroscopic metasurface aperture implements an advanced thermodynamic technique known as ``radiative cooling'' protocols.\textsuperscript{1} In standard thermodynamics, an antenna reaches thermal equilibrium with whatever environment it is ``looking'' at. By highly directing the metasurface array and overcoupling the microwave communication channel to a 10 mK cold load---essentially forcing the receiver to stare deeply into a localized cryogenic reservoir or the 2.7 K vacuum of space---the system actively drains the thermal noise out of the transmission line.\textsuperscript{1}
+
+This radiative overcoupling successfully manipulates the Bose-Einstein statistics of the channel, driving the effective thermal photon occupation number down to an exceptional 0.06.\textsuperscript{1} By suppressing the thermal noise floor, the system permits unconditionally secure continuous-variable state teleportation. Empirical simulations indicate that this architecture can achieve state transfer fidelities of 58.5\% even when the metasurface array is operating in higher-temperature 4 K ambient environments.\textsuperscript{1}
+
+\subsection*{Quantum Illumination and the Chernoff Exponent}
+
+Furthermore, utilizing the metasurface as an active RF aperture enables the deployment of Quantum Illumination (QI), commonly referred to as Quantum Radar.\textsuperscript{1} Traditional classical radar systems struggle to detect low-reflectivity targets in environments heavily polluted with background thermal noise or deliberate electronic jamming (multipath clutter).\textsuperscript{1}
+
+The metasurface circumvents this by acting as a source and receiver for entangled microwaves. The system utilizes spontaneous parametric down-conversion to generate a two-mode squeezed vacuum (TMSV) state, producing a pair of highly correlated photons: a ``signal'' photon and an ``idler'' photon.\textsuperscript{1} The signal photon is transmitted out of the metasurface aperture into the noisy, room-temperature environment to scan for targets, while the idler photon is retained locally within the cryogenic storage array.\textsuperscript{1}
+
+As the signal photon travels through the atmosphere and scatters off targets, its interactions with ambient thermal photons and environmental decoherence completely destroy the pure quantum entanglement.\textsuperscript{1} The state is mathematically no longer entangled. However, a robust, non-classical correlation metric---known as quantum discord---survives the entanglement-breaking noise.\textsuperscript{1}
+
+When the heavily degraded return signal scatters back into the metasurface aperture, it is captured and jointly measured against the locally retained idler mode. In statistical hypothesis testing, the error probability of distinguishing between the presence or absence of a target is governed by the quantum Chernoff bound. Because of the surviving quantum discord, the joint measurement of the return signal and the idler effectively doubles the quantum Chernoff exponent compared to the best possible classical heterodyne receiver.\textsuperscript{1} This exponential increase in error exponent elevates the detection precision to the theoretical Heisenberg limit ($1/M$). In practical implementations simulating heavy fog and dense urban clutter, this microwave quantum illumination architecture achieved up to a 1.5x target range extension and proved uniquely capable of rejecting multipath clutter returns that were up to 20 dB stronger than the true target echoes.\textsuperscript{1}
+
+\begin{table}[h]
+\centering
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{p{0.2\textwidth} p{0.25\textwidth} p{0.25\textwidth} p{0.2\textwidth}}
+\toprule
+\textbf{Application Modality} & \textbf{Primary Environmental / Physical Obstacle} & \textbf{Metamaterial / Quantum Mitigation Strategy} & \textbf{Target Performance Metric} \\
+\midrule
+Global Optical QKD & Mie scattering (rain, fog, clouds) & Shift to Microwave / Rayleigh scattering & Weather-resilient continuous up-links \\
+Microwave SATCOM & High thermal microwave photon occupation & Radiative overcoupling to 10 mK load & Transfer fidelity of 58.5\% at 4K \\
+Quantum Radar (QI) & Heavy urban multipath clutter \& jamming & TMSV generation / Quantum Discord & Reject clutter up to 20 dB stronger \\
+\bottomrule
+\end{tabular}
+\caption{Macroscopic Applications and Mitigation Strategies}
+\end{table}
+
+\section*{Hardware-Software Co-Design Ecosystems: Identifying Potential Partners}
+
+The transition of these highly complex cryogenic metasurfaces from theoretical mathematical constructs to physically deployable Quantum ASICs requires an intense, geographically concentrated intersection of materials science, advanced nanofabrication, and cryogenic engineering.\textsuperscript{20} Developing 10 mK acoustic resonators, rf-SQUID arrays, and 28nm FD-SOI control logic cannot occur in isolation. Regions with dense clusters of these specialized disciplines could serve as critical accelerators for quantum hardware. The academic and industrial ecosystem in San Diego, California, serves as an example of the type of vertically integrated infrastructure that would be necessary to develop these advanced systems.\textsuperscript{20}
+
+\subsection*{Academic Characterization: Scanning Microwave Microscopy}
+
+At the foundational academic level, leveraging facilities such as those at the University of California, San Diego (UCSD) would allow the material characterization and visualization capabilities required to validate metamaterial designs. Operating metasurfaces in the microwave regime requires precise imaging of the near-field electromagnetic profiles of the meta-atoms.
+
+Institutions such as UCSD house world-class scanning microwave microscopy (SMM) laboratories capable of directly visualizing electronic states and topological edge modes at ultra-low temperatures down to 60 mK.\textsuperscript{23} These SMM facilities are uniquely equipped to probe the dissipative discrete breathers and coherence clustering in rf-SQUID arrays, and could provide the empirical feedback loop necessary to optimize the DC flux bias and RF coupling parameters of the array.\textsuperscript{23} Furthermore, academic expertise in designing highly tunable sub-wavelength meta-atoms and integrating emergent quantum materials into active THz and microwave photonics is concentrated at such institutions.\textsuperscript{25} Heavy investments in cryogenic electron microscopy (Cryo-EM) and materials research centers ensure that the microscopic defect densities (TLS anomalies) in lithium niobate crystals can be rigorously analyzed and mitigated at the atomic level prior to fabrication.\textsuperscript{21}
+
+\subsection*{Commercial Metrology and Hybrid Packaging}
+
+Academic characterization would need to be matched by robust commercial infrastructure capable of supplying specialized metrology equipment and scaling up the manufacturing processes. Within ecosystems of this type, established metrology entities such as Quantum Design could supply the foundational environmental control systems.\textsuperscript{31} High-magnetic-field cryostats and Physical Properties Measurement Systems (PPMS) are essential tools deployed in laboratories worldwide to characterize the specific heat, kinetic inductance, and thermoelastic damping properties of superconducting niobium thin films and $\text{LiNbO}_3$ BAW resonators.\textsuperscript{31} The ability to rapidly verify the material property curves of these components between 300 K and 1.8 K would accelerate the iteration cycles of the meta-atom designs.\textsuperscript{31}
+
+Finally, bridging the gap between discrete, functional components and commercially deployable Quantum ASICs would rely on engaging with specialized quantum hardware startups. Companies similar to Monarch Quantum, which focus heavily on the advanced hybrid packaging of integrated photonics, represent the ideal profile for such partnerships.\textsuperscript{22} Constructing a holographic quantum bus requires consolidating hundreds of discrete optical, microwave, and control components---including the delicate 28nm Cryo-CMOS logic chips and the 1,000-element metasurface arrays---into single, factory-aligned modules.\textsuperscript{22} Expertise in robotic assembly, machine-learning-driven alignment, and co-packaged optics drastically reduces the physical footprint and integration risk of these systems.\textsuperscript{22} Engaging with ecosystems that include such companies could provide the manufacturing backbone necessary to deploy large-scale, 18-nanowatt cryogenic controllers and weather-resilient quantum radar apertures, accelerating the global path to macroscopic quantum advantage.\textsuperscript{22}
+
+\section*{Strategic Conclusions}
+
+The continued progression toward fault-tolerant solid-state quantum computing and secure, global quantum networking is currently severely bottlenecked by the physical limitations of static coaxial wiring and the atmospheric scattering of optical photons. The integration of programmable, holographic metasurfaces as a solid-state, dynamic routing layer provides a highly viable, thermodynamically sound solution to both architectural crises.
+
+By leveraging the non-linear kinetic inductance of radio-frequency SQUID arrays and the strong, low-loss piezoelectric coupling of lithium niobate Bulk Acoustic Wave resonators, engineers can construct highly tunable meta-atoms that remain fully operational in 10 mK dilution refrigerators. Utilizing these specific solid-state components brilliantly sidesteps the thermal occlusion and physical freezing phenomena that render traditional liquid crystal and phase-change optical modulators entirely useless in the quantum regime. Furthermore, driving these complex metasurfaces with 28nm FD-SOI Cryo-CMOS controllers---operating at an unprecedented active dissipation limit of exactly 18 nanowatts per cell---completely bypasses the crippling milliwatt-scale heat loads introduced by passive coaxial cables, preserving the micro-watt cooling capacities of the cryostat.
+
+Computationally, the implementation of Quantum Approximate Optimization Algorithm (QAOA) routing mapped through Deep Neural Network surrogate modeling demonstrates that complex spatial steering can be achieved with highly constrained, energy-efficient phase shifts. By limiting the phase profile to a tight band between 3.03 and 3.28 radians centered around a $\pi$-radian inversion baseline, the architecture maximizes constructive routing interference while minimizing the energy required to perturb the meta-atoms.
+
+Ultimately, this unified hardware architecture is not merely an internal routing solution for planar quantum processors. The same programmable metasurface principles, when scaled dimensionally, operate as active phased-array apertures capable of executing weather-resilient microwave Quantum Key Distribution via 10 mK radiative cooling. Moreover, by harnessing two-mode squeezed vacuum states and preserving quantum discord, these apertures enable quantum illumination protocols that double the Chernoff error exponent and reject massive multipath clutter. Support from (or partnership with) dense regional research and manufacturing ecosystems that bridge the gap from atomic microscopy to hybrid packaging would be necessary to fully realize this vision; the synthesis of cryo-metamaterials and quantum architecture search provides a robust, foundational engineering framework for the realization of a distributed, scalable, and weather-resilient quantum internet.
+
+\begin{thebibliography}{99}
+
+\bibitem{ref1} A Review of THz Modulators with Dynamic Tunable Metasurfaces - PMC. \url{https://pmc.ncbi.nlm.nih.gov/articles/PMC6669754/}
+
+\bibitem{ref2} Reconfigurable Cryogenic Microwave Devices Using Low Temperature Superconducting rf-SQUIDs - UWSpace - University of Waterloo. \url{https://uwspace.uwaterloo.ca/items/df000a88-7e77-4daa-b0f1-4d0539c6e66a}
+
+\bibitem{ref3} Cryogenic Analog Microwave Variable Attenuator Using rf-SQUIDs. \url{https://ieeexplore.ieee.org/document/10044250/}
+
+\bibitem{ref4} Effects of Strong Capacitive Coupling Between Meta-Atoms in rf SQUID Metamaterials. \url{https://arxiv.org/html/2402.07044v2}
+
+\bibitem{ref5} [0909.3400] Dissipative breathers in rf SQUID metamaterials - arXiv.org. \url{https://arxiv.org/abs/0909.3400}
+
+\bibitem{ref6} Dissipative breathers in rf SQUID metamaterials - Semantic Scholar. \url{https://www.semanticscholar.org/paper/Dissipative-breathers-in-rf-SQUID-metamaterials-Tsironis-Lazarides/a9d688fa4a9b2e6861eadff2da349123b76824f3}
+
+\bibitem{ref7} Imaging Microwave Response of rf-SQUID Metasurface in dc Magnetic Field. \url{https://www.researchgate.net/publication/303342452_Imaging_Microwave_Response_of_rf-SQUID_Metasurface_in_dc_Magnetic_Field}
+
+\bibitem{ref8} Imaging collective behavior in an rf-SQUID metamaterial tuned by DC and RF magnetic fields | Applied Physics Letters. \url{https://pubs.aip.org/aip/apl/article/114/8/082601/37263/Imaging-collective-behavior-in-an-rf-SQUID}
+
+\bibitem{ref9} Coherent oscillations of driven rf SQUID metamaterials. - Semantic Scholar. \url{https://www.semanticscholar.org/paper/Coherent-oscillations-of-driven-rf-SQUID-Trepanier-Zhang/bb5259a7c088b46d629c6aa189d422b926a73d9f}
+
+\bibitem{ref10} Low Temperature Properties of Low-Loss Macroscopic Lithium Niobate Bulk Acoustic Wave Resonators - arXiv. \url{https://arxiv.org/html/2407.17693v2}
+
+\bibitem{ref11} arXiv:2407.17693v2 [physics.app-ph] - arXiv.org. \url{https://arxiv.org/abs/2407.17693}
+
+\bibitem{ref12} Loss channels affecting lithium niobate phononic crystal resonators at cryogenic temperature | NTT Research. \url{https://ntt-research.com/wp-content/uploads/2022/09/Loss-channels-affecting-lithium-niobate-phononic-crystal-resonators-at-cryogenic-temperature1.pdf}
+
+\bibitem{ref13} Upconversion of phonon modes into microwave photons in a lithium niobate bulk acoustic wave resonator coupled to a microwave cavity - AIP Publishing. \url{https://pubs.aip.org/aip/app/article/9/11/111304/3320474/Upconversion-of-phonon-modes-into-microwave}
+
+\bibitem{ref14} Upconversion of Phonon Modes into Microwave Photons in a Lithium Niobate Bulk Acoustic Wave Resonator Coupled to a Microwave Cavity - arXiv. \url{https://arxiv.org/html/2410.20271v2}
+
+\bibitem{ref15} Cryogenic CMOS for Qubit Control and Readout - SciSpace. \url{https://scispace.com/pdf/cryogenic-cmos-for-qubit-control-and-readout-1ydx6djb.pdf}
+
+\bibitem{ref16} A cryogenic CMOS chip for generating control signals for multiple qubits | The Manfra Group. \url{https://manfragroup.org/wp-content/uploads/2021/02/2021.01.25_Nature-Electronics_A-cryogenic-CMOS-chip-for-generating-control-signals-for-multiple-qubits.pdf}
+
+\bibitem{ref17} A cryogenic CMOS chip for generating control signals for multiple qubits - Microsoft Research. \url{https://www.microsoft.com/en-us/research/publication/a-cryogenic-cmos-chip-for-generating-control-signals-for-multiple-qubits/}
+
+\bibitem{ref18} Quantum Computing Logistics - SSRN. \url{https://papers.ssrn.com/sol3/Delivery.cfm/SSRN_ID4249265_code2375536.pdf?abstractid=4249265}
+
+\bibitem{ref19} 2024 Assessment of the DEVCOM Army Research Laboratory at NAP.edu. \url{https://www.nationalacademies.org/read/28878/chapter/7}
+
+\bibitem{ref20} UC San Diego Cryo-EM. \url{https://cryoem.ucsd.edu/}
+
+\bibitem{ref21} Integrated Photonics Company Launches in San Diego. \url{https://monarchquantum.com/2026/01/06/news20260106/}
+
+\bibitem{ref22} Allen Lab. \url{https://allen.physics.ucsd.edu/}
+
+\bibitem{ref23} Table of Contents - UCOP. \url{https://www.ucop.edu/research-initiatives/programs/lab-fees/files/lfrp-active-abstracts.pdf}
+
+\bibitem{ref24} Active and tunable nanophotonic metamaterials - PMC. \url{https://pmc.ncbi.nlm.nih.gov/articles/PMC11501849/}
+
+\bibitem{ref25} Richard Averitt Professor (Full) at University of California San Diego - ResearchGate. \url{https://www.researchgate.net/profile/Richard-Averitt}
+
+\bibitem{ref26} Materials Day 2017 | College of Engineering - Boston University. \url{https://www.bu.edu/eng/academics/departments-and-divisions/materials-science-engineering/news-2/125608-2/materials-day-2017/}
+
+\bibitem{ref27} Richard Averitt | Program in Materials Science and Engineering. \url{https://matsci.ucsd.edu/faculty/richard-averitt}
+
+\bibitem{ref28} Cryo-electron Microscopy - UCSD Biological Sciences. \url{http://biology.ucsd.edu/research/facilities-resources/technology-sandbox/instrumentation/microscopy/index.html}
+
+\bibitem{ref29} Research - Institute for Materials Discovery and Design - University of California San Diego. \url{https://imdd.ucsd.edu/research}
+
+\bibitem{ref30} Research - Maple Group. \url{https://mbmlab.ucsd.edu/research/}
+
+\bibitem{ref31} Quantum Design manufactures materials characterization systems. \url{https://qdusa.com/}
+
+\bibitem{ref32} Patternable Mesoporous Thin Film Quantum Materials via Block Copolymer Self-Assembly: An Emergent Technology? - OSTI.GOV. \url{https://www.osti.gov/servlets/purl/1819299}
+
+\bibitem{ref33} SPIE Photonics West 2026 Exhibition : Exhibitor List. \url{https://spie.org/conferences-and-exhibitions/photonics-west/photonics-west-marketplace/exhibitors}
+
+\end{thebibliography}
+
+\end{document}

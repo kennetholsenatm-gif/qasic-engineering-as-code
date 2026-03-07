@@ -1,0 +1,6 @@
+{"sessionId": "29961b", "location": "cli_dashboard.py", "message": "main entered", "data": {"argv_len": 1}, "timestamp": 1772899379928}
+{"sessionId": "29961b", "location": "cli_dashboard.py", "message": "before loop", "data": {"stdin_isatty": true}, "timestamp": 1772899380006}
+{"sessionId": "29961b", "location": "cli_dashboard.py", "message": "before input", "data": {}, "timestamp": 1772899380009}
+{"sessionId": "29961b", "location": "cli_dashboard.py", "message": "main entered", "data": {"argv_len": 1}, "timestamp": 1772899591716}
+{"sessionId": "29961b", "location": "cli_dashboard.py", "message": "before loop", "data": {"stdin_isatty": true}, "timestamp": 1772899591793}
+{"sessionId": "29961b", "location": "cli_dashboard.py", "message": "before input", "data": {}, "timestamp": 1772899591796}

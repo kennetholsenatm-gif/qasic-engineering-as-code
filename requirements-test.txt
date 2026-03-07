@@ -1,0 +1,5 @@
+# Install with: pip install -r requirements-test.txt (includes base requirements)
+# For full engineering tests (routing, inverse net, viz): also install engineering deps.
+-r requirements.txt
+pytest>=7.0.0
+torch>=1.9.0

@@ -1,0 +1,27 @@
+{
+  "num_logical_qubits": 4,
+  "num_physical_nodes": 4,
+  "topology": "star",
+  "solver": "QAOA",
+  "objective_value": 12.0,
+  "backend": null,
+  "mapping": [
+    {
+      "logical": 0,
+      "physical": 3
+    },
+    {
+      "logical": 1,
+      "physical": 1
+    },
+    {
+      "logical": 2,
+      "physical": 0
+    },
+    {
+      "logical": 3,
+      "physical": 2
+    }
+  ],
+  "timestamp": "2026-03-07T21:39:15.702340Z"
+}

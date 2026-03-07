@@ -1,0 +1,2 @@
+# CLI dashboard (python -m dashboard). Core repo needs numpy (see requirements.txt).
+rich>=10.0.0
