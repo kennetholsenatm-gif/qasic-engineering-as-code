@@ -29,7 +29,7 @@ from state import State, product_state, bell_pair
 from state.gates import X, Z, H
 
 
-def commit(bit: int, bell: State) -> tuple[int, int]:
+def commit(bit: int, bell: State, rng: np.random.Generator | None = None) -> tuple[int, int]:
     """
     Alice commits to bit (0 or 1). She has the first qubit of the Bell pair.
     - To commit to 0: measure in Z, get outcome m.
@@ -39,6 +39,8 @@ def commit(bit: int, bell: State) -> tuple[int, int]:
     """
     if bit not in (0, 1):
         raise ValueError("bit must be 0 or 1")
+    if rng is None:
+        rng = np.random.default_rng()
     # Simulate: Bell is (|00⟩+|11⟩)/√2. Alice's qubit is 0.
     # If b=0: she measures Z -> prob 1/2 for 0, 1/2 for 1. We pick m by sampling.
     # If b=1: she applies X so state becomes (|10⟩+|01⟩)/√2, then measures Z -> same.
@@ -51,7 +53,6 @@ def commit(bit: int, bell: State) -> tuple[int, int]:
     # Bob's state is I/2 (max mixed). Binding: Alice committed to b and sent m; if
     # she changed b she'd need to have sent a different m, but m was fixed by her
     # measurement (we assume she doesn't keep a quantum copy).
-    rng = np.random.default_rng()
     m = int(rng.integers(0, 2))
     return (bit, m)
 
@@ -79,10 +80,9 @@ def run_commitment_protocol(bit: int, seed: int | None = None) -> dict:
     Full run: create Bell pair, Alice commits to bit, then opens.
     Returns dict with commitment, open message, and Bob's verification result.
     """
-    if seed is not None:
-        np.random.seed(seed)
+    rng = np.random.default_rng(seed)
     bell = bell_pair("Phi+")
-    b, m = commit(bit, bell)
+    b, m = commit(bit, bell, rng=rng)
     # Bob's qubit after Alice's action: in honest protocol, if b=0 Alice measured
     # and got m, so Bob's half collapsed to |m⟩. If b=1, Alice applied X then
     # measured and got m, so Bob's half is |m⟩ (since Bell: |00⟩+|11⟩ -> X on 0

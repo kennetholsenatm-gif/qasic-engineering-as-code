@@ -87,7 +87,9 @@ def ket1() -> State:
 
 
 def product_state(*kets: Union[State, str]) -> State:
-    """|a⟩⊗|b⟩⊗... from State objects or '0'/'1' strings."""
+    """|a⟩⊗|b⟩⊗... from State objects or '0'/'1' strings. Requires at least one ket."""
+    if len(kets) == 0:
+        raise ValueError("product_state requires at least one ket")
     vecs = []
     for k in kets:
         if isinstance(k, State):

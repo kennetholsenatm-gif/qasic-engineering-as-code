@@ -17,7 +17,8 @@ from __future__ import annotations
 import argparse
 import json
 import os
-from datetime import datetime
+import sys
+from datetime import datetime, timezone
 import numpy as np
 
 # qiskit-optimization 0.7 (Qiskit 2.x) — import in steps to tolerate partial failures (e.g. Python 3.14)
@@ -175,6 +176,7 @@ def solve_routing(
     qp: QuadraticProgram,
     use_qaoa: bool = True,
     qaoa_reps: int = 2,
+    optimizer_maxiter: int = 100,
     sampler=None,
     pass_manager=None,
 ) -> dict:
@@ -187,7 +189,7 @@ def solve_routing(
             initial_point = [1.0] * (2 * qaoa_reps)
             qaoa_kw = dict(
                 sampler=effective_sampler,
-                optimizer=COBYLA(maxiter=100),
+                optimizer=COBYLA(maxiter=optimizer_maxiter),
                 reps=qaoa_reps,
                 initial_point=initial_point,
             )
@@ -313,27 +315,89 @@ def main() -> None:
         type=str,
         default=None,
         metavar="FILE",
-        help="Write result (mapping, solver, objective, backend) to JSON file.",
+        help="Write result (mapping, solver, objective, backend) to JSON file (e.g. -o routing_result.json).",
+    )
+    parser.add_argument(
+        "--maxiter",
+        type=int,
+        default=100,
+        metavar="N",
+        help="COBYLA max iterations (default 100). Use lower for faster/cheaper hardware runs.",
+    )
+    parser.add_argument(
+        "--reps",
+        type=int,
+        default=2,
+        metavar="N",
+        help="QAOA layers (default 2). Use 1 with --fast for cheaper runs.",
+    )
+    parser.add_argument(
+        "--fast",
+        action="store_true",
+        help="Budget preset: --maxiter 20 --reps 1 for affordable runs under 5 min QPU time.",
+    )
+    parser.add_argument(
+        "--topology",
+        "-t",
+        type=str,
+        default="linear_chain",
+        choices=["linear", "linear_chain", "star", "repeater", "repeater_chain"],
+        help="Named logical topology (default: linear_chain).",
+    )
+    parser.add_argument(
+        "--qubits",
+        "-n",
+        type=int,
+        default=3,
+        metavar="N",
+        help="Number of logical qubits (default: 3).",
+    )
+    parser.add_argument(
+        "--hub",
+        type=int,
+        default=0,
+        help="Hub node index for star topology (default: 0).",
     )
     args = parser.parse_args()
 
-    num_logical = 3  # Alice, Bob, Message (teleportation)
-    num_physical = 3  # Metasurface interaction zones
+    # Apply --fast preset
+    maxiter = 20 if args.fast else args.maxiter
+    reps = 1 if args.fast else args.reps
+
+    num_logical = args.qubits
+    num_physical = num_logical  # Same number of physical nodes
+
+    # Resolve topology and interaction matrix for QUBO
+    interaction_matrix = None
+    try:
+        from pathlib import Path
+        _root = Path(__file__).resolve().parents[1]
+        if str(_root) not in sys.path:
+            sys.path.insert(0, str(_root))
+        from asic.topology_builder import get_topology
+        kw = {"hub": args.hub} if args.topology == "star" else {}
+        _topo, interaction_matrix = get_topology(args.topology, num_logical, **kw)
+    except ImportError:
+        pass  # Use default linear chain interaction_matrix in build_routing_qubo
+    except Exception as e:
+        print(f"  Topology error: {e}", file=sys.stderr)
+        sys.exit(1)
 
     if not HAS_QISKIT_OPT:
-        print("qiskit_optimization not available.")
+        print("qiskit_optimization not available.", file=sys.stderr)
         if _qiskit_opt_import_error is not None:
-            print(f"  Import error: {_qiskit_opt_import_error}")
-        print("  Install with: python -m pip install qiskit qiskit-optimization hashable-list ordered-set")
-        print("  (Use the same 'python' you run this script with. Check: python -c \"import sys; print(sys.executable)\")")
-        return
+            print(f"  Import error: {_qiskit_opt_import_error}", file=sys.stderr)
+        print("  Install with: python -m pip install qiskit qiskit-optimization hashable-list ordered-set", file=sys.stderr)
+        print("  (Use the same 'python' you run this script with. Check: python -c \"import sys; print(sys.executable)\")", file=sys.stderr)
+        sys.exit(1)
 
     qp = build_routing_qubo(
         num_logical_qubits=num_logical,
         num_physical_nodes=num_physical,
+        interaction_matrix=interaction_matrix,
     )
     print("Metasurface Qubit Routing QUBO (minimize interaction distance)")
-    print(f"  Logical qubits: {num_logical}, Physical nodes: {num_physical}")
+    print(f"  Topology: {args.topology}, Logical qubits: {num_logical}, Physical nodes: {num_physical}")
 
     use_qaoa = HAS_QAOA or args.hardware
     if not use_qaoa:
@@ -346,12 +410,23 @@ def main() -> None:
         )
         if sampler is None or pm is None:
             print("  Falling back to simulation.")
-            result = solve_routing(qp, use_qaoa=HAS_QAOA)
+            result = solve_routing(qp, use_qaoa=HAS_QAOA, qaoa_reps=reps, optimizer_maxiter=maxiter)
         else:
             backend_name_for_output = backend.name
             print(f"  Using real backend: {backend_name_for_output}")
+            est = estimate_quantum_resources(
+                num_logical_qubits=num_logical,
+                num_physical_nodes=num_physical,
+                qaoa_reps=reps,
+                optimizer_maxiter=maxiter,
+            )
+            qpu_sec = est["total_shots_on_hardware"] * 50e-6
+            print(f"  [Est. QPU time ~{qpu_sec:.1f} s (~{est['total_shots_on_hardware']} shots)]")
+            if args.fast:
+                print("  (--fast: budget preset for affordable runs under 5 min QPU time.)")
             result = solve_routing(
-                qp, use_qaoa=True, sampler=sampler, pass_manager=pm
+                qp, use_qaoa=True, qaoa_reps=reps, optimizer_maxiter=maxiter,
+                sampler=sampler, pass_manager=pm
             )
     else:
         # Optional: print rough quantum resource estimate when using QAOA
@@ -359,12 +434,16 @@ def main() -> None:
             est = estimate_quantum_resources(
                 num_logical_qubits=num_logical,
                 num_physical_nodes=num_physical,
-                qaoa_reps=2,
-                optimizer_maxiter=100,
+                qaoa_reps=reps,
+                optimizer_maxiter=maxiter,
             )
+            qpu_sec = est["total_shots_on_hardware"] * 50e-6  # ~50 us per shot
             print(f"  [QAOA resource estimate: {est['n_qubits']} qubits, ~{est['circuit_evaluations']} circuit evals, "
-                  f"simulator ~{est['simulator_time_sec_rough']} s; on real HW ~{est['total_shots_on_hardware']} shots]")
-        result = solve_routing(qp, use_qaoa=use_qaoa)
+                  f"simulator ~{est['simulator_time_sec_rough']} s; on real HW ~{est['total_shots_on_hardware']} shots, "
+                  f"est. QPU time ~{qpu_sec:.1f} s]")
+            if args.fast:
+                print("  (--fast: budget preset for affordable runs under 5 min QPU time.)")
+        result = solve_routing(qp, use_qaoa=use_qaoa, qaoa_reps=reps, optimizer_maxiter=maxiter)
 
     print(f"  Solver: {result['solver']}, objective value: {result['fval']}")
 
@@ -382,15 +461,22 @@ def main() -> None:
         out = {
             "num_logical_qubits": num_logical,
             "num_physical_nodes": num_physical,
+            "topology": args.topology,
             "solver": result["solver"],
             "objective_value": float(result["fval"]) if result["fval"] is not None else None,
             "backend": backend_name_for_output,
             "mapping": [{"logical": a, "physical": b} for a, b in (mapping or [])],
-            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         }
-        with open(args.output, "w") as f:
-            json.dump(out, f, indent=2)
+        try:
+            with open(args.output, "w", encoding="utf-8") as f:
+                json.dump(out, f, indent=2)
+        except OSError as e:
+            print(f"  Error writing output: {e}", file=sys.stderr)
+            sys.exit(1)
         print(f"  Result written to {args.output}")
+
+    sys.exit(0)
 
 
 if __name__ == "__main__":

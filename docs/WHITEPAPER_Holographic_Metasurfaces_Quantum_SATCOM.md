@@ -8,6 +8,8 @@
 
 The current trajectory of quantum computing is constrained by the physical and thermodynamic limits of fixed-wire topologies and extensive coaxial interconnects. Simultaneously, macroscopic satellite communications have been revolutionized by Metamaterial Surface Antenna Technology (MSAT). MSAT utilizes programmable active matrix holography to efficiently steer RF waves without moving parts. This whitepaper proposes a convergence of these two domains: adapting macroscopic software-defined apertures into a solid-state, cryogenic interface for subatomic wave manipulation. By utilizing a programmable metasurface to mediate entanglement between localized RF electrons, we outline an architecture that aims to eliminate the "wiring crisis" in quantum processors. This approach provides a pathway to dynamic, all-to-all qubit connectivity. Furthermore, it scales outward to enable weather-resilient, highly directional, and tamper-evident quantum SATCOM links and phased-array quantum radar.
 
+**Related documents.** For deeper material on rf-SQUID breathers, reflective-type phase-shifter topologies, lithium niobate BAW at millikelvin, 28 nm FD-SOI Cryo-CMOS (Gooseberry), and example regional ecosystems and potential partner types (e.g., facilities such as UCSD SMM, vendors such as Quantum Design, companies such as Monarch Quantum), see the long-form report *Cryogenic Metamaterial Architectures for Solid-State Quantum Routing and SATCOM* ([LaTeX source](Cryogenic_Metamaterial_Architectures_Quantum_SATCOM.tex); compile with `xelatex`). For a concise paper with a math appendix (QAOA mixing Hamiltonian, DNN phase synthesis), see [WHITEPAPER_Holographic_Metasurfaces_Quantum_SATCOM.tex](WHITEPAPER_Holographic_Metasurfaces_Quantum_SATCOM.tex).
+
 ---
 
 ## 1. Introduction: The Wiring Bottleneck in Quantum Scaling
@@ -29,6 +31,33 @@ In a quantum architecture, the metasurface can manipulate the **local density of
 
 **Implication for protocol-level design:** A reconfigurable bus does not require a universal gate set on a fixed graph. Instead, the same physical hardware can implement different **logical topologies** by software: a linear chain for teleportation and Bell-pair distribution, or a star topology for multi-node entanglement, without changing the underlying wiring. This aligns with a "Quantum ASIC" philosophy: define the **minimal gate set and connectivity** required for a target set of protocols (e.g., entanglement distribution, teleportation, tamper-evident links), and let the metasurface realize that connectivity dynamically rather than via static edges.
 
+### 2.1 Architecture overview
+
+The following diagram maps the full stack from protocol layer to hardware and applications. See [Architecture overview](architecture_overview.md) for the same figure with a short data-flow description.
+
+```mermaid
+flowchart TB
+  subgraph protocol [Protocol layer]
+    ProtocolLayer["Quantum ASIC: linear chain 0–1–2; gates H, X, Z, CNOT. Protocols: teleportation, tamper-evident (Thief), bit commitment"]
+  end
+  subgraph routing [Routing]
+    Routing["QUBO: logical → physical assignment. QAOA on IBM hardware. Output: mapping + routing_result.json"]
+  end
+  subgraph inverse [Inverse design]
+    InverseDesign["Topology feature vector → DNN/MLP → phase profile. Output: phases.npy + JSON. Phase band ≈ π ± 0.14 rad"]
+  end
+  subgraph hardware [Hardware]
+    Hardware["Cryogenic meta-atoms: rf-SQUID, LiNbO₃ BAW. Control: 28 nm FD-SOI Cryo-CMOS, 18 nW/cell"]
+  end
+  subgraph apps [Applications]
+    Applications["Weather-resilient SATCOM (radiative cooling, thermal photon ≈ 0.06). Quantum Illumination (TMSV, Chernoff gain)"]
+  end
+  protocol -->|"target topology"| routing
+  routing -->|"mapping"| inverse
+  inverse -->|"phase array"| hardware
+  hardware -->|"steered RF"| apps
+```
+
 ---
 
 ## 3. Thermodynamic Realities and Hardware Adaptation
@@ -40,6 +69,20 @@ Transitioning macroscopic RF beamforming to the discrete quantum regime requires
 - **Material Phase Transitions:** Operating the system below 100 mK preserves spin coherence. However, the nematic liquid crystals traditionally used in commercial MSAT freeze into rigid crystalline states at these temperatures, losing all electro-optic tunability.
 
 To operate successfully at 10 mK, the metasurface must replace macroscopic liquid crystals with **cryogenic solid-state components**. Utilizing ultra-low temperature varactors, arrays of superconducting quantum interference devices (SQUIDs), or precise piezoelectric quartz bulk acoustic wave (BAW) resonators allows the active matrix to dynamically steer single microwave photons without introducing thermal decoherence.
+
+### 3.1 Key relations
+
+The following relations and target values appear throughout the architecture and in the supporting long-form report (*Cryogenic Metamaterial Architectures for Solid-State Quantum Routing and SATCOM*).
+
+| Quantity | Relation or value | Context |
+|----------|-------------------|--------|
+| Microwave photon energy | \(E = h\nu\) | Planck; at 4–12 GHz, \(h\nu \ll k_B T\) at 300 K |
+| Thermal occlusion | Operate well below 100 mK | Preserve spin coherence; \(k_B T\) must not mask signal |
+| Rayleigh scattering (atmosphere) | \(\gamma_c(f,T) = K_l(f,T)\,M\) | Microwave vs Mie (optical); weather resilience |
+| Thermal photon occupation (channel) | \(\approx 0.06\) | After radiative overcoupling to 10 mK cold load |
+| State transfer fidelity | 58.5% at 4 K | Continuous-variable teleportation with thermal suppression |
+| Metasurface phase profile (inverse design) | \(\phi \in [3.03,\,3.28]\) rad; mean \(\approx 3.14\;\mathrm{rad}\) | Sub-radian perturbations around \(\pi\); low actuation energy |
+| Cryo-CMOS dissipation | 18 nW per cell | Gooseberry-style CLFG; 1000 cells ⇒ 18 µW total |
 
 ---
 
@@ -103,7 +146,11 @@ A realistic path from concept to deployment involves staged milestones:
 4. **Link to SATCOM:** Integrate an RF quantum source (e.g., Cooper pair splitter or circuit QED source) with a cryogenic or near-cryogenic metasurface aperture for over-the-air entanglement distribution or teleportation over short ranges (lab, then outdoor). Characterize tamper-evidence (fidelity under intentional disturbance).
 5. **Scaling:** Increase aperture size and qubit count; integrate with classical SATCOM payloads for hybrid quantum-classical links; pursue phased-array quantum radar prototypes.
 
-**Current implementation status:** The **toy-quantum-protocols** repository provides protocol-layer validation (item 3) in simulation and a full engineering pipeline: (a) **QUBO-based metasurface qubit routing** solved with QAOA, run in simulation or on **real IBM Quantum hardware** (e.g., ibm_torino), with results written to JSON; (b) **inverse design** (topology → phase profile) run on CPU/GPU with JSON and phase-array output, optionally chained to the routing result. See **§10** for code layout, commands, and output formats.
+**Current implementation status:** The **QASIC Engineering-as-Code** repository provides protocol-layer validation (item 3) in simulation and a full engineering pipeline: (a) **QUBO-based metasurface qubit routing** solved with QAOA, run in simulation or on **real IBM Quantum hardware** (e.g., ibm_torino), with results written to JSON; (b) **inverse design** (topology → phase profile) run on CPU/GPU with JSON and phase-array output, optionally chained to the routing result. See **§10** for code layout, commands, and output formats.
+
+**Pushing as far as possible without physical metamaterials:** All of the above runs without any cryogenic metasurface in hand. A single **pipeline script** (`engineering/run_pipeline.py`) runs routing (sim or real IBM hardware) then inverse design, writing routing JSON and phase array; a **visualization script** (`engineering/viz_routing_phase.py`) summarizes mapping and phase statistics. Protocol demos, routing, and inverse design are fully usable in simulation and on cloud quantum hardware; the outputs (mapping + phase profile) are the same data that would be consumed by control firmware once a physical metasurface is available.
+
+**When hardware is in hand:** With a real 10 mK metasurface demonstrator, the next steps would be: (1) feed routing JSON and phase array into the control stack (e.g., Cryo-CMOS DAC schedules); (2) validate on-chip entanglement via the bus (item 2) and compare fidelities to simulation; (3) run over-the-air entanglement or teleportation over short links. The repository remains the reference for protocol topology, routing formulation, and inverse-design interface.
 
 ---
 
@@ -115,12 +162,12 @@ Holographic metasurfaces, adapted to cryogenic solid-state operation, can act as
 
 ## 10. Supporting Code and Implementation
 
-The concepts in this whitepaper are supported by open-source code in the **toy-quantum-protocols** repository, which provides (1) a protocol and Quantum ASIC layer for teleportation, tamper-evidence, and bit commitment, and (2) engineering workloads for **metasurface qubit routing** (QUBO + QAOA) and **inverse design** (topology → phase profile). Both engineering workloads run on real or accelerated hardware and output structured results (JSON and, for the inverse net, phase arrays) for integration with downstream control or simulation.
+The concepts in this whitepaper are supported by open-source code in the **QASIC Engineering-as-Code** repository, which provides (1) a protocol and Quantum ASIC layer for teleportation, tamper-evidence, and bit commitment, and (2) engineering workloads for **metasurface qubit routing** (QUBO + QAOA) and **inverse design** (topology → phase profile). Both engineering workloads run on real or accelerated hardware and output structured results (JSON and, for the inverse net, phase arrays) for integration with downstream control or simulation.
 
 ### 10.1 Repository layout
 
 - **Protocol layer:** `state/` (minimal qubit simulation), `protocols/` (entanglement, teleportation, tamper-evident “Thief,” toy bit commitment), `asic/` (Quantum ASIC: minimal gate set and linear topology 0–1–2). See `docs/QUANTUM_ASIC.md` and `PROTOCOLS.md`.
-- **Engineering:** `engineering/routing_qubo_qaoa.py` (QUBO routing with QAOA), `engineering/metasurface_inverse_net.py` (PyTorch inverse design). Optional deps: `qiskit`, `qiskit-optimization`, `qiskit-ibm-runtime`, `torch`. See `engineering/README.md`.
+- **Engineering:** `engineering/routing_qubo_qaoa.py` (QUBO routing with QAOA), `engineering/metasurface_inverse_net.py` (PyTorch inverse design), `engineering/run_pipeline.py` (routing → inverse design in one run), `engineering/viz_routing_phase.py` (summarize routing JSON and phase array). Optional deps: `qiskit`, `qiskit-optimization`, `qiskit-ibm-runtime`, `torch`. See `engineering/README.md`.
 
 ### 10.2 Metasurface qubit routing (QUBO + QAOA)
 
@@ -184,11 +231,26 @@ python engineering/metasurface_inverse_net.py --routing-result routing_result.js
 
 This implements the **“desired coupling/steering → phase shifts per meta-atom”** step that the active matrix must apply.
 
-### 10.4 Integration with the whitepaper
+### 10.4 Pipeline and visualization (no physical metasurface required)
+
+To run the full stack in simulation (or routing on real IBM hardware) and then inverse design:
+
+```bash
+python engineering/run_pipeline.py
+python engineering/run_pipeline.py --hardware -o my_run
+```
+
+This produces `my_run_routing.json`, `my_run_inverse.json`, and `my_run_inverse_phases.npy` (default base: `pipeline_result`). To summarize routing and phase outputs:
+
+```bash
+python engineering/viz_routing_phase.py pipeline_result_routing.json --inverse pipeline_result_inverse.json --histogram
+```
+
+### 10.5 Integration with the whitepaper
 
 - **§2 (Quantum bus):** The routing output (mapping) defines which logical qubits sit on which physical zones; the inverse net’s phase profile is the continuous counterpart (impedance/phase per meta-atom) that would steer the bus.
 - **§5 (Quantum ASIC):** The same linear topology (0–1–2) and minimal gate set used in the protocol layer are the *target* of the routing QUBO (minimize distance for required adjacent interactions).
-- **§8 (Roadmap):** Protocol-layer validation and minimal-topology mapping are implemented and have been run in simulation and on real IBM hardware; inverse design runs on GPU with optional chaining from routing JSON. Next steps in the roadmap (cryogenic metasurface demonstrator, on-chip entanglement via bus) would consume outputs of this code (mapping + phase profile) as design or control inputs.
+- **§8 (Roadmap):** Protocol-layer validation and minimal-topology mapping are implemented and have been run in simulation and on real IBM hardware; inverse design runs on GPU with optional chaining from routing JSON. The pipeline script and viz script allow running and inspecting the full stack without physical metamaterials. Next steps in the roadmap (cryogenic metasurface demonstrator, on-chip entanglement via bus) would consume outputs of this code (mapping + phase profile) as design or control inputs.
 
 ---
 
@@ -201,4 +263,4 @@ This implements the **“desired coupling/steering → phase shifts per meta-ato
 - **Quantum ASIC and minimal topology:** Protocol-level minimal gate set and linear topology (see repo: `docs/QUANTUM_ASIC.md`, `PROTOCOLS.md`) for teleportation, tamper-evidence, and commitment.
 - **Tamper-evidence and no-cloning:** Foundational QKD and quantum communication literature; "Thief" and intercept models in pedagogical simulators (e.g., Quirk).
 - **Quantum radar:** Theoretical and experimental work on entangled-photon radar and correlation-based detection; phased-array extensions.
-- **Supporting code:** `toy-quantum-protocols` repo: `engineering/README.md`, `engineering/routing_qubo_qaoa.py`, `engineering/metasurface_inverse_net.py`; BQTC QRNG API pattern (`IBM_QUANTUM_TOKEN`, `ibm_quantum_platform`).
+- **Supporting code:** QASIC Engineering-as-Code repo: `engineering/README.md`, `engineering/routing_qubo_qaoa.py`, `engineering/metasurface_inverse_net.py`; BQTC QRNG API pattern (`IBM_QUANTUM_TOKEN`, `ibm_quantum_platform`).
