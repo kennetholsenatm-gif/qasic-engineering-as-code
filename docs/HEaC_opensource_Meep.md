@@ -17,14 +17,17 @@ Short summary of the **Hardware-Engineering-as-Code (HEaC)** open-source tool ch
 | Library | `engineering/heac/meep_unit_cell_sweep.py` | Sweep dimension → phase; output `meta_atom_library.json` (+ .npy). Meep or `--no-meep` synthetic. |
 | Interpolator | `engineering/heac/phase_to_dimension.py` | Load library, build φ→d; CLI: `--table` for sample points. |
 | Manifest | `engineering/heac/phases_to_geometry.py` | `phases.npy` + library → `geometry_manifest.json`. |
-| GDS (optional) | `engineering/heac/manifest_to_gds.py` | Manifest → .gds (requires gdsfactory). |
-| Pipeline | `engineering/run_pipeline.py --heac` | After inverse design, run phases→manifest; create synthetic library if needed. |
+| GDS (optional) | `engineering/heac/manifest_to_gds.py` | Manifest → .gds (requires gdsfactory). Use `--pdk-config` for PDK layers and design rules. |
+| DRC (optional) | `engineering/heac/run_drc_klayout.py` | Run DRC on GDS (KLayout batch or mock when KLayout not installed). |
+| LVS (optional) | `engineering/heac/run_lvs_klayout.py` | Layout vs schematic: manifest + routing vs GDS (KLayout or mock). |
+| Pipeline | `engineering/run_pipeline.py --heac` | After inverse design, run phases→manifest; create synthetic library if needed. Use `--gds --drc --lvs` for GDS + DRC/LVS. |
 
 ## Dependencies
 
 - **Required for HEaC (manifest only):** `numpy`, `scipy` (interpolator).
 - **Optional – Meep:** `pymeep` for real unit-cell FDTD sweep (otherwise synthetic library).
-- **Optional – GDS:** `gdsfactory` for `manifest_to_gds.py`.
+- **Optional – GDS:** `gdsfactory` for `manifest_to_gds.py`. PDK config: `engineering/heac/pdk_config.yaml` (minimal toy rules for CI; swap for foundry PDK for tape-out).
+- **Optional – DRC/LVS:** KLayout on PATH for real DRC/LVS; otherwise mock mode (file checks) so CI passes.
 
 See [engineering/README.md](../engineering/README.md#hardware-engineering-as-code-open-source-meep) for commands and [engineering/requirements-engineering.txt](../engineering/requirements-engineering.txt) for version notes.
 

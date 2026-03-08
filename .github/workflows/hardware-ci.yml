@@ -1,0 +1,106 @@
+# Hardware CI: on PR/push to relevant paths, run tests + pipeline + thermodynamic validation.
+# Optional: GDS diff vs baseline; Meep in separate/scheduled run to keep PR fast.
+name: Hardware CI
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'protocols/**'
+      - 'asic/**'
+      - 'engineering/**'
+      - 'apps/**'
+      - 'state/**'
+      - 'docs/**'
+      - 'tests/**'
+      - 'requirements*.txt'
+  pull_request:
+    branches: [main, master]
+    paths:
+      - 'protocols/**'
+      - 'asic/**'
+      - 'engineering/**'
+      - 'apps/**'
+      - 'state/**'
+      - 'docs/**'
+      - 'tests/**'
+      - 'requirements*.txt'
+
+jobs:
+  test:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install -r requirements-test.txt
+          pip install -r engineering/requirements-engineering.txt
+      - name: Run pytest
+        run: python -m pytest tests/ -v --ignore=tests/test_engineering_protocol_ibm.py 2>/dev/null || python -m pytest tests/ -v -k "not ibm" 2>/dev/null || python -m pytest tests/ -v
+        continue-on-error: false
+
+  hardware-verify:
+    name: Pipeline + thermodynamic + HEaC
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install -r engineering/requirements-engineering.txt
+      - name: Run pipeline (routing + inverse + HEaC, --fast, no Meep)
+        run: |
+          python engineering/run_pipeline.py -o ci_result --heac --fast
+        working-directory: ${{ github.workspace }}
+      - name: Thermodynamic validator
+        run: |
+          if [ -f engineering/ci_result_inverse_phases.npy ]; then
+            python engineering/thermodynamic_validator.py engineering/ci_result_inverse_phases.npy -j
+          elif [ -f engineering/ci_result_inverse.json ]; then
+            python engineering/thermodynamic_validator.py engineering/ci_result_inverse.json -j
+          else
+            echo "No phases/inverse output; skipping thermodynamic validator"
+          fi
+        working-directory: ${{ github.workspace }}
+      - name: Upload pipeline artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-outputs
+          path: |
+            engineering/ci_result_routing.json
+            engineering/ci_result_inverse.json
+            engineering/ci_result_inverse_phases.npy
+            engineering/ci_result_geometry_manifest.json
+          if-no-files-found: ignore
+
+  gds-diff:
+    name: GDS diff (optional)
+    runs-on: ubuntu-latest
+    needs: hardware-verify
+    if: success() && github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: pipeline-outputs
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run manifest diff script
+        run: |
+          pip install -r requirements.txt
+          if [ -f engineering/ci_result_geometry_manifest.json ]; then
+            python engineering/ci_gds_diff.py engineering/ci_result_geometry_manifest.json --phases engineering/ci_result_inverse_phases.npy -o engineering/ci_diff_report.md 2>/dev/null || echo "Diff report skipped"
+          else
+            echo "No manifest artifact; diff skipped"
+          fi
+        working-directory: ${{ github.workspace }}

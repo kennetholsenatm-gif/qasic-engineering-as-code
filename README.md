@@ -37,7 +37,11 @@ Two applications live under **`apps/`** and use the shared **`QRNG.PY`** at repo
 - **[BQTC](apps/README.md#bqtc-bayesian-quantum-traffic-controller)** — Bayesian-Quantum Traffic Controller: Telemetry → Bayesian inference → Qiskit QUBO path selection → VyOS BGP actuator.
 - **[qrnc](apps/README.md#qrnc-quantum-backed-tokens-and-exchange)** — Quantum-backed tokens and BitCommit-style two-party exchange.
 
-See [apps/README.md](apps/README.md) for run instructions and [docs/APPLICATIONS.md](docs/APPLICATIONS.md) for purpose and security caveats. Conceptual extensions to **data and control plane** (tamper-evident tunneling, FEC, key streaming, BGP commitment, SD-WAN QAOA, OAM fault localization) are described in [docs/DATA_AND_CONTROL_PLANE_QUANTUM_ASIC.md](docs/DATA_AND_CONTROL_PLANE_QUANTUM_ASIC.md).
+See [apps/README.md](apps/README.md) for run instructions and [docs/APPLICATIONS.md](docs/APPLICATIONS.md) for purpose and security caveats.
+
+### Pulse control
+
+**`pulse/`** compiles ASIC gate circuits to pulse schedules (Qiskit OpenPulse or a pseudo-schedule dict) for microwave/optical control. Run `python -m pulse --circuit teleport -o schedule.json` from the repo root; see [docs/PULSE_CONTROL.md](docs/PULSE_CONTROL.md). Conceptual extensions to **data and control plane** (tamper-evident tunneling, FEC, key streaming, BGP commitment, SD-WAN QAOA, OAM fault localization) are described in [docs/DATA_AND_CONTROL_PLANE_QUANTUM_ASIC.md](docs/DATA_AND_CONTROL_PLANE_QUANTUM_ASIC.md).
 
 ## Project layout
 
@@ -73,6 +77,11 @@ qasic-engineering-as-code/
 │   ├── gate_set.py           # Allowed 1q/2q gates
 │   ├── circuit.py            # Op list, validation, protocol_*_ops()
 │   └── executor.py           # Run ASIC circuit on State
+├── pulse/                    # Pulse-level control: gate -> schedule (OpenPulse / pseudo)
+│   ├── compiler.py           # compile_circuit_to_schedule()
+│   ├── openpulse_backend.py  # Qiskit Pulse schedule builder
+│   ├── pseudo_schedule.py    # Dict schedule when Qiskit not installed
+│   └── schedule_config_schema.json
 ├── protocols/                # Protocol logic
 │   ├── __init__.py
 │   ├── entanglement.py       # Bell pairs, distribution
@@ -188,6 +197,16 @@ python -m pytest tests/ -v
 ```
 
 Optional: install `engineering/requirements-engineering.txt` to run routing and inverse-net tests (including `test_engineering_routing.py` QUBO build when `qiskit-optimization` is available).
+
+## Hardware CI
+
+On push/PR to `protocols/`, `asic/`, `engineering/`, `apps/`, `state/`, or `tests/`, GitHub Actions runs:
+
+1. **Unit tests** — `pytest tests/`
+2. **Pipeline + thermodynamic validation** — `run_pipeline.py -o ci_result --heac --fast`, then `thermodynamic_validator.py` on the generated phases
+3. **GDS/manifest diff** (on PRs) — `engineering/ci_gds_diff.py` compares current run to `engineering/ci_baseline/` and reports cell count / phase summary changes
+
+Store reference outputs in `engineering/ci_baseline/` (see `engineering/ci_baseline/README.md`) to enable diff comments. Meep FDTD can be run in a separate scheduled or manual workflow to keep PR latency low.
 
 ## Whitepaper and reports
 

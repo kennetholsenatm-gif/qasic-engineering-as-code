@@ -1,0 +1,26 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Pulse backend config",
+  "description": "Config for compiling ASIC circuits to pulse schedules (OpenPulse or pseudo).",
+  "type": "object",
+  "properties": {
+    "n_qubits": { "type": "integer", "minimum": 1, "default": 3 },
+    "dt": { "type": "number", "description": "Sample time in seconds", "default": 1e-9 },
+    "duration_1q": { "type": "integer", "description": "Samples per single-qubit gate (OpenPulse)", "default": 128 },
+    "duration_2q": { "type": "integer", "description": "Samples per two-qubit gate (OpenPulse)", "default": 256 },
+    "amp": { "type": "number", "description": "Default pulse amplitude", "default": 0.1 },
+    "samples_per_1q_gate": { "type": "integer", "description": "Pseudo-schedule only", "default": 32 },
+    "samples_per_2q_gate": { "type": "integer", "description": "Pseudo-schedule only", "default": 64 },
+    "qubits": {
+      "type": "array",
+      "description": "Per-qubit calibration (optional)",
+      "items": {
+        "type": "object",
+        "properties": {
+          "frequency": { "type": "number" },
+          "scale": { "type": "number" }
+        }
+      }
+    }
+  }
+}

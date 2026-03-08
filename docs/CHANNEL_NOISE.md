@@ -81,4 +81,4 @@ A **Discrete Variable** toy analogue of Seth Lloyd’s Quantum Illumination (200
 python demos/demo_noise.py
 ```
 
-See also the whitepaper (§ SATCOM, thermal noise, radiative cooling) and the repository README.
+For **layout-aware decoherence** (parasitic extraction from geometry manifest) and **thermal stage reports** (10 mK / 4 K / 50 K), see [THERMAL_AND_PARASITICS.md](THERMAL_AND_PARASITICS.md). See also the whitepaper (§ SATCOM, thermal noise, radiative cooling) and the repository README.

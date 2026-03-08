@@ -22,7 +22,10 @@ Code supporting the **Holographic Metasurfaces and Cryogenic Architectures** whi
 | **`phase_synthesis_report.py`** | Phase stats + thermodynamic validation in one report. Input: inverse JSON or .npy; optional `--json`. |
 | **`benchmark_mlp_vs_gnn.py`** | Compare MLP vs GNN inverse design: phase stats, thermodynamic compliance, optional MSE to π target. Use `--routing-result` for both models; `-o` JSON, `--table` for summary. |
 | **`graph_from_geometry.py`** | Build physics-aligned graphs for the GNN: 2D grid or coupling-matrix topology. `--grid NX,NY` or `--routing FILE`; optional `-o BASE` to save tensors. |
-| **`heac/`** | **HEaC (open-source, Meep):** `meep_unit_cell_sweep.py` (meta-atom library), `phase_to_dimension.py` (φ→d), `phases_to_geometry.py` (phases.npy→manifest), `manifest_to_gds.py` (optional gdsfactory). See [Hardware-Engineering-as-Code](#hardware-engineering-as-code-open-source-meep) below. |
+| **`heac/`** | **HEaC (open-source, Meep):** `meep_unit_cell_sweep.py` (meta-atom library), `phase_to_dimension.py` (φ→d), `phases_to_geometry.py` (phases.npy→manifest), `manifest_to_gds.py` (optional gdsfactory; `--pdk-config` for PDK), `run_drc_klayout.py`, `run_lvs_klayout.py` (DRC/LVS or mock). See [Hardware-Engineering-as-Code](#hardware-engineering-as-code-open-source-meep) below. |
+| **`calibration/`** | **Digital twin:** Ingest quantum telemetry (T1/T2 per qubit), Bayesian update of decoherence rates, output `decoherence_from_calibration.json` for routing/simulation. See [../docs/CALIBRATION_DIGITAL_TWIN.md](../docs/CALIBRATION_DIGITAL_TWIN.md). |
+| **`thermal_stages.py`** | Lumped thermal report (10 mK / 4 K / 50 K) from routing + phases. Use `run_pipeline.py --thermal`. |
+| **`parasitic_extraction.py`** | Layout-aware decoherence from geometry manifest (and routing). Use `run_pipeline.py --heac --parasitic`. |
 
 ## Relation to the rest of the repo
 
@@ -30,6 +33,10 @@ Code supporting the **Holographic Metasurfaces and Cryogenic Architectures** whi
 - The **inverse net** takes high-level targets (e.g. “Bell pair between zone A and B”, steering angle) and outputs the **phase profile** for the active matrix, which the physical metasurface then implements.
 
 So: **protocol layer** (ASIC) → **routing** (which logical qubit on which node) → **inverse design** (phase shifts per meta-atom).
+
+### Hardware CI
+
+When you push or open a PR that touches `protocols/`, `asic/`, `engineering/`, `apps/`, or `state/`, the **Hardware CI** workflow (`.github/workflows/hardware-ci.yml`) runs unit tests, then the pipeline with `--heac --fast`, then the thermodynamic validator. On PRs, it optionally runs `engineering/ci_gds_diff.py` to compare the new manifest (and phase summary) to a baseline in `engineering/ci_baseline/`. To get diff reports, add `ci_result_geometry_manifest.json` (and optionally `ci_result_inverse_phases.npy`) to `engineering/ci_baseline/` and update them on merge to main.
 
 ### Engineering-as-Code stack
 
@@ -184,7 +191,7 @@ python engineering/heac/manifest_to_gds.py engineering/geometry_manifest.json -o
 ```bash
 python engineering/run_pipeline.py --heac
 ```
-If `meta_atom_library.json` is missing, a synthetic library is generated automatically. Use `--heac-library PATH` to supply a custom library.
+If `meta_atom_library.json` is missing, a synthetic library is generated automatically. Use `--heac-library PATH` to supply a custom library. For GDS export and DRC/LVS, use `--heac --gds` (writes `.gds`), `--drc` (run DRC; mock if KLayout not on PATH), and `--lvs` (layout vs schematic; mock if KLayout not installed). Use `--pdk` to apply `heac/pdk_config.yaml` (layer numbers, min width/spacing).
 
 **Optional dependencies:** `scipy` (interpolator), `pymeep` (Meep FDTD for library sweep), `gdsfactory` (GDS export). See [engineering/requirements-engineering.txt](requirements-engineering.txt).
 

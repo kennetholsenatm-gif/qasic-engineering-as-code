@@ -81,6 +81,42 @@ def main() -> int:
         default=None,
         help="Path to meta_atom_library.json for --heac; default: engineering/meta_atom_library.json (created with synthetic library if missing).",
     )
+    parser.add_argument(
+        "--pdk",
+        action="store_true",
+        help="Use PDK config for GDS export (layer numbers, design rules). Requires --heac.",
+    )
+    parser.add_argument(
+        "--pdk-config",
+        type=str,
+        default=None,
+        help="Path to PDK config YAML; default: engineering/heac/pdk_config.yaml when --pdk.",
+    )
+    parser.add_argument(
+        "--gds",
+        action="store_true",
+        help="After HEaC manifest, run manifest_to_gds to produce .gds (requires gdsfactory).",
+    )
+    parser.add_argument(
+        "--drc",
+        action="store_true",
+        help="After GDS, run DRC (KLayout or mock). Implies --gds.",
+    )
+    parser.add_argument(
+        "--lvs",
+        action="store_true",
+        help="After GDS, run LVS (schematic from manifest vs layout). Implies --gds.",
+    )
+    parser.add_argument(
+        "--thermal",
+        action="store_true",
+        help="After inverse design, run thermal stage report (routing + phases -> thermal_report.json).",
+    )
+    parser.add_argument(
+        "--parasitic",
+        action="store_true",
+        help="After HEaC manifest, run parasitic extraction (manifest -> decoherence_from_layout.json).",
+    )
     args = parser.parse_args()
 
     # Resolve paths from repo root or cwd
@@ -193,6 +229,99 @@ def main() -> int:
                 print("HEaC step failed.", file=sys.stderr)
             else:
                 print(f"  Geometry manifest: {manifest_path}")
+
+    # Optional: GDS export and DRC/LVS (require manifest from --heac)
+    do_gds = args.gds or args.drc or args.lvs
+    manifest_path = os.path.join(script_dir, args.output + "_geometry_manifest.json")
+    if do_gds and os.path.isfile(manifest_path):
+        gds_path = os.path.join(script_dir, args.output + ".gds")
+        pdk_cfg = args.pdk_config or (os.path.join(script_dir, "heac", "pdk_config.yaml") if args.pdk else None)
+        heac_dir = os.path.join(script_dir, "heac")
+        # manifest_to_gds
+        gds_cmd = [
+            sys.executable,
+            os.path.join(heac_dir, "manifest_to_gds.py"),
+            manifest_path, "-o", gds_path,
+        ]
+        if pdk_cfg and os.path.isfile(pdk_cfg):
+            gds_cmd += ["--pdk-config", pdk_cfg]
+        print("Running manifest -> GDS...")
+        rc_gds = subprocess.run(gds_cmd, cwd=repo_root)
+        if rc_gds.returncode != 0:
+            print("GDS export failed.", file=sys.stderr)
+            return rc_gds.returncode
+        if not os.path.isfile(gds_path):
+            print("GDS file not produced.", file=sys.stderr)
+            return 1
+        print(f"  GDS: {gds_path}")
+        # DRC
+        if args.drc:
+            drc_report = os.path.join(script_dir, args.output + "_drc_report.json")
+            rc_drc = subprocess.run(
+                [sys.executable, os.path.join(heac_dir, "run_drc_klayout.py"), gds_path, "-o", drc_report],
+                cwd=repo_root,
+            )
+            if rc_drc.returncode != 0:
+                print("DRC failed.", file=sys.stderr)
+                return rc_drc.returncode
+        # LVS
+        if args.lvs:
+            lvs_report = os.path.join(script_dir, args.output + "_lvs_report.json")
+            lvs_cmd = [
+                sys.executable, os.path.join(heac_dir, "run_lvs_klayout.py"),
+                manifest_path, gds_path,
+            ]
+            if os.path.isfile(routing_json):
+                lvs_cmd += ["--routing", routing_json]
+            lvs_cmd += ["-o", lvs_report]
+            rc_lvs = subprocess.run(lvs_cmd, cwd=repo_root)
+            if rc_lvs.returncode != 0:
+                print("LVS failed.", file=sys.stderr)
+                return rc_lvs.returncode
+    elif do_gds and not os.path.isfile(manifest_path):
+        print("--gds/--drc/--lvs require HEaC manifest; run with --heac first.", file=sys.stderr)
+        return 1
+
+    # Optional: thermal stage report (routing + phases)
+    if args.thermal and os.path.isfile(routing_json):
+        npy_thermal = os.path.join(script_dir, args.output + "_inverse_phases.npy")
+        if not os.path.isfile(npy_thermal) and os.path.isfile(inverse_json):
+            base_inv = os.path.splitext(inverse_json)[0]
+            alt = base_inv + "_phases.npy"
+            if os.path.isfile(alt):
+                npy_thermal = alt
+        if os.path.isfile(npy_thermal):
+            thermal_report_path = os.path.join(script_dir, args.output + "_thermal_report.json")
+            thermal_cmd = [
+                sys.executable,
+                os.path.join(script_dir, "thermal_stages.py"),
+                routing_json, npy_thermal, "-o", thermal_report_path,
+            ]
+            print("Running thermal stage report...")
+            rc_thermal = subprocess.run(thermal_cmd, cwd=repo_root)
+            if rc_thermal.returncode != 0:
+                print("Thermal report failed (check phase/routing inputs).", file=sys.stderr)
+            else:
+                print(f"  Thermal report: {thermal_report_path}")
+
+    # Optional: parasitic extraction (manifest -> decoherence file)
+    manifest_for_parasitic = os.path.join(script_dir, args.output + "_geometry_manifest.json")
+    if args.parasitic and os.path.isfile(manifest_for_parasitic):
+        decoherence_out = os.path.join(script_dir, args.output + "_decoherence_from_layout.json")
+        parasitic_cmd = [
+            sys.executable,
+            os.path.join(script_dir, "parasitic_extraction.py"),
+            manifest_for_parasitic,
+        ]
+        if os.path.isfile(routing_json):
+            parasitic_cmd += ["--routing", routing_json]
+        parasitic_cmd += ["-o", decoherence_out]
+        print("Running parasitic extraction...")
+        rc_parasitic = subprocess.run(parasitic_cmd, cwd=repo_root)
+        if rc_parasitic.returncode != 0:
+            print("Parasitic extraction failed.", file=sys.stderr)
+        else:
+            print(f"  Decoherence from layout: {decoherence_out}")
 
     print("Pipeline done. Outputs:")
     if os.path.isfile(routing_json):

@@ -1,0 +1,28 @@
+# PDK configuration for HEaC GDS export and DRC/LVS.
+# First target: minimal "toy" rule set for CI and open-source compatibility.
+# Swap this for a foundry-specific PDK (e.g. superconducting qubit or SiPh) for tape-out.
+#
+# References: gdsfactory PDKs, Qiskit Metal layers, open SiPh PDKs.
+# See docs/HEaC_opensource_Meep.md and engineering/README.md.
+
+name: heac_toy_pdk
+description: Minimal design rules for HEaC metasurface GDS; CI and open-source use.
+
+# Layer mapping: (layer, datatype) for GDS. Match gdsfactory (layer, datatype) convention.
+layers:
+  metal: [1, 0]   # Meta-atom / active layer
+  # Optional future: substrate, via, etc.
+
+# Design rules (um). Enforced when building PDK-compliant layout from manifest.
+design_rules:
+  min_width_um: 0.1
+  min_spacing_um: 0.05
+  # Ensure cell dimension is at least min_width; pitch must satisfy spacing.
+
+# DRC: path to KLayout DRC script (optional). If absent, run_drc_klayout.py uses mock/minimal.
+# drc_script: path/to/rules.drc
+
+# LVS: paths to schematic and layout netlist format (optional). run_lvs_klayout.py can
+# generate schematic netlist from manifest + routing.json when PDK is used.
+# schematic_netlist: ...
+# layout_netlist: ...
