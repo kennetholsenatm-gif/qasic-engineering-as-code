@@ -80,7 +80,7 @@ mlflow:
 grafana:
   enabled: false
   port: 3000
-  image: grafana/grafana:10.2-alpine
+  image: grafana/grafana:10.2.9
   adminPassword: ""   # set in prod
   resources:
     limits: { cpu: "500m", memory: "512Mi" }

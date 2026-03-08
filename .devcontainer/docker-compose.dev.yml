@@ -1,0 +1,8 @@
+# Dev Container override: mount repo into api service and keep container alive for Cursor to attach.
+# Used with devcontainer.json; base stack is ../docker-compose.yml.
+
+services:
+  api:
+    volumes:
+      - ..:/app
+    command: sleep infinity

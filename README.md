@@ -222,6 +222,8 @@ This produces `dist/qasic_engineering_as_code-<version>.tar.gz` (sdist) and `dis
 
 ### Docker
 
+If you see an error that `.env` is not found, create it from the template: `copy .env.example .env` (Windows) or `cp .env.example .env` (Mac/Linux).
+
 Run the API, frontend, and optional Jupyter in one go:
 
 ```bash
@@ -241,6 +243,20 @@ cd infra/tofu && tofu init && tofu apply -var="deployment_target=local"
 ```
 
 Then open: frontend **http://localhost**, API **http://localhost:8000/docs**, MLflow **http://localhost:5000**, Grafana **http://localhost:3000** (dashboards; InfluxDB telemetry). To provision **AWS** (RDS + ElastiCache) instead and point your containers at managed DBs: `tofu apply -var="deployment_target=aws" -var="db_password=..."`. See [infra/tofu/README.md](infra/tofu/README.md).
+
+### Cursor + Docker
+
+Use [Cursor](https://cursor.com) with Docker Desktop for one-click Compose and optional Dev Containers.
+
+**Prerequisites:** Docker Desktop installed and running (Windows: WSL2 backend recommended). In Cursor, install the **Docker** and **Dev Containers** extensions.
+
+- **Quick run:** Open this repo in Cursor, then **Terminal → Run Task…** and choose:
+  - **Docker: Compose up (core)** — API + frontend (and optionally Jupyter via profile).
+  - **Docker: Compose up (full stack)** — API, frontend, Redis, Postgres, InfluxDB, MLflow, Grafana, Celery (uses `docker-compose.full.yml`).
+- **Stop:** Run task **Docker: Compose down** to stop both core and full stack.
+- **Dev Container:** Use **Command Palette → Dev Containers: Reopen in Container** to open the project inside the API container. The editor and terminal run in that environment; start other services (e.g. frontend, full stack) from the in-container terminal with `docker compose up` if needed.
+
+Compose files: [docker-compose.yml](docker-compose.yml) (core), [docker-compose.full.yml](docker-compose.full.yml) (full stack).
 
 ## CLI dashboard
 

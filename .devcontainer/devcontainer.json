@@ -1,0 +1,12 @@
+{
+  "name": "QASIC API (Dev Container)",
+  "dockerComposeFile": ["../docker-compose.yml", "docker-compose.dev.yml"],
+  "service": "api",
+  "workspaceFolder": "/app",
+  "postCreateCommand": "pip install --no-cache-dir pytest black 2>/dev/null || true",
+  "customizations": {
+    "vscode": {
+      "extensions": []
+    }
+  }
+}

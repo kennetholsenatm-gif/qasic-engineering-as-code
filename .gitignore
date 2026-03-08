@@ -11,3 +11,6 @@ venv/
 # Engineering run outputs (user-specific)
 engineering/*.json
 engineering/*_phases.npy
+
+# Debug session logs (agent instrumentation)
+debug-*.log
