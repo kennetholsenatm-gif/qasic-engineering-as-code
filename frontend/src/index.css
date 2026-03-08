@@ -6,7 +6,7 @@
 body { margin: 0; font-family: system-ui, sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
 a { color: #38bdf8; }
 a:hover { text-decoration: underline; }
-#root { max-width: 900px; margin: 0 auto; padding: 1.5rem; }
+#root { min-height: 100vh; }
 nav { margin-bottom: 1.5rem; }
 nav a { margin-right: 1rem; }
 h1 { font-size: 1.5rem; margin-top: 0; }
