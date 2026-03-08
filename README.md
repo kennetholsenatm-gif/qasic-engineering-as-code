@@ -254,6 +254,7 @@ Store reference outputs in `engineering/ci_baseline/` (see `engineering/ci_basel
 | **Code-based materials science, simulation tools, cost-effective infra** (scqubits, SuperScreen, QuTiP, QAOA, potential partners) | [Computational_Materials_Science_Cryogenic_Quantum_Metamaterials.tex](docs/Computational_Materials_Science_Cryogenic_Quantum_Metamaterials.tex) (LaTeX report; build PDF: same) |
 | **Engineering as Code distributed roadmap** (virtualized quantum hardware, HPC/simulation stack, QAOA, DNN surrogates, cost-effective infra, potential partners) | [Engineering_as_Code_Distributed_Computational_Roadmap.tex](docs/Engineering_as_Code_Distributed_Computational_Roadmap.tex) (LaTeX report; build PDF: same) |
 | **Full-stack diagram** (protocol → routing → inverse design → hardware → apps) | [docs/architecture_overview.md](docs/architecture_overview.md) |
+| **Next steps / maturity roadmap** (tapeout, HIL, cryogenic loop, OpenQASM/GDS–MEEP) | [docs/NEXT_STEPS_ROADMAP.md](docs/NEXT_STEPS_ROADMAP.md) |
 
 ### Documents
 

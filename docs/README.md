@@ -14,6 +14,7 @@ Documentation and whitepapers for **QASIC Engineering-as-Code** ([GitHub](https:
 | [Whitepaper_Unified_Quantum_Metasurfaces_SATCOM.tex](Whitepaper_Unified_Quantum_Metasurfaces_SATCOM.tex) | **Unified whitepaper (LaTeX):** EaC for Quantum ASICs; protocol, simulation, routing, applications |
 | [Whitepaper_Unified_Quantum_Metasurfaces_SATCOM.md](Whitepaper_Unified_Quantum_Metasurfaces_SATCOM.md) | (Unified; see .tex for canonical source) |
 | [architecture_overview.md](architecture_overview.md) | Full-stack diagram: protocol layer → routing → inverse design → hardware → applications |
+| [NEXT_STEPS_ROADMAP.md](NEXT_STEPS_ROADMAP.md) | **Next steps / maturity roadmap:** Tapeout (superconducting extraction, DFT, Monte Carlo), control/HIL (QICK, HIL CI), cryogenic (thermal→decoherence, Cryo-CMOS), interop (OpenQASM/QIR, GDS–MEEP pipeline) |
 | [QKD.md](QKD.md) | **QKD:** Pedagogical BB84 and E91 (basis angles, CHSH); code and API |
 | [QUANTUM_ASIC.md](QUANTUM_ASIC.md) | Quantum ASIC spec: minimal topology (0–1–2), gate set (H, X, Z, CNOT), protocol mapping |
 | [WHITEPAPER_Holographic_Metasurfaces_Quantum_SATCOM.md](WHITEPAPER_Holographic_Metasurfaces_Quantum_SATCOM.md) | Main whitepaper (Markdown): vision, protocol layer, roadmap, §10 supporting code |
