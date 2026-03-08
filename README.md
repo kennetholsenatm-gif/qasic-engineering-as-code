@@ -4,7 +4,7 @@
 
 **Quantum ASIC and Engineering-as-Code (EaC) pipeline:** protocols, routing, inverse design, quantum illumination, and CV quantum radar. Pedagogical implementations of **quantum teleportation**, **tamper-evident channels**, and **bit commitment** over a quantum link, plus DV/CV quantum illumination—in pure Python with NumPy.
 
-**Status:** The full stack (protocols, routing, inverse design) runs **without physical metamaterials**: simulation and real IBM Quantum for routing, CPU/GPU for inverse design. Use `python engineering/run_pipeline.py` to run routing then inverse design in one go; see [Whitepaper §8 and §10](docs/WHITEPAPER_Holographic_Metasurfaces_Quantum_SATCOM.md).
+**Status:** The full stack (protocols, routing, inverse design) runs **without physical metamaterials**: simulation and real IBM Quantum for routing, CPU/GPU for inverse design. Use `python engineering/run_pipeline.py` to run routing then inverse design in one go; see [Whitepaper §8 and §10](docs/WHITEPAPER_Holographic_Metasurfaces_Quantum_SATCOM.md). The repo also includes **tape-out–oriented** features: PDK-aware GDS with DRC/LVS, pulse-level control synthesis (OpenPulse/pseudo), cryogenic thermal and parasitic extraction, Hardware CI (pipeline + thermodynamic validation + manifest diff), and digital-twin calibration (telemetry → decoherence/phase updates).
 
 ## Concepts
 
@@ -41,7 +41,16 @@ See [apps/README.md](apps/README.md) for run instructions and [docs/APPLICATIONS
 
 ### Pulse control
 
-**`pulse/`** compiles ASIC gate circuits to pulse schedules (Qiskit OpenPulse or a pseudo-schedule dict) for microwave/optical control. Run `python -m pulse --circuit teleport -o schedule.json` from the repo root; see [docs/PULSE_CONTROL.md](docs/PULSE_CONTROL.md). Conceptual extensions to **data and control plane** (tamper-evident tunneling, FEC, key streaming, BGP commitment, SD-WAN QAOA, OAM fault localization) are described in [docs/DATA_AND_CONTROL_PLANE_QUANTUM_ASIC.md](docs/DATA_AND_CONTROL_PLANE_QUANTUM_ASIC.md).
+**`pulse/`** compiles ASIC gate circuits to pulse schedules (Qiskit OpenPulse or a pseudo-schedule dict) for microwave/optical control. Run `python -m pulse --circuit teleport -o schedule.json` from the repo root; see [docs/PULSE_CONTROL.md](docs/PULSE_CONTROL.md).
+
+### Tape-out and production features
+
+- **HEaC + PDK:** Geometry manifest → GDS with optional [PDK config](engineering/heac/pdk_config.yaml); [DRC](engineering/heac/run_drc_klayout.py) and [LVS](engineering/heac/run_lvs_klayout.py) (KLayout or mock). Use `python engineering/run_pipeline.py --heac --gds --drc --lvs`. See [docs/HEaC_opensource_Meep.md](docs/HEaC_opensource_Meep.md).
+- **Thermal & parasitics:** [Thermal stage report](engineering/thermal_stages.py) (routing + phases → 10 mK / 4 K / 50 K); [parasitic extraction](engineering/parasitic_extraction.py) (manifest → layout-aware decoherence). Pipeline flags: `--thermal`, `--parasitic`. See [docs/THERMAL_AND_PARASITICS.md](docs/THERMAL_AND_PARASITICS.md).
+- **Digital twin calibration:** [engineering/calibration/](engineering/calibration/) ingests quantum telemetry (T1/T2 per qubit), runs a Bayesian update, and writes `decoherence_from_calibration.json` for routing/simulation. See [docs/CALIBRATION_DIGITAL_TWIN.md](docs/CALIBRATION_DIGITAL_TWIN.md).
+- **Hardware CI:** On push/PR, GitHub Actions runs tests, pipeline + thermodynamic validation, and optional manifest diff; see [Hardware CI](#hardware-ci) below.
+
+Conceptual extensions to **data and control plane** (tamper-evident tunneling, FEC, key streaming, BGP commitment, SD-WAN QAOA, OAM fault localization) are described in [docs/DATA_AND_CONTROL_PLANE_QUANTUM_ASIC.md](docs/DATA_AND_CONTROL_PLANE_QUANTUM_ASIC.md).
 
 ## Project layout
 
@@ -59,6 +68,11 @@ qasic-engineering-as-code/
 │   ├── architecture_overview.md   # Full-stack diagram: protocol → routing → inverse design → hardware → apps
 │   ├── QUANTUM_ASIC.md       # ASIC spec: topology + gate set
 │   ├── TOPOLOGY_BUILDER.md   # Named topologies (linear, star, repeater) + viz_topology
+│   ├── PULSE_CONTROL.md      # Gate → pulse schedule (OpenPulse / pseudo)
+│   ├── HEaC_opensource_Meep.md   # HEaC tool chain, PDK, DRC/LVS
+│   ├── THERMAL_AND_PARASITICS.md  # Thermal stages, parasitic extraction, decoherence feedback
+│   ├── CALIBRATION_DIGITAL_TWIN.md  # Telemetry → digital twin → decoherence for routing/sim
+│   ├── CHANNEL_NOISE.md      # Kraus channels, noise simulator
 │   ├── CV_QUANTUM_RADAR.md   # Toy CV simulator: TMSV, covariance matrices, quantum radar
 │   ├── WHITEPAPER_Holographic_Metasurfaces_Quantum_SATCOM.md
 │   ├── WHITEPAPER_Holographic_Metasurfaces_Quantum_SATCOM.tex
@@ -93,15 +107,27 @@ qasic-engineering-as-code/
 │   ├── noise.py              # NoiseModel, run_teleport_with_noise, run_thief_with_noise
 │   ├── quantum_illumination.py  # DV toy: Bell probe vs thermal loss, Chernoff comparison
 │   └── quantum_radar.py      # CV toy: TMSV + lossy thermal BS, mutual info, SNR; see docs/CV_QUANTUM_RADAR.md
-├── engineering/               # Metasurface routing + inverse design (optional; no physical metasurface required)
+├── engineering/               # Metasurface routing, inverse design, HEaC, thermal/parasitics, calibration
 │   ├── README.md
 │   ├── requirements-engineering.txt
 │   ├── routing_qubo_qaoa.py  # QUBO: logical qubits -> physical nodes (QAOA/classical); --topology linear|star|repeater
 │   ├── metasurface_inverse_net.py  # PyTorch: target topology -> phase profile
-│   ├── run_pipeline.py       # Run routing then inverse design (sim or --hardware)
+│   ├── run_pipeline.py       # Routing then inverse design; optional --heac, --gds, --drc, --lvs, --thermal, --parasitic
 │   ├── run_protocol_on_ibm.py  # Run ASIC protocol (teleport, Bell, etc.) on IBM or simulator
-│   ├── viz_routing_phase.py  # Summarize routing JSON + phase array
-│   └── viz_topology.py       # Draw topology graph (+ optional mapping from routing JSON); see docs/TOPOLOGY_BUILDER.md
+│   ├── thermodynamic_validator.py  # π-baseline, 18 nW/cell phase validation
+│   ├── thermal_stages.py     # Lumped thermal report (10 mK / 4 K / 50 K) from routing + phases
+│   ├── parasitic_extraction.py  # Layout-aware decoherence from geometry manifest
+│   ├── ci_gds_diff.py        # Manifest/phase diff vs baseline (Hardware CI)
+│   ├── ci_baseline/          # Reference outputs for CI diff
+│   ├── heac/                 # HEaC: phases→manifest, manifest→GDS, DRC, LVS
+│   │   ├── phases_to_geometry.py
+│   │   ├── manifest_to_gds.py
+│   │   ├── pdk_config.yaml
+│   │   ├── run_drc_klayout.py
+│   │   └── run_lvs_klayout.py
+│   ├── calibration/         # Digital twin: telemetry → Bayesian update → decoherence file
+│   ├── viz_routing_phase.py
+│   └── viz_topology.py       # See docs/TOPOLOGY_BUILDER.md
 ├── dashboard/                # CLI dashboard (python -m dashboard)
 │   ├── __main__.py
 │   └── cli_dashboard.py      # Rich menu: run protocol/routing/pipeline, view results, docs
@@ -111,11 +137,14 @@ qasic-engineering-as-code/
 ├── frontend/                 # Vite + React SPA (npm run dev / npm run build)
 │   ├── src/
 │   └── package.json
-├── tests/                    # Pytest suite (state, protocols, ASIC, engineering, viz)
+├── tests/                    # Pytest suite (state, protocols, ASIC, pulse, engineering, calibration)
 │   ├── conftest.py
 │   ├── test_state.py
 │   ├── test_protocols_*.py
 │   ├── test_asic.py
+│   ├── test_pulse.py         # Pulse compiler (pseudo / OpenPulse)
+│   ├── test_heac_drc_lvs.py  # HEaC GDS, DRC/LVS (mock and PDK config)
+│   ├── test_calibration.py  # Digital twin, Bayesian update, calibration cycle
 │   ├── test_engineering_*.py
 │   └── test_viz.py
 ├── demos/                    # Runnable scripts
@@ -157,7 +186,7 @@ python demos/demo_bb84.py           # BB84 QKD (pedagogical)
 python demos/demo_e91.py            # E91 QKD (Bell pairs + CHSH)
 ```
 
-Demos are script-style (no CLI arguments). For the full pipeline (routing + inverse design), run `python engineering/run_pipeline.py`; it writes `engineering/<base>_routing.json`, `engineering/<base>_inverse.json`, and `engineering/<base>_inverse_phases.npy` (default base: `pipeline_result`). Use `--routing-method rl` for RL-based routing or `--model gnn` for GNN inverse design; use `--with-superscreen` to compute inductance from the routing topology (optional). For affordable runs on IBM Quantum (under 5 minutes QPU time), see [Engineering as Code on IBM Quantum](engineering/README.md#engineering-as-code-on-ibm-quantum-affordable-5-min) in the engineering README.
+Demos are script-style (no CLI arguments). For the full pipeline (routing + inverse design), run `python engineering/run_pipeline.py`; it writes `engineering/<base>_routing.json`, `engineering/<base>_inverse.json`, and `engineering/<base>_inverse_phases.npy` (default base: `pipeline_result`). Use `--routing-method rl` for RL-based routing or `--model gnn` for GNN inverse design; use `--with-superscreen` to compute inductance from the routing topology (optional). For tape-out–oriented runs: `--heac` (geometry manifest), `--gds --drc --lvs` (GDS + DRC/LVS), `--thermal` (thermal report), `--parasitic` (layout decoherence). For affordable runs on IBM Quantum (under 5 minutes QPU time), see [Engineering as Code on IBM Quantum](engineering/README.md#engineering-as-code-on-ibm-quantum-affordable-5-min) in the engineering README.
 
 ### Docker
 
@@ -196,7 +225,7 @@ pip install -r requirements-test.txt
 python -m pytest tests/ -v
 ```
 
-Optional: install `engineering/requirements-engineering.txt` to run routing and inverse-net tests (including `test_engineering_routing.py` QUBO build when `qiskit-optimization` is available).
+Optional: install `engineering/requirements-engineering.txt` to run routing and inverse-net tests (including `test_engineering_routing.py` QUBO build when `qiskit-optimization` is available). The suite also includes `test_pulse.py` (pulse compiler), `test_heac_drc_lvs.py` (HEaC GDS/DRC/LVS), and `test_calibration.py` (digital twin calibration).
 
 ## Hardware CI
 
@@ -215,6 +244,11 @@ Store reference outputs in `engineering/ci_baseline/` (see `engineering/ci_basel
 | If you want… | Read… |
 |--------------|--------|
 | **Vision, protocol layer, roadmap, and code** (architecture overview, Quantum ASIC, routing/inverse-design commands) | [WHITEPAPER_Holographic_Metasurfaces_Quantum_SATCOM.md](docs/WHITEPAPER_Holographic_Metasurfaces_Quantum_SATCOM.md) |
+| **Pulse-level control** (gate → schedule, OpenPulse, pseudo-schedule) | [PULSE_CONTROL.md](docs/PULSE_CONTROL.md) |
+| **HEaC, PDK, DRC/LVS** (manifest→GDS, design rules, KLayout/mock) | [HEaC_opensource_Meep.md](docs/HEaC_opensource_Meep.md) |
+| **Thermal stages and parasitic extraction** (10 mK/4 K/50 K, layout decoherence) | [THERMAL_AND_PARASITICS.md](docs/THERMAL_AND_PARASITICS.md) |
+| **Digital twin calibration** (telemetry → decoherence for routing/sim) | [CALIBRATION_DIGITAL_TWIN.md](docs/CALIBRATION_DIGITAL_TWIN.md) |
+| **Channel noise and decoherence** (Kraus channels, noise simulator) | [CHANNEL_NOISE.md](docs/CHANNEL_NOISE.md) |
 | **Math details** (QAOA mixing Hamiltonian, DNN phase synthesis, key equations) | [WHITEPAPER_Holographic_Metasurfaces_Quantum_SATCOM.tex](docs/WHITEPAPER_Holographic_Metasurfaces_Quantum_SATCOM.tex) (short LaTeX; build PDF: see [Building PDFs](docs/README.md#building-pdfs-tex-live)) |
 | **Materials, cryo hardware, ecosystems** (rf-SQUIDs, LiNbO₃ BAW, Cryo-CMOS Gooseberry, San Diego ecosystem) | [Cryogenic_Metamaterial_Architectures_Quantum_SATCOM.tex](docs/Cryogenic_Metamaterial_Architectures_Quantum_SATCOM.tex) (long LaTeX report; build PDF: same) |
 | **Code-based materials science, simulation tools, cost-effective infra** (scqubits, SuperScreen, QuTiP, QAOA, potential partners) | [Computational_Materials_Science_Cryogenic_Quantum_Metamaterials.tex](docs/Computational_Materials_Science_Cryogenic_Quantum_Metamaterials.tex) (LaTeX report; build PDF: same) |
