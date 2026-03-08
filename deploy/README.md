@@ -34,9 +34,13 @@ helm install qasic ./deploy/helm/qasic -n qasic --create-namespace \
   --set api.shortServiceName=true
 ```
 
+## CI/CD and ECR
+
+Hardware CI (`.github/workflows/hardware-ci.yml`) runs tests, pipeline, Trivy container scanning, and **uploads SARIF** to GitHub so container vulnerabilities appear in the Security tab and PR checks. On push to `main`/`master`, if repository variable **ENABLE_ECR_PUSH** is set to `true` and secret **AWS_ROLE_TO_ASSUME** is configured (OIDC), the workflow builds and pushes API and frontend images to Amazon ECR with tags `${{ github.sha }}` and `latest`. Create ECR repositories `qasic-api` and `qasic-frontend` (via Tofu or console), then reference the image in Helm, e.g. `--set image.registry=<account>.dkr.ecr.<region>.amazonaws.com/ --set image.api.tag=<sha>`.
+
 ## Docker Compose (local / dev)
 
-- **docker-compose.yml** – API + Frontend.
-- **docker-compose.full.yml** – API, Frontend, Celery worker, Redis, Postgres, InfluxDB, MLflow, Grafana.
+- **docker-compose.yml** – Core stack: API, Frontend, Celery, Redis, Postgres (production parity).
+- **docker-compose.full.yml** – Core + InfluxDB, MLflow, Grafana.
 
-Not suitable for multi-tenant or horizontal scaling; use Kubernetes for that.
+Use `make run-local` or `make run-local-core` from repo root (see main README). Not suitable for multi-tenant or horizontal scaling; use Kubernetes for that.

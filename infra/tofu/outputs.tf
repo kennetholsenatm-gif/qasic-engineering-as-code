@@ -1,42 +1,7 @@
-# Outputs for wiring app config or CI
+# Outputs for wiring app config, Helm, or CI
 
 output "deployment_target" {
   value = var.deployment_target
-}
-
-# --- Local stack (when deployment_target = "local") ---
-
-output "local_compose_status" {
-  value       = var.deployment_target == "local" ? "docker compose up -d (see docker ps)" : null
-  description = "Hint that the local stack was started via compose"
-}
-
-output "local_urls" {
-  value = var.deployment_target == "local" ? {
-    api      = "http://localhost:8000"
-    frontend = "http://localhost:80"
-    mlflow   = "http://localhost:5000"
-    influx   = "http://localhost:8086"
-    grafana  = "http://localhost:3000"
-  } : null
-}
-
-output "local_database_url" {
-  value     = var.deployment_target == "local" ? "postgresql://qasic:qasic@localhost:5432/qasic" : null
-  sensitive = true
-}
-
-output "local_celery_broker_url" {
-  value     = var.deployment_target == "local" ? "redis://localhost:6379/0" : null
-  sensitive = true
-}
-
-output "local_mlflow_tracking_uri" {
-  value = var.deployment_target == "local" ? "http://localhost:5000" : null
-}
-
-output "local_influx_url" {
-  value = var.deployment_target == "local" ? "http://localhost:8086" : null
 }
 
 # --- AWS (when deployment_target = "aws") ---
@@ -53,12 +18,34 @@ output "aws_celery_broker_url" {
   description = "Redis URL for Celery (ElastiCache)"
 }
 
+output "aws_secretsmanager_secret_name" {
+  value       = var.deployment_target == "aws" && var.create_aws_rds ? aws_secretsmanager_secret.db[0].name : null
+  description = "Secrets Manager secret name for DB credentials (for External Secrets Operator)"
+}
+
 output "aws_vpc_id" {
   value       = var.deployment_target == "aws" ? module.aws_networking[0].vpc_id : null
-  description = "VPC ID for ECS/EC2 placement"
+  description = "VPC ID for EKS/ECS placement"
 }
 
 output "aws_private_subnet_ids" {
   value       = var.deployment_target == "aws" ? module.aws_networking[0].private_subnet_ids : null
-  description = "Private subnet IDs for RDS/ElastiCache/ECS"
+  description = "Private subnet IDs for RDS/ElastiCache/EKS"
+}
+
+# --- EKS (when create_aws_eks = true) ---
+
+output "eks_cluster_name" {
+  value       = var.deployment_target == "aws" && var.create_aws_eks ? module.aws_eks[0].cluster_name : null
+  description = "EKS cluster name (for aws eks update-kubeconfig)"
+}
+
+output "eks_cluster_endpoint" {
+  value       = var.deployment_target == "aws" && var.create_aws_eks ? module.aws_eks[0].cluster_endpoint : null
+  description = "EKS API endpoint"
+}
+
+output "eks_oidc_provider_arn" {
+  value       = var.deployment_target == "aws" && var.create_aws_eks ? module.aws_eks[0].oidc_provider_arn : null
+  description = "EKS OIDC provider ARN (for IRSA)"
 }

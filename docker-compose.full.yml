@@ -1,6 +1,5 @@
-# QASIC Engineering-as-Code: full stack with local DBs (Redis, PostgreSQL, InfluxDB, MLflow)
-# Use with: docker compose -f docker-compose.full.yml up -d
-# Or let OpenTofu apply run it: cd infra/tofu && tofu apply -var="deployment_target=local"
+# QASIC Engineering-as-Code: full stack with observability (core + InfluxDB, MLflow, Grafana)
+# Use with: docker compose -f docker-compose.full.yml up -d  (or make run-local)
 
 services:
   api:
@@ -23,9 +22,15 @@ services:
       - .env
     depends_on:
       redis:
-        condition: service_started
+        condition: service_healthy
       postgres:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   celery-worker:
     build:
@@ -43,9 +48,10 @@ services:
     env_file:
       - .env
     depends_on:
-      - api
-      - redis
-      - postgres
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
 
   frontend:
     build:
@@ -54,7 +60,8 @@ services:
     ports:
       - "80:8080"
     depends_on:
-      - api
+      api:
+        condition: service_healthy
 
   redis:
     image: redis:7-alpine

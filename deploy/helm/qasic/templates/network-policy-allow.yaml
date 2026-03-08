@@ -1,0 +1,74 @@
+{{- if .Values.networkPolicy.enabled }}
+# Allow frontend -> API (port 8000)
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "qasic.fullname" . }}-allow-frontend-to-api
+  labels:
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: qasic-api
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: qasic-frontend
+      ports:
+        - protocol: TCP
+          port: {{ .Values.api.port }}
+---
+# Allow API and Celery -> Postgres (port 5432)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "qasic.fullname" . }}-allow-app-to-postgres
+  labels:
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: postgres
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: qasic-api
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: qasic-celery-worker
+      ports:
+        - protocol: TCP
+          port: {{ .Values.postgres.port }}
+---
+# Allow API and Celery -> Redis (port 6379)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "qasic.fullname" . }}-allow-app-to-redis
+  labels:
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: redis
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: qasic-api
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: qasic-celery-worker
+      ports:
+        - protocol: TCP
+          port: {{ .Values.redis.port }}
+{{- end }}

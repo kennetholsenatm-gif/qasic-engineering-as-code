@@ -35,6 +35,18 @@ postgres:
   password: "qasic"
   # When enabled: false, set externalUrl (postgresql://user:pass@host:5432/db) and pass via api/celery env.
   externalUrl: ""
+  # External Secrets Operator: when true, do not create inline Secret; use externalSecret to sync from AWS Secrets Manager.
+  useExternalSecret: false
+  externalSecret:
+    secretStoreRef: ""      # e.g. cluster-secret-store-aws
+    remoteRef:
+      secretName: ""       # e.g. qasic-db-credentials (Tofu output aws_secretsmanager_secret_name)
+      key: ""              # key in the external secret (e.g. password or data key)
+    targetSecretName: ""   # K8s secret name to create (e.g. qasic-postgres)
+
+# NetworkPolicy: default-deny + allow frontend->api, api/celery->postgres, api/celery->redis
+networkPolicy:
+  enabled: false
 
 # KEDA: scale celery-worker based on Redis queue length (works on any K8s cluster)
 keda:
@@ -49,10 +61,18 @@ api:
   shortServiceName: false
   env: []
   # Example: BACKEND_CORS_ORIGINS, QASIC_DEBUG
-  existingSecret: ""   # optional: secret name for IBM_QUANTUM_TOKEN etc.
+  existingSecret: ""   # optional: secret name for IBM_QUANTUM_TOKEN etc.; in prod use ESO-created secret with DATABASE_URL
   resources:
     limits: { cpu: "1000m", memory: "1Gi" }
     requests: { cpu: "100m", memory: "256Mi" }
+  hpa:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+  pdb:
+    enabled: false
+    minAvailable: 1
 
 frontend:
   port: 8080
@@ -60,6 +80,14 @@ frontend:
   resources:
     limits: { cpu: "200m", memory: "128Mi" }
     requests: { cpu: "50m", memory: "64Mi" }
+  hpa:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+  pdb:
+    enabled: false
+    minAvailable: 1
 
 celeryWorker:
   logLevel: info

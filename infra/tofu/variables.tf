@@ -1,48 +1,27 @@
-# Deployment target: "local" = Docker Compose on this machine; "aws" = cloud resources only (RDS, ElastiCache, etc.)
+# Deployment target: "aws" = provision RDS, ElastiCache, EKS; local stack uses Makefile/Compose (no Tofu).
 
 variable "deployment_target" {
   type        = string
-  default     = "local"
-  description = "Where to run the stack: local (docker-compose) or aws (managed DBs + optional ECS)"
+  default     = "aws"
+  description = "Cloud target: aws (RDS, ElastiCache, EKS). For local dev use make run-local or docker compose."
   validation {
-    condition     = contains(["local", "aws"], var.deployment_target)
-    error_message = "deployment_target must be 'local' or 'aws'."
+    condition     = contains(["aws"], var.deployment_target)
+    error_message = "deployment_target must be 'aws'."
   }
 }
 
-variable "repo_root" {
-  type        = string
-  description = "Absolute path to the repo root (where docker-compose lives). Default: parent of infra/."
-  default     = null
-}
-
-# --- Local (Docker Compose) ---
-
-variable "compose_file" {
-  type        = string
-  default     = "docker-compose.full.yml"
-  description = "Compose file name under repo_root (e.g. docker-compose.full.yml)"
-}
-
-variable "influx_token" {
-  type        = string
-  default     = "qasic-telemetry-token"
-  description = "InfluxDB 2.x admin token for local stack"
-  sensitive   = true
-}
-
-# --- AWS (when deployment_target = "aws") ---
+# --- AWS ---
 
 variable "aws_region" {
   type        = string
   default     = "us-east-1"
-  description = "AWS region for RDS, ElastiCache, etc."
+  description = "AWS region for RDS, ElastiCache, EKS"
 }
 
 variable "aws_project_name" {
   type        = string
   default     = "qasic"
-  description = "Prefix for resource names (e.g. qasic-rds, qasic-cache)"
+  description = "Prefix for resource names (e.g. qasic-rds, qasic-eks)"
 }
 
 variable "db_username" {
@@ -54,9 +33,15 @@ variable "db_username" {
 
 variable "db_password" {
   type        = string
-  description = "PostgreSQL master password (AWS RDS). Required when deployment_target = aws."
+  description = "PostgreSQL master password (AWS RDS). If unset, Tofu generates one and stores it in Secrets Manager."
   default     = null
   sensitive   = true
+}
+
+variable "create_aws_rds" {
+  type        = bool
+  default     = true
+  description = "When true and deployment_target=aws, create RDS PostgreSQL"
 }
 
 variable "create_aws_elasticache" {
@@ -65,8 +50,8 @@ variable "create_aws_elasticache" {
   description = "When true and deployment_target=aws, create ElastiCache Redis"
 }
 
-variable "create_aws_rds" {
+variable "create_aws_eks" {
   type        = bool
   default     = true
-  description = "When true and deployment_target=aws, create RDS PostgreSQL"
+  description = "When true and deployment_target=aws, create EKS cluster for Helm deployment"
 }

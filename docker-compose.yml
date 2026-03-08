@@ -1,6 +1,6 @@
-# QASIC Engineering-as-Code: API, frontend, and optional Jupyter
-# Usage: docker-compose up --build
-# Optional: docker-compose run --service-ports jupyter  # for notebooks
+# QASIC Engineering-as-Code: core app stack (API, frontend, Celery, Redis, Postgres)
+# Usage: docker compose up -d --build  (or make run-local-core)
+# For full stack with InfluxDB, MLflow, Grafana: docker compose -f docker-compose.full.yml up -d (or make run-local)
 
 services:
   api:
@@ -11,8 +11,39 @@ services:
       - "8000:8000"
     environment:
       - IBM_QUANTUM_TOKEN=${IBM_QUANTUM_TOKEN:-}
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - DATABASE_URL=postgresql://qasic:qasic@postgres:5432/qasic
     env_file:
       - .env
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  celery-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    command: celery -A app.celery_app worker -l info
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - DATABASE_URL=postgresql://qasic:qasic@postgres:5432/qasic
+    env_file:
+      - .env
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
 
   frontend:
     build:
@@ -21,7 +52,36 @@ services:
     ports:
       - "80:8080"
     depends_on:
-      - api
+      api:
+        condition: service_healthy
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: qasic
+      POSTGRES_PASSWORD: qasic
+      POSTGRES_DB: qasic
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U qasic -d qasic"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
   # Jupyter: no host volume mount (LFI/tampering risk). For local dev only, add: volumes: [".:/app"]
   jupyter:
@@ -37,3 +97,7 @@ services:
       - .env
     profiles:
       - jupyter
+
+volumes:
+  redis_data:
+  postgres_data:

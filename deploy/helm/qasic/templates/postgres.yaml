@@ -1,4 +1,5 @@
 {{- if .Values.postgres.enabled }}
+{{- if not (and .Values.postgres.useExternalSecret .Values.postgres.externalSecret.targetSecretName) }}
 apiVersion: v1
 kind: Secret
 metadata:
@@ -9,6 +10,7 @@ type: Opaque
 stringData:
   password: {{ .Values.postgres.password | default "qasic" | quote }}
 ---
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -40,7 +42,7 @@ spec:
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "qasic.fullname" . }}-postgres
+                  name: {{ if and .Values.postgres.useExternalSecret .Values.postgres.externalSecret.targetSecretName }}{{ .Values.postgres.externalSecret.targetSecretName }}{{ else }}{{ include "qasic.fullname" . }}-postgres{{ end }}
                   key: password
             - name: POSTGRES_DB
               value: {{ .Values.postgres.db | quote }}

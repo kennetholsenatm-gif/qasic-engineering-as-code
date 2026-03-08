@@ -41,6 +41,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: 'pip'
       - name: Install pip-audit
         run: pip install pip-audit
       - name: SCA Python (requirements)
@@ -65,6 +66,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: 'pip'
       - name: Install Bandit
         run: pip install bandit
       - name: Run Bandit (app + engineering)
@@ -80,6 +82,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: 'pip'
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
@@ -97,6 +100,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: 'pip'
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
@@ -145,10 +149,23 @@ jobs:
     name: Container scan (Trivy)
     runs-on: ubuntu-latest
     needs: [sca, sast]
+    permissions:
+      security-events: write
+      contents: read
     steps:
       - uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
       - name: Build API image
-        run: docker build -f Dockerfile.api -t qasic-api:ci .
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.api
+          push: false
+          load: true
+          tags: qasic-api:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
       - name: Run Trivy (API image)
         uses: aquasecurity/trivy-action@master
         with:
@@ -156,8 +173,21 @@ jobs:
           format: 'sarif'
           output: 'trivy-api.sarif'
           severity: 'CRITICAL,HIGH'
+      - name: Upload SARIF (API)
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-api.sarif
+          category: api
       - name: Build frontend image
-        run: docker build -f Dockerfile.frontend -t qasic-frontend:ci .
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.frontend
+          push: false
+          load: true
+          tags: qasic-frontend:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
       - name: Run Trivy (frontend image)
         uses: aquasecurity/trivy-action@master
         with:
@@ -165,6 +195,57 @@ jobs:
           format: 'sarif'
           output: 'trivy-frontend.sarif'
           severity: 'CRITICAL,HIGH'
+      - name: Upload SARIF (frontend)
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-frontend.sarif
+          category: frontend
+
+  # Push to ECR on main/master. Set repository variable ENABLE_ECR_PUSH=true and secret AWS_ROLE_TO_ASSUME (OIDC) to enable.
+  push-images:
+    name: Push images to ECR
+    runs-on: ubuntu-latest
+    needs: [test, sca, sast, container-scan]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') && vars.ENABLE_ECR_PUSH == 'true'
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Build and push API image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.api
+          push: true
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/qasic-api:${{ github.sha }}
+            ${{ steps.login-ecr.outputs.registry }}/qasic-api:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.frontend
+          push: true
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/qasic-frontend:${{ github.sha }}
+            ${{ steps.login-ecr.outputs.registry }}/qasic-frontend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
   gds-diff:
     name: GDS diff (optional)

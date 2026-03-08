@@ -224,25 +224,27 @@ This produces `dist/qasic_engineering_as_code-<version>.tar.gz` (sdist) and `dis
 
 If you see an error that `.env` is not found, create it from the template: `copy .env.example .env` (Windows) or `cp .env.example .env` (Mac/Linux).
 
-Run the API, frontend, and optional Jupyter in one go:
+**Core stack** (API, frontend, Celery, Redis, Postgres)—production parity in one command:
 
 ```bash
-docker-compose up --build
+docker compose up -d --build
+# Or: make run-local-core
 ```
 
-Then open the frontend at `http://localhost` (or port 80). For Jupyter: `docker-compose --profile jupyter run --service-ports jupyter`.
+Then open the frontend at `http://localhost` (or port 80). For Jupyter: `docker compose --profile jupyter run --service-ports jupyter`.
 
-**Full stack (Redis, Postgres, InfluxDB, MLflow, Celery) and IaC:** To run the API + Celery worker with all local DBs in containers, use the full Compose file and optional **OpenTofu** (Terraform-compatible) to bring everything up or push to cloud:
+**Full stack** (core + InfluxDB, MLflow, Grafana): use the full Compose file. Local development is run via **Makefile** or Compose directly; **OpenTofu is used only for cloud (AWS)** infrastructure (see [infra/tofu/README.md](infra/tofu/README.md)).
 
 ```bash
-# Option A: Docker Compose only
+# Option A: Makefile (from repo root)
+make run-local
+make down-local
+
+# Option B: Docker Compose only
 docker compose -f docker-compose.full.yml up -d --build
-
-# Option B: OpenTofu drives Compose (generates .env.tofu and runs compose)
-cd infra/tofu && tofu init && tofu apply -var="deployment_target=local"
 ```
 
-Then open: frontend **http://localhost**, API **http://localhost:8000/docs**, MLflow **http://localhost:5000**, Grafana **http://localhost:3000** (dashboards; InfluxDB telemetry). To provision **AWS** (RDS + ElastiCache) instead and point your containers at managed DBs: `tofu apply -var="deployment_target=aws" -var="db_password=..."`. See [infra/tofu/README.md](infra/tofu/README.md).
+Then open: frontend **http://localhost**, API **http://localhost:8000/docs**, MLflow **http://localhost:5000**, Grafana **http://localhost:3000** (dashboards; InfluxDB telemetry). To provision **AWS** (RDS, ElastiCache, EKS): `cd infra/tofu && tofu init && tofu apply -var="deployment_target=aws"` (optionally `-var="db_password=..."` or use Tofu-generated secrets). See [infra/tofu/README.md](infra/tofu/README.md).
 
 ### Cursor + Docker
 
@@ -251,8 +253,8 @@ Use [Cursor](https://cursor.com) with Docker Desktop for one-click Compose and o
 **Prerequisites:** Docker Desktop installed and running (Windows: WSL2 backend recommended). In Cursor, install the **Docker** and **Dev Containers** extensions.
 
 - **Quick run:** Open this repo in Cursor, then **Terminal → Run Task…** and choose:
-  - **Docker: Compose up (core)** — API + frontend (and optionally Jupyter via profile).
-  - **Docker: Compose up (full stack)** — API, frontend, Redis, Postgres, InfluxDB, MLflow, Grafana, Celery (uses `docker-compose.full.yml`).
+  - **Docker: Compose up (core)** — API, frontend, Celery, Redis, Postgres (and optionally Jupyter via profile).
+  - **Docker: Compose up (full stack)** — Core + InfluxDB, MLflow, Grafana (uses `docker-compose.full.yml`).
 - **Stop:** Run task **Docker: Compose down** to stop both core and full stack.
 - **Dev Container:** Use **Command Palette → Dev Containers: Reopen in Container** to open the project inside the API container. The editor and terminal run in that environment; start other services (e.g. frontend, full stack) from the in-container terminal with `docker compose up` if needed.
 
@@ -291,9 +293,12 @@ Optional: install `engineering/requirements-engineering.txt` to run routing and 
 
 On push/PR to `protocols/`, `asic/`, `engineering/`, `apps/`, `state/`, or `tests/`, GitHub Actions runs:
 
-1. **Unit tests** — `pytest tests/`
-2. **Pipeline + thermodynamic validation** — `run_pipeline.py -o ci_result --heac --fast`, then `thermodynamic_validator.py` on the generated phases
-3. **GDS/manifest diff** (on PRs) — `engineering/ci_gds_diff.py` compares current run to `engineering/ci_baseline/` and reports cell count / phase summary changes
+1. **Unit tests** — `pytest tests/` (with pip cache)
+2. **SCA/SAST** — pip-audit, npm audit, Bandit
+3. **Container scan** — Trivy on API and frontend images (with Docker layer cache); **SARIF upload** to GitHub so vulnerabilities appear in the Security tab and PR checks
+4. **Pipeline + thermodynamic validation** — `run_pipeline.py -o ci_result --heac --fast`, then `thermodynamic_validator.py` on the generated phases
+5. **GDS/manifest diff** (on PRs) — `engineering/ci_gds_diff.py` compares current run to `engineering/ci_baseline/` and reports cell count / phase summary changes
+6. **Push to ECR** (optional) — On push to `main`/`master`, if repo variable `ENABLE_ECR_PUSH=true` and secret `AWS_ROLE_TO_ASSUME` (OIDC) are set, images are built and pushed to Amazon ECR with tag `${{ github.sha }}` and `latest`. See [deploy/README.md](deploy/README.md).
 
 Store reference outputs in `engineering/ci_baseline/` (see `engineering/ci_baseline/README.md`) to enable diff comments. Meep FDTD can be run in a separate scheduled or manual workflow to keep PR latency low.
 
