@@ -116,6 +116,97 @@ class RunQKDRequest(BaseModel):
     seed: int | None = None
 
 
+class QRNCMintRequest(BaseModel):
+    num_bytes: int = 32
+    use_real_hardware: bool = False
+    ibm_token: str | None = None
+    token_id: str | None = None
+
+
+class QRNCExchangeRequest(BaseModel):
+    token_a_hex: str
+    token_b_hex: str
+    party_a_id: str = "Alice"
+    party_b_id: str = "Bob"
+
+
+class BQTCRunCycleRequest(BaseModel):
+    dry_run: bool = True  # BQTC pipeline.yaml actuator.dry_run is separate; this is for API docs
+
+
+@app.post("/api/apps/qrnc/mint")
+def apps_qrnc_mint(req: QRNCMintRequest):
+    """Mint a quantum-backed QRNC token (sim or IBM hardware)."""
+    try:
+        from apps.qrnc import mint_qrnc
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"QRNC import failed: {e}")
+    try:
+        token = mint_qrnc(
+            num_bytes=req.num_bytes,
+            use_real_hardware=req.use_real_hardware,
+            ibm_token=req.ibm_token,
+            token_id=req.token_id,
+        )
+        return {
+            "value": token.value,
+            "id": token.id,
+            "issued_at": token.issued_at.isoformat() if token.issued_at else None,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/apps/qrnc/exchange")
+def apps_qrnc_exchange(req: QRNCExchangeRequest):
+    """Run two-party QRNC exchange (commit-then-reveal). Returns received tokens and record."""
+    try:
+        from apps.qrnc import QRNC, run_two_party_exchange
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"QRNC import failed: {e}")
+    try:
+        token_a = QRNC.from_hex(req.token_a_hex)
+        token_b = QRNC.from_hex(req.token_b_hex)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid token hex: {e}")
+    try:
+        received_by_a, received_by_b, record = run_two_party_exchange(
+            token_a, token_b, party_a_id=req.party_a_id, party_b_id=req.party_b_id
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    if received_by_a is None:
+        return {"success": False, "message": "Verification failed"}
+    return {
+        "success": True,
+        "received_by_a_hex": received_by_a.value,
+        "received_by_b_hex": received_by_b.value,
+        "record": {
+            "party_a_id": record.party_a_id,
+            "party_b_id": record.party_b_id,
+            "timestamp": record.timestamp.isoformat(),
+        },
+    }
+
+
+@app.post("/api/apps/bqtc/run-cycle")
+def apps_bqtc_run_cycle(req: BQTCRunCycleRequest):
+    """Run one BQTC pipeline cycle (no live telemetry; buffer may be empty)."""
+    bqtc_dir = REPO_ROOT / "apps" / "bqtc"
+    script = bqtc_dir / "run_one_cycle.py"
+    if not script.is_file():
+        raise HTTPException(status_code=503, detail="BQTC run_one_cycle.py not found")
+    cmd = [sys.executable, str(script)]
+    code, out = _run(cmd, cwd=bqtc_dir)
+    if code != 0:
+        raise HTTPException(status_code=503, detail=out or "BQTC run-one-cycle failed")
+    try:
+        data = json.loads(out) if out.strip() else []
+        return {"results": data}
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=500, detail=f"Invalid BQTC output: {e}")
+
+
 @app.post("/api/run/qkd")
 def run_qkd(req: RunQKDRequest):
     """Run pedagogical QKD (BB84 or E91) in simulation."""
@@ -463,6 +554,7 @@ def get_docs_links():
         {"name": "Computational materials science (MD)", "path": "docs/Computational_Materials_Science_Cryogenic_Quantum_Metamaterials.md", "url": None},
         {"name": "Quantum terrestrial backhaul (MD)", "path": "docs/quantum-terrestrial-backhaul.md", "url": None},
         {"name": "Unified quantum metasurfaces SATCOM (MD)", "path": "docs/Whitepaper_Unified_Quantum_Metasurfaces_SATCOM.md", "url": None},
+        {"name": "Applications (BQTC, QRNC)", "path": "docs/APPLICATIONS.md", "url": None},
     ]
     for L in links:
         full = REPO_ROOT / L["path"]
@@ -486,6 +578,7 @@ _ALLOWED_DOC_PATHS = frozenset({
     "docs/Computational_Materials_Science_Cryogenic_Quantum_Metamaterials.md",
     "docs/Cryogenic_Metamaterial_Architectures_Quantum_SATCOM.md",
     "engineering/README.md",
+    "docs/APPLICATIONS.md",
 })
 
 

@@ -1,0 +1,13 @@
+# Byte-compiled
+__pycache__/
+*.py[cod]
+*$py.class
+# Virtual envs
+.venv/
+venv/
+env/
+# Secrets and local config (never commit)
+.env
+.env.*
+*.env
+!example.env

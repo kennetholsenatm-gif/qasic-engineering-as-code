@@ -1,0 +1,29 @@
+# Fabric topology for Bayesian-Quantum traffic controller
+# Leafs and paths (IS-IS next-hops / BGP neighbors) for Stage 3 & 4
+# Replace host IPs with your VyOS/leaf addresses (keep real topology out of version control)
+
+leafs:
+  - name: leaf1
+    host: 192.0.2.11   # example; use your leaf address
+    asn: 65001
+  - name: leaf2
+    host: 192.0.2.12   # example; use your leaf address
+    asn: 65001
+  - name: leaf3
+    host: 192.0.2.13   # example; use your leaf address
+    asn: 65001
+
+# Paths: logical path id -> capacity (Mbps) and optional next-hop info
+paths:
+  - id: path0
+    capacity_mbps: 10000
+    description: via spine1
+  - id: path1
+    capacity_mbps: 10000
+    description: via spine2
+  - id: path2
+    capacity_mbps: 10000
+    description: via spine3
+
+# Active EVPN VNIs to optimize (optional; if empty, infer from telemetry)
+vnis: [10001, 10002, 10003]

@@ -1,0 +1,5 @@
+#!/bin/bash
+# Convenience entrypoint: run the full installer from repo root.
+# Usage: ./install [OPTIONS]   e.g.  ./install -y   or   ./install --rpm -y
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+exec "$ROOT/scripts/install.sh" "$@"

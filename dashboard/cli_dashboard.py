@@ -117,6 +117,50 @@ def view_last_results(console: "Console | None" = None) -> None:
         console.print(p)
 
 
+def run_bqtc_one_cycle(console: "Console | None" = None) -> None:
+    """Run one BQTC pipeline cycle (no live telemetry)."""
+    from rich.console import Console
+    if console is None:
+        console = Console()
+    bqtc_dir = REPO_ROOT / "apps" / "bqtc"
+    script = bqtc_dir / "run_one_cycle.py"
+    if not script.is_file():
+        console.print("[yellow]BQTC run_one_cycle.py not found. See apps/README.md.[/yellow]")
+        return
+    code = _run([sys.executable, str(script)], cwd=bqtc_dir)
+    if code != 0:
+        console.print("[red]BQTC run-one-cycle failed.[/red]")
+    else:
+        console.print("[green]BQTC one cycle completed.[/green] (See apps/README.md for full pipeline.)")
+
+
+def run_qrnc_demo(console: "Console | None" = None) -> None:
+    """Mint two QRNC tokens and run two-party exchange (sim)."""
+    from rich.console import Console
+    from rich.panel import Panel
+    if console is None:
+        console = Console()
+    try:
+        from apps.qrnc import mint_qrnc, run_two_party_exchange
+    except Exception as e:
+        console.print(Panel(f"[red]QRNC import failed: {e}[/red]\nEnsure QRNG.PY is at repo root. See apps/README.md.", title="QRNC"))
+        return
+    try:
+        console.print("Minting two tokens (simulator)...")
+        t_a = mint_qrnc(32, use_real_hardware=False)
+        t_b = mint_qrnc(32, use_real_hardware=False)
+        rec_a, rec_b, record = run_two_party_exchange(t_a, t_b, party_a_id="Alice", party_b_id="Bob")
+        if rec_a is None:
+            console.print(Panel("[red]Exchange verification failed.[/red]", title="QRNC"))
+            return
+        console.print(Panel(
+            f"Exchange succeeded.\nAlice received: {rec_a.value[:16]}...\nBob received: {rec_b.value[:16]}...",
+            title="QRNC",
+        ))
+    except Exception as e:
+        console.print(Panel(f"[red]{e}[/red]", title="QRNC"))
+
+
 def show_doc_links(console: "Console | None" = None, open_browser: bool = False) -> None:
     from rich.console import Console
     from rich.panel import Panel
@@ -131,6 +175,8 @@ def show_doc_links(console: "Console | None" = None, open_browser: bool = False)
         ("Whitepaper (Markdown)", DOCS_DIR / "WHITEPAPER_Holographic_Metasurfaces_Quantum_SATCOM.md"),
         ("Docs index", DOCS_DIR / "README.md"),
         ("Engineering README", ENGINEERING_DIR / "README.md"),
+        ("Applications (BQTC, QRNC)", DOCS_DIR / "APPLICATIONS.md"),
+        ("Apps README", REPO_ROOT / "apps" / "README.md"),
     ]
     tbl = Table(title="Documentation")
     tbl.add_column("Document", style="cyan")
@@ -179,16 +225,17 @@ def main() -> int:
             "  [6] Run inverse design\n"
             "  [7] View last results\n"
             "  [8] Show doc links\n"
-            "  [9] Quit",
+            "  [9] Run BQTC pipeline (one cycle)\n"
+            "  [10] Quantum tokens (QRNC): mint and exchange demo\n"
+            "  [11] Quit",
             title="Menu",
         ))
         try:
-            # Flush prompt so it is visible before input (Rich Panel may use a different stream)
-            print("Choice [1-9] (default 9): ", end="", flush=True)
-            raw = input().strip() or "9"
+            print("Choice [1-11] (default 11): ", end="", flush=True)
+            raw = input().strip() or "11"
             choice = int(raw)
         except (ValueError, KeyboardInterrupt, EOFError):
-            choice = 9
+            choice = 11
 
         if choice == 1:
             run_protocol_sim()
@@ -207,6 +254,10 @@ def main() -> int:
         elif choice == 8:
             show_doc_links(console, open_browser=False)
         elif choice == 9:
+            run_bqtc_one_cycle(console)
+        elif choice == 10:
+            run_qrnc_demo(console)
+        elif choice == 11:
             return 0
         else:
             console.print("[yellow]Invalid choice.[/yellow]")

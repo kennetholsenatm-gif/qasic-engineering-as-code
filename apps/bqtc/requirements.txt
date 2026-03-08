@@ -1,0 +1,21 @@
+# Bayesian-Quantum Traffic Controller
+
+# Stage 1: Telemetry (optional: use built-in minimal parser without netflow)
+netflow>=1.0.0
+
+# Stage 2: Bayesian
+numpy>=1.20.0
+pandas>=1.3.0
+scikit-learn>=1.0.0
+# Optional: pymc>=5.0.0
+PyYAML>=5.4
+
+# Stage 3: Quantum
+qiskit>=1.0.0
+qiskit-aer>=0.17.0
+qiskit-optimization>=0.6.0
+# qiskit-algorithms optional if QAOA lives in qiskit_optimization
+
+# Stage 4: Actuator (at least one)
+pyvyos>=0.1.0
+# vymgmt>=0.1  # alternative SSH-based

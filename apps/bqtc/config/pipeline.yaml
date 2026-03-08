@@ -1,0 +1,24 @@
+# Pipeline configuration
+
+telemetry:
+  sflow_port: 6343
+  netflow_port: 2055
+  window_seconds: 600   # rolling window for Bayesian stage
+
+bayesian:
+  backend: sklearn      # "sklearn" or "pymc"
+  # sklearn: GaussianProcessRegressor or BayesianRidge
+  model_type: bayesian_ridge  # bayesian_ridge | gaussian_process
+
+quantum:
+  use_simulator: true
+  qaoa_reps: 2
+  # Set to true and IBM_QUANTUM_TOKEN for real hardware
+  use_ibm_hardware: false
+
+actuator:
+  dry_run: true         # do not commit to VyOS until false
+  rate_limit_seconds: 5 # delay between leaf commits
+
+pipeline:
+  interval_seconds: 300  # run full pipeline every 5 minutes

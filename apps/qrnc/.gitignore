@@ -1,0 +1,15 @@
+# Byte-compiled
+__pycache__/
+*.py[cod]
+*$py.class
+# Virtual envs
+.venv/
+venv/
+env/
+# IDE
+.idea/
+.vscode/
+*.swp
+# Local / secrets
+*.tfvars
+!example.tfvars

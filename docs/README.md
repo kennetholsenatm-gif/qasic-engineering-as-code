@@ -6,6 +6,7 @@ Documentation and whitepapers for **QASIC Engineering-as-Code** ([GitHub](https:
 
 | Document | Description |
 |----------|-------------|
+| [APPLICATIONS.md](APPLICATIONS.md) | **Applications:** BQTC (traffic control) and qrnc (quantum-backed tokens, exchange); run instructions and security caveats |
 | [Whitepaper_Unified_Quantum_Metasurfaces_SATCOM.tex](Whitepaper_Unified_Quantum_Metasurfaces_SATCOM.tex) | **Unified whitepaper (LaTeX):** EaC for Quantum ASICs; protocol, simulation, routing, applications |
 | [Whitepaper_Unified_Quantum_Metasurfaces_SATCOM.md](Whitepaper_Unified_Quantum_Metasurfaces_SATCOM.md) | (Unified; see .tex for canonical source) |
 | [architecture_overview.md](architecture_overview.md) | Full-stack diagram: protocol layer → routing → inverse design → hardware → applications |

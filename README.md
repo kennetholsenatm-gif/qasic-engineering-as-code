@@ -30,12 +30,26 @@ The **Quantum ASIC** idea: reduce hardware to **only the gates and topology** ne
 
 All three protocols compile to this minimal set and validate against it. See **[docs/QUANTUM_ASIC.md](docs/QUANTUM_ASIC.md)** for the spec and **`python demos/demo_asic.py`** to validate and run. For routing and visualization of other topologies (star, repeater chain), see **`asic/topology_builder`** and **[docs/TOPOLOGY_BUILDER.md](docs/TOPOLOGY_BUILDER.md)**.
 
+## Applications
+
+Two applications live under **`apps/`** and use the shared **`QRNG.PY`** at repo root where needed:
+
+- **[BQTC](apps/README.md#bqtc-bayesian-quantum-traffic-controller)** — Bayesian-Quantum Traffic Controller: Telemetry → Bayesian inference → Qiskit QUBO path selection → VyOS BGP actuator.
+- **[qrnc](apps/README.md#qrnc-quantum-backed-tokens-and-exchange)** — Quantum-backed tokens and BitCommit-style two-party exchange.
+
+See [apps/README.md](apps/README.md) for run instructions and [docs/APPLICATIONS.md](docs/APPLICATIONS.md) for purpose and security caveats.
+
 ## Project layout
 
 ```
 qasic-engineering-as-code/
 ├── README.md
 ├── requirements.txt
+├── QRNG.PY                    # Shared quantum RNG (used by apps/qrnc)
+├── apps/                      # Applications: BQTC, qrnc
+│   ├── README.md
+│   ├── bqtc/                   # Bayesian-Quantum Traffic Controller
+│   └── qrnc/                   # Quantum-backed tokens and exchange
 ├── docs/
 │   ├── README.md             # Document index and "how to read" pointer
 │   ├── architecture_overview.md   # Full-stack diagram: protocol → routing → inverse design → hardware → apps
@@ -93,7 +107,7 @@ qasic-engineering-as-code/
 │   ├── test_asic.py
 │   ├── test_engineering_*.py
 │   └── test_viz.py
-└── demos/                    # Runnable scripts
+├── demos/                    # Runnable scripts
     ├── demo_teleport.py
     ├── demo_thief.py
     ├── demo_commitment.py
