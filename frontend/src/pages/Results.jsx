@@ -1,12 +1,19 @@
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { FileBarChart, RefreshCw, FolderOpen, Box } from 'lucide-react'
+import { FileBarChart, RefreshCw, FolderOpen, Box, Download } from 'lucide-react'
+import PhaseViewer3D from './PhaseViewer3D'
 
-function fetchLatest(apiBase) {
-  return fetch(`${apiBase}/api/results/latest`).then(async (r) => {
+function fetchLatest(apiBase, projectId) {
+  const url = projectId != null ? `${apiBase}/api/results/latest?project_id=${projectId}` : `${apiBase}/api/results/latest`
+  return fetch(url).then(async (r) => {
     if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.statusText)
     return r.json()
   })
+}
+
+function fetchMlflowRuns(apiBase, experimentId) {
+  const url = experimentId ? `${apiBase}/api/mlflow/runs?experiment_id=${experimentId}` : `${apiBase}/api/mlflow/runs`
+  return fetch(url).then(async (r) => (!r.ok ? { runs: [] } : r.json()))
 }
 
 function StatCard({ label, value, sub }) {
@@ -129,10 +136,66 @@ function EmptyState() {
   )
 }
 
-export default function Results({ apiBase }) {
+function GdsDownload({ apiBase, gdsPath }) {
+  if (!gdsPath) return null
+  const href = `${apiBase.replace(/\/$/, '')}/api/results/gds`
+  return (
+    <a
+      href={href}
+      download
+      className="inline-flex items-center gap-2 rounded-lg border border-sky-500/50 bg-sky-500/10 px-3 py-2 text-sm text-sky-400 transition-colors hover:bg-sky-500/20"
+    >
+      <Download className="h-4 w-4" />
+      Download GDS
+    </a>
+  )
+}
+
+function MlflowSection({ apiBase, experimentId }) {
+  const { data } = useQuery({
+    queryKey: ['mlflow-runs', apiBase, experimentId],
+    queryFn: () => fetchMlflowRuns(apiBase, experimentId),
+    staleTime: 30_000,
+  })
+  const runs = data?.runs || []
+  if (!runs.length) return null
+  return (
+    <section className="rounded-xl border border-slate-700/60 bg-slate-800/60 p-4">
+      <h2 className="text-lg font-medium text-slate-100">MLflow runs</h2>
+      <div className="mt-3 overflow-x-auto">
+        <table className="w-full min-w-[400px] border-collapse text-sm">
+          <thead>
+            <tr className="border-b border-slate-600 text-left text-slate-400">
+              <th className="pb-2 pr-2">Run</th>
+              <th className="pb-2 pr-2">Start</th>
+              <th className="pb-2 pr-2">Metrics</th>
+            </tr>
+          </thead>
+          <tbody>
+            {runs.slice(0, 10).map((r) => (
+              <tr key={r.run_id} className="border-b border-slate-700/60">
+                <td className="py-2 pr-2 font-mono text-slate-300">{r.run_name || r.run_id?.slice(0, 8)}</td>
+                <td className="py-2 pr-2 text-slate-500">{r.start_time ? new Date(r.start_time).toLocaleString() : '—'}</td>
+                <td className="py-2 pr-2 text-slate-400">
+                  {r.metrics && Object.keys(r.metrics).length ? (
+                    <span>{Object.entries(r.metrics).map(([k, v]) => `${k}=${v}`).join(', ')}</span>
+                  ) : (
+                    '—'
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )
+}
+
+export default function Results({ apiBase, projectId = null }) {
   const { data, error, isLoading, isRefetching, refetch } = useQuery({
-    queryKey: ['results', 'latest', apiBase],
-    queryFn: () => fetchLatest(apiBase),
+    queryKey: ['results', 'latest', apiBase, projectId],
+    queryFn: () => fetchLatest(apiBase, projectId),
     staleTime: 15_000,
     refetchInterval: 30_000,
   })
@@ -162,20 +225,44 @@ export default function Results({ apiBase }) {
           <FileBarChart className="h-7 w-7 text-sky-400" />
           Last results
         </h1>
-        <button
-          type="button"
-          onClick={() => refetch()}
-          disabled={isRefetching}
-          className="inline-flex items-center gap-2 rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-slate-300 transition-colors hover:bg-slate-700 disabled:opacity-60"
-        >
-          <RefreshCw className={`h-4 w-4 ${isRefetching ? 'animate-spin' : ''}`} />
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          <GdsDownload apiBase={apiBase} gdsPath={data?.gds_path} />
+          <button
+            type="button"
+            onClick={() => refetch()}
+            disabled={isRefetching}
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-slate-300 transition-colors hover:bg-slate-700 disabled:opacity-60"
+          >
+            <RefreshCw className={`h-4 w-4 ${isRefetching ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
+        </div>
       </div>
-      {isRefetching && (
-        <p className="mt-1 text-sm text-slate-500">Refreshing…</p>
-      )}
+      {isRefetching && <p className="mt-1 text-sm text-slate-500">Refreshing…</p>}
       {!hasData && <EmptyState />}
+
+      {hasData && (
+        <div className="mt-6 grid gap-6 lg:grid-cols-2">
+          <div className="rounded-xl border border-slate-700/60 bg-slate-800/60 p-4">
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-lg font-medium text-slate-100">Phase viewer (3D)</h2>
+              <Link
+                to="/phase-viewer"
+                className="text-sm text-sky-400 hover:underline"
+              >
+                Open full page
+              </Link>
+            </div>
+            <div className="mt-3 min-h-[280px]">
+              <PhaseViewer3D apiBase={apiBase} />
+            </div>
+          </div>
+          <div>
+            <MlflowSection apiBase={apiBase} />
+          </div>
+        </div>
+      )}
+
       {data?.routing && <div className="mt-6"><RoutingSection routing={data.routing} /></div>}
       {data?.inverse && <div className="mt-6"><InverseSection inverse={data.inverse} /></div>}
     </>

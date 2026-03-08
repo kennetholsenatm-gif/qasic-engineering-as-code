@@ -33,15 +33,38 @@ def is_enabled() -> bool:
     return _tracking_uri() is not None
 
 
+def get_or_create_experiment(experiment_name: str) -> str | None:
+    """
+    Get or create an MLflow experiment by name. Returns experiment_id if successful.
+    Used for project-based workspace: one experiment per project.
+    """
+    uri = _tracking_uri()
+    if not uri:
+        return None
+    try:
+        import mlflow
+        mlflow.set_tracking_uri(uri)
+        exp = mlflow.get_experiment_by_name(experiment_name)
+        if exp is not None:
+            return exp.experiment_id
+        return mlflow.create_experiment(experiment_name)
+    except Exception:
+        return None
+
+
 def log_artifact_run(
     run_name: str,
     params: dict[str, Any] | None = None,
     tags: dict[str, str] | None = None,
     artifacts: list[str | Path] | None = None,
     artifact_dir: str | Path | None = None,
+    experiment_id: str | None = None,
+    experiment_name: str | None = None,
 ) -> str | None:
     """
     Start an MLflow run, log params/tags and optional artifact files/dir, end run.
+    If experiment_id or experiment_name (for get_or_create_experiment) is set, use that experiment;
+    otherwise use default _experiment_name().
     Returns run_id if successful, None if MLflow not configured or on error.
     """
     uri = _tracking_uri()
@@ -50,7 +73,16 @@ def log_artifact_run(
     try:
         import mlflow
         mlflow.set_tracking_uri(uri)
-        mlflow.set_experiment(_experiment_name())
+        if experiment_id:
+            mlflow.set_experiment(experiment_id=experiment_id)
+        elif experiment_name:
+            eid = get_or_create_experiment(experiment_name)
+            if eid:
+                mlflow.set_experiment(experiment_id=eid)
+            else:
+                mlflow.set_experiment(_experiment_name())
+        else:
+            mlflow.set_experiment(_experiment_name())
         params = params or {}
         tags = tags or {}
         run_id = None

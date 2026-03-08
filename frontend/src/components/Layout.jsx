@@ -15,6 +15,9 @@ import {
   Menu,
   X,
   ChevronDown,
+  FolderOpen,
+  Settings,
+  GitBranch,
 } from 'lucide-react'
 
 const navGroups = [
@@ -23,6 +26,7 @@ const navGroups = [
     icon: LayoutDashboard,
     items: [
       { to: '/', label: 'Home', icon: Home },
+      { to: '/projects', label: 'Projects', icon: FolderOpen },
       { to: '/results', label: 'Results', icon: FileBarChart },
       { to: '/phase-viewer', label: 'Phase Viewer 3D', icon: Box },
     ],
@@ -34,6 +38,8 @@ const navGroups = [
       { to: '/run/pipeline', label: 'Pipeline', icon: Route },
       { to: '/run/routing', label: 'Routing', icon: Route },
       { to: '/run/inverse', label: 'Inverse design', icon: Sparkles },
+      { to: '/config', label: 'Config forms', icon: Settings },
+      { to: '/workflows', label: 'Workflows (DAG)', icon: GitBranch },
     ],
   },
   {

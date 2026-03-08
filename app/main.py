@@ -17,7 +17,7 @@ from typing import Literal
 import asyncio
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 
 # IBM protocol jobs: Redis-backed when CELERY_BROKER_URL set (multi-worker); else in-memory (single-worker)
@@ -128,6 +128,7 @@ class RunPipelineRequest(BaseModel):
     heac: bool = False
     skip_routing: bool = False
     skip_inverse: bool = False
+    project_id: int | None = None
 
 
 class RunInverseRequest(BaseModel):
@@ -191,6 +192,413 @@ class QRNCExchangeRequest(BaseModel):
 
 class BQTCRunCycleRequest(BaseModel):
     dry_run: bool = True  # BQTC pipeline.yaml actuator.dry_run is separate; this is for API docs
+
+
+class CreateProjectRequest(BaseModel):
+    name: str
+    description: str | None = None
+    config: dict | None = None
+
+
+@app.get("/api/projects")
+def list_projects_api():
+    """List all projects (project-based workspace)."""
+    try:
+        from storage.db import list_projects, is_enabled
+        if not is_enabled():
+            return {"projects": []}
+        return {"projects": list_projects()}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=_sanitize_detail(e, "Failed to list projects."))
+
+
+@app.post("/api/projects")
+def create_project_api(req: CreateProjectRequest):
+    """Create a project. Returns project id and mlflow_experiment_id when MLflow is configured."""
+    try:
+        from storage.db import create_project, get_project, update_project_mlflow_experiment, is_enabled
+        if not is_enabled():
+            raise HTTPException(status_code=503, detail="Database not configured (set DATABASE_URL).")
+        pid = create_project(req.name, req.description, req.config)
+        if pid is None:
+            raise HTTPException(status_code=400, detail="Project name may already exist.")
+        proj = get_project(pid)
+        if proj and os.environ.get("MLFLOW_TRACKING_URI"):
+            try:
+                from storage.artifacts_mlflow import get_or_create_experiment
+                exp_name = f"qasic-project-{req.name.replace(' ', '_')}"
+                eid = get_or_create_experiment(exp_name)
+                if eid:
+                    update_project_mlflow_experiment(pid, eid)
+                    proj["mlflow_experiment_id"] = eid
+            except Exception:
+                pass
+        return proj or {"id": pid, "name": req.name, "description": req.description or "", "config": req.config or {}}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=_sanitize_detail(e, "Failed to create project."))
+
+
+@app.get("/api/projects/{project_id}")
+def get_project_api(project_id: int):
+    """Get a single project by id."""
+    try:
+        from storage.db import get_project, is_enabled
+        if not is_enabled():
+            raise HTTPException(status_code=503, detail="Database not configured.")
+        proj = get_project(project_id)
+        if not proj:
+            raise HTTPException(status_code=404, detail="Project not found.")
+        return proj
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=_sanitize_detail(e, "Failed to get project."))
+
+
+@app.get("/api/projects/{project_id}/runs")
+def list_project_runs_api(project_id: int, limit: int = 50):
+    """List pipeline runs for a project."""
+    try:
+        from storage.db import list_pipeline_runs, get_project, is_enabled
+        if not is_enabled():
+            return {"runs": []}
+        proj = get_project(project_id)
+        if not proj:
+            raise HTTPException(status_code=404, detail="Project not found.")
+        return {"runs": list_pipeline_runs(project_id=project_id, limit=limit)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=_sanitize_detail(e, "Failed to list runs."))
+
+
+# --- DAG orchestrator (task types, CRUD, validate) ---
+
+class DAGCreateRequest(BaseModel):
+    name: str
+    project_id: int | None = None
+    nodes: list = []
+    edges: list = []
+
+
+class DAGUpdateRequest(BaseModel):
+    name: str | None = None
+    nodes: list | None = None
+    edges: list | None = None
+
+
+class DAGValidateRequest(BaseModel):
+    nodes: list = []
+    edges: list = []
+
+
+@app.get("/api/dag/task-types")
+def get_dag_task_types():
+    """Return task type registry for palette and validation (inputs, outputs, backends)."""
+    try:
+        from orchestration.task_registry import list_task_types
+        return {"task_types": list_task_types()}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=_sanitize_detail(e, "Failed to load task types."))
+
+
+@app.get("/api/dag")
+def list_dags_api(project_id: int | None = None, limit: int = 100):
+    """List DAG definitions, optionally by project_id."""
+    try:
+        from storage.db import list_dags, is_enabled
+        if not is_enabled():
+            return {"dags": []}
+        return {"dags": list_dags(project_id=project_id, limit=limit)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=_sanitize_detail(e, "Failed to list DAGs."))
+
+
+@app.post("/api/dag")
+def create_dag_api(req: DAGCreateRequest):
+    """Create a DAG definition."""
+    try:
+        from storage.db import create_dag, get_dag, is_enabled
+        if not is_enabled():
+            raise HTTPException(status_code=503, detail="Database not configured (set DATABASE_URL).")
+        dag_id = create_dag(req.name, req.nodes, req.edges, req.project_id)
+        if dag_id is None:
+            raise HTTPException(status_code=500, detail="Failed to create DAG.")
+        d = get_dag(dag_id)
+        return d or {"id": dag_id, "name": req.name, "project_id": req.project_id, "nodes": req.nodes, "edges": req.edges}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=_sanitize_detail(e, "Failed to create DAG."))
+
+
+@app.get("/api/dag/{dag_id}")
+def get_dag_api(dag_id: int):
+    """Get a DAG definition by id."""
+    try:
+        from storage.db import get_dag, is_enabled
+        if not is_enabled():
+            raise HTTPException(status_code=503, detail="Database not configured.")
+        d = get_dag(dag_id)
+        if not d:
+            raise HTTPException(status_code=404, detail="DAG not found.")
+        return d
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=_sanitize_detail(e, "Failed to get DAG."))
+
+
+@app.put("/api/dag/{dag_id}")
+def update_dag_api(dag_id: int, req: DAGUpdateRequest):
+    """Update a DAG definition."""
+    try:
+        from storage.db import update_dag, get_dag, is_enabled
+        if not is_enabled():
+            raise HTTPException(status_code=503, detail="Database not configured.")
+        updated = update_dag(dag_id, name=req.name, nodes=req.nodes, edges=req.edges)
+        if not updated:
+            raise HTTPException(status_code=500, detail="Failed to update DAG.")
+        d = get_dag(dag_id)
+        return d or {"id": dag_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=_sanitize_detail(e, "Failed to update DAG."))
+
+
+@app.post("/api/dag/validate")
+def validate_dag_api(req: DAGValidateRequest):
+    """Validate a DAG (acyclic, task types, backends, required inputs). Returns list of errors."""
+    try:
+        from orchestration.dag_validate import validate_dag
+        errors = validate_dag(req.nodes, req.edges)
+        return {"valid": len(errors) == 0, "errors": errors}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=_sanitize_detail(e, "Validation failed."))
+
+
+@app.post("/api/dag/{dag_id}/run")
+@limit_heavy
+def run_dag_api(request: Request, dag_id: int):
+    """Create a DAG run and enqueue execution (Celery). Returns run_id and task_id when Celery available."""
+    try:
+        from storage.db import get_dag, create_dag_run, update_dag_run, is_enabled
+        if not is_enabled():
+            raise HTTPException(status_code=503, detail="Database not configured (set DATABASE_URL).")
+        d = get_dag(dag_id)
+        if not d:
+            raise HTTPException(status_code=404, detail="DAG not found.")
+        nodes = d.get("nodes") or []
+        edges = d.get("edges") or []
+        run_id = create_dag_run(dag_id=dag_id, status="pending", nodes_snapshot=nodes, edges_snapshot=edges)
+        if run_id is None:
+            raise HTTPException(status_code=500, detail="Failed to create run.")
+        task_id = None
+        if _celery_available():
+            from app.tasks import run_dag_task
+            task = run_dag_task.delay(run_id)
+            task_id = task.id
+            update_dag_run(run_id, celery_task_id=task_id)
+            return {"run_id": run_id, "task_id": task_id, "status": "pending", "message": "Run enqueued; execution in progress."}
+        return {"run_id": run_id, "status": "pending", "message": "Run created; start Celery worker to execute."}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=_sanitize_detail(e, "Failed to start run."))
+
+
+@app.get("/api/dag/runs/{run_id}")
+def get_dag_run_api(run_id: int):
+    """Get DAG run status and node-level status."""
+    try:
+        from storage.db import get_dag_run, is_enabled
+        if not is_enabled():
+            raise HTTPException(status_code=503, detail="Database not configured.")
+        r = get_dag_run(run_id)
+        if not r:
+            raise HTTPException(status_code=404, detail="Run not found.")
+        return r
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=_sanitize_detail(e, "Failed to get run."))
+
+
+@app.get("/api/dag/{dag_id}/runs")
+def list_dag_runs_api(dag_id: int, limit: int = 50):
+    """List runs for a DAG."""
+    try:
+        from storage.db import list_dag_runs, get_dag, is_enabled
+        if not is_enabled():
+            return {"runs": []}
+        d = get_dag(dag_id)
+        if not d:
+            raise HTTPException(status_code=404, detail="DAG not found.")
+        return {"runs": list_dag_runs(dag_id=dag_id, limit=limit)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=_sanitize_detail(e, "Failed to list runs."))
+
+
+@app.get("/api/pipeline/dag")
+def get_pipeline_dag():
+    """Return pipeline DAG (nodes and edges) for visualization (e.g. React Flow)."""
+    nodes = [
+        {"id": "routing", "label": "Routing", "type": "default"},
+        {"id": "superscreen", "label": "SuperScreen", "type": "default"},
+        {"id": "inverse_design", "label": "Inverse design", "type": "default"},
+        {"id": "heac_library", "label": "HEaC library", "type": "default"},
+        {"id": "heac_phases_to_geometry", "label": "Phases → Geometry", "type": "default"},
+        {"id": "manifest_to_gds", "label": "Manifest → GDS", "type": "default"},
+        {"id": "drc", "label": "DRC", "type": "default"},
+        {"id": "lvs", "label": "LVS", "type": "default"},
+        {"id": "dft", "label": "DFT", "type": "default"},
+        {"id": "thermal", "label": "Thermal", "type": "default"},
+        {"id": "meep_verify", "label": "MEEP verify", "type": "default"},
+        {"id": "packaging", "label": "Packaging", "type": "default"},
+        {"id": "parasitic", "label": "Parasitic", "type": "default"},
+    ]
+    edges = [
+        {"id": "e1", "source": "routing", "target": "superscreen"},
+        {"id": "e2", "source": "routing", "target": "inverse_design"},
+        {"id": "e3", "source": "inverse_design", "target": "heac_phases_to_geometry"},
+        {"id": "e4", "source": "heac_library", "target": "heac_phases_to_geometry"},
+        {"id": "e5", "source": "heac_phases_to_geometry", "target": "manifest_to_gds"},
+        {"id": "e6", "source": "manifest_to_gds", "target": "drc"},
+        {"id": "e7", "source": "manifest_to_gds", "target": "lvs"},
+        {"id": "e8", "source": "manifest_to_gds", "target": "dft"},
+        {"id": "e9", "source": "routing", "target": "thermal"},
+        {"id": "e10", "source": "heac_phases_to_geometry", "target": "meep_verify"},
+        {"id": "e11", "source": "heac_phases_to_geometry", "target": "packaging"},
+        {"id": "e12", "source": "heac_phases_to_geometry", "target": "parasitic"},
+    ]
+    return {"nodes": nodes, "edges": edges}
+
+
+@app.get("/api/tasks/{task_id}/stream")
+async def stream_task_log(task_id: str):
+    """Server-Sent Events stream of task progress (Redis Pub/Sub). Use for real-time pipeline log in UI."""
+    import asyncio
+    redis_url = os.environ.get("CELERY_BROKER_URL", "redis://localhost:6379/0")
+    try:
+        import redis.asyncio as redis_async
+    except ImportError:
+        try:
+            import redis
+            if not hasattr(redis, "asyncio"):
+                raise HTTPException(status_code=503, detail="Install redis with async support for SSE (pip install redis).")
+        except ImportError:
+            raise HTTPException(status_code=503, detail="Redis not installed.")
+        raise HTTPException(status_code=503, detail="Use redis>=4.5 with async for SSE streaming.")
+    async def event_generator():
+        r = redis_async.from_url(redis_url)
+        pubsub = r.pubsub()
+        channel = f"qasic:task:{task_id}:log"
+        await pubsub.subscribe(channel)
+        try:
+            while True:
+                message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=30.0)
+                if message and message.get("type") == "message":
+                    data = message.get("data")
+                    if isinstance(data, bytes):
+                        data = data.decode("utf-8", errors="replace")
+                    try:
+                        payload = json.loads(data) if isinstance(data, str) else data
+                    except json.JSONDecodeError:
+                        payload = {"message": data, "step": None, "done": False}
+                    yield f"data: {json.dumps(payload)}\n\n"
+                    if payload.get("done"):
+                        break
+                await asyncio.sleep(0.1)
+        finally:
+            await pubsub.unsubscribe(channel)
+            await r.close()
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.get("/api/schemas/pipeline")
+def get_schema_pipeline():
+    """JSON Schema for pipeline config (for dynamic forms, e.g. @rjsf/core)."""
+    from config.loader import PipelineConfig
+    return PipelineConfig.model_json_schema()
+
+
+@app.get("/api/schemas/thermal")
+def get_schema_thermal():
+    """JSON Schema for thermal config."""
+    from config.loader import ThermalConfig
+    return ThermalConfig.model_json_schema()
+
+
+@app.get("/api/mlflow/runs")
+def get_mlflow_runs(experiment_id: str | None = None, limit: int = 20):
+    """Proxy MLflow runs for the default or given experiment (for Results dashboard metrics)."""
+    try:
+        from storage.artifacts_mlflow import _tracking_uri, _experiment_name, is_enabled
+        from mlflow.tracking import MlflowClient
+    except ImportError:
+        return {"runs": []}
+    if not is_enabled():
+        return {"runs": []}
+    uri = _tracking_uri()
+    if not uri:
+        return {"runs": []}
+    try:
+        client = MlflowClient(tracking_uri=uri)
+        if experiment_id:
+            exp = client.get_experiment(experiment_id)
+            if not exp or exp.lifecycle_stage != "active":
+                return {"runs": []}
+        else:
+            exp = client.get_experiment_by_name(_experiment_name())
+            if not exp:
+                return {"runs": []}
+            experiment_id = exp.experiment_id
+        runs = client.search_runs(experiment_ids=[experiment_id], max_results=limit, order_by=["start_time DESC"])
+        out = []
+        for r in runs:
+            out.append({
+                "run_id": r.info.run_id,
+                "run_name": r.info.run_name,
+                "start_time": r.info.start_time,
+                "end_time": r.info.end_time,
+                "params": dict(r.data.params) if r.data.params else {},
+                "metrics": dict(r.data.metrics) if r.data.metrics else {},
+            })
+        return {"runs": out}
+    except Exception:
+        return {"runs": []}
+
+
+@app.get("/api/results/gds")
+def download_gds(output_base: str | None = None):
+    """Download GDS file for latest run or given output_base."""
+    gds_path = None
+    if output_base:
+        gds_path = ENGINEERING_DIR / f"{output_base}.gds"
+    if not gds_path or not gds_path.is_file():
+        try:
+            from storage.db import get_latest_pipeline_run, is_enabled
+            if is_enabled():
+                row = get_latest_pipeline_run()
+                if row and row.get("gds_path") and os.path.isfile(row["gds_path"]):
+                    return FileResponse(row["gds_path"], filename=os.path.basename(row["gds_path"]))
+            if (ENGINEERING_DIR / f"{PIPELINE_BASE}.gds").is_file():
+                return FileResponse(str(ENGINEERING_DIR / f"{PIPELINE_BASE}.gds"), filename=f"{PIPELINE_BASE}.gds")
+        except Exception:
+            pass
+    if not gds_path or not gds_path.is_file():
+        raise HTTPException(status_code=404, detail="No GDS file found. Run pipeline with --heac --gds first.")
+    return FileResponse(str(gds_path), filename=gds_path.name)
 
 
 @app.post("/api/apps/qrnc/mint")
@@ -445,6 +853,7 @@ def run_pipeline_async(request: Request, req: RunPipelineRequest):
                 PIPELINE_BASE,
                 config={"backend": req.backend, "fast": req.fast, "routing_method": req.routing_method, "model": req.model, "heac": req.heac},
                 task_id=task.id,
+                project_id=req.project_id,
             )
     except Exception:
         pass
@@ -482,6 +891,7 @@ def run_pipeline(request: Request, req: RunPipelineRequest):
             run_id = record_pipeline_run(
                 PIPELINE_BASE,
                 config={"backend": req.backend, "fast": req.fast, "routing_method": req.routing_method, "model": req.model, "heac": req.heac},
+                project_id=req.project_id,
             )
     except Exception:
         pass
@@ -511,11 +921,13 @@ def run_pipeline(request: Request, req: RunPipelineRequest):
         raise HTTPException(status_code=503, detail=_sanitize_detail(RuntimeError(err or "Pipeline run failed"), "Pipeline run failed."))
     try:
         from storage.db import update_pipeline_run
+        gds_path_str = str(ENGINEERING_DIR / f"{PIPELINE_BASE}.gds") if (ENGINEERING_DIR / f"{PIPELINE_BASE}.gds").exists() else None
         update_pipeline_run(
             run_id=run_id,
             status="success",
             routing_path=str(ROUTING_JSON) if ROUTING_JSON.exists() else None,
             inverse_path=str(INVERSE_JSON) if INVERSE_JSON.exists() else None,
+            gds_path=gds_path_str,
         )
     except Exception:
         pass
@@ -682,21 +1094,26 @@ def run_quantum_radar_optimize(req: QuantumRadarOptimizeRequest):
 
 
 @app.get("/api/results/latest")
-def get_results_latest():
-    """Return paths and summary of last pipeline (routing + inverse) outputs. Uses PostgreSQL run when DATABASE_URL set."""
+def get_results_latest(project_id: int | None = None):
+    """Return paths and summary of last pipeline (routing + inverse) outputs. Optional project_id for project-scoped latest."""
     routing_path = str(ROUTING_JSON)
     inverse_path = str(INVERSE_JSON)
+    gds_path = None
+    run_id = None
     try:
         from storage.db import get_latest_pipeline_run, is_enabled as db_enabled
         if db_enabled():
-            row = get_latest_pipeline_run()
-            if row and row.get("routing_path"):
-                routing_path = row["routing_path"]
-            if row and row.get("inverse_path"):
-                inverse_path = row["inverse_path"]
+            row = get_latest_pipeline_run(project_id=project_id)
+            if row:
+                run_id = row.get("id")
+                if row.get("routing_path"):
+                    routing_path = row["routing_path"]
+                if row.get("inverse_path"):
+                    inverse_path = row["inverse_path"]
+                gds_path = row.get("gds_path")
     except Exception:
         pass
-    result = {"routing_path": routing_path, "inverse_path": inverse_path, "routing": None, "inverse": None}
+    result = {"run_id": run_id, "routing_path": routing_path, "inverse_path": inverse_path, "gds_path": gds_path, "routing": None, "inverse": None}
     for path_key, file_path in [("routing", routing_path), ("inverse", inverse_path)]:
         if not file_path or not os.path.isfile(file_path):
             continue

@@ -3,6 +3,7 @@ Pipeline run parameters for the DAG orchestrator. Mirrors run_pipeline.py CLI.
 """
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from typing import Optional
 

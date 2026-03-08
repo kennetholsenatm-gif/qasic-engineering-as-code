@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Terminal } from 'lucide-react'
+import PipelineDag from '../components/PipelineDag'
 
 const POLL_INTERVAL_MS = 2000
 
@@ -12,12 +13,31 @@ function fetchTask(apiBase, taskId) {
   })
 }
 
+function fetchProjects(apiBase) {
+  return fetch(`${apiBase}/api/projects`).then(async (r) => {
+    if (!r.ok) return { projects: [] }
+    const d = await r.json()
+    return d
+  })
+}
+
 export default function RunPipeline({ apiBase }) {
   const [backend, setBackend] = useState('sim')
   const [fast, setFast] = useState(false)
   const [result, setResult] = useState(null)
   const [error, setError] = useState(null)
   const [taskId, setTaskId] = useState(null)
+  const [projectId, setProjectId] = useState(null)
+  const [logLines, setLogLines] = useState([])
+  const logEndRef = useRef(null)
+  const eventSourceRef = useRef(null)
+
+  const { data: projectsData } = useQuery({
+    queryKey: ['projects', apiBase],
+    queryFn: () => fetchProjects(apiBase),
+    staleTime: 30_000,
+  })
+  const projects = projectsData?.projects || []
 
   const submitMutation = useMutation({
     mutationFn: async (body) => {
@@ -39,7 +59,10 @@ export default function RunPipeline({ apiBase }) {
     },
     onSuccess: (data) => {
       setError(null)
-      if (data.taskId) setTaskId(data.taskId)
+      if (data.taskId) {
+        setTaskId(data.taskId)
+        setLogLines([])
+      }
       if (data.result) setResult(data.result)
     },
     onError: (err) => setError(err.message),
@@ -69,16 +92,53 @@ export default function RunPipeline({ apiBase }) {
     }
   }, [taskId, taskData])
 
+  useEffect(() => {
+    if (!taskId || !apiBase) return
+    const url = `${apiBase.replace(/\/$/, '')}/api/tasks/${taskId}/stream`
+    const es = new EventSource(url)
+    eventSourceRef.current = es
+    es.onmessage = (ev) => {
+      try {
+        const payload = JSON.parse(ev.data)
+        setLogLines((prev) => [...prev, payload.message || ev.data])
+        if (payload.done) es.close()
+      } catch {
+        setLogLines((prev) => [...prev, ev.data])
+      }
+    }
+    es.onerror = () => es.close()
+    return () => {
+      es.close()
+      eventSourceRef.current = null
+    }
+  }, [taskId, apiBase])
+
+  useEffect(() => {
+    logEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [logLines])
+
   const loading = submitMutation.isPending || (!!taskId && taskStatus !== 'error')
-  const statusLabel = taskId ? (taskData?.status === 'PENDING' ? 'In queue' : taskData?.status === 'STARTED' ? 'Running…' : 'Polling…') : 'Running…'
+  const statusLabel = taskId
+    ? taskData?.status === 'PENDING'
+      ? 'In queue'
+      : taskData?.status === 'STARTED'
+        ? 'Running…'
+        : 'Polling…'
+    : 'Running…'
 
   function handleSubmit(e) {
     e.preventDefault()
     setResult(null)
     setError(null)
     setTaskId(null)
-    submitMutation.mutate({ backend, fast })
+    submitMutation.mutate({
+      backend,
+      fast,
+      project_id: projectId || undefined,
+    })
   }
+
+  const activeStep = taskData?.status === 'STARTED' ? 'routing' : null
 
   return (
     <>
@@ -86,7 +146,33 @@ export default function RunPipeline({ apiBase }) {
       <p className="mt-1 text-sm text-slate-500">
         Pipeline runs on a Celery worker when available (routing + inverse); otherwise runs in the API.
       </p>
+
+      <section className="mt-6">
+        <h2 className="mb-2 text-sm font-medium text-slate-400">Pipeline DAG</h2>
+        <PipelineDag apiBase={apiBase} activeStep={activeStep} />
+      </section>
+
       <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+        {projects.length > 0 && (
+          <div>
+            <label htmlFor="project" className="mb-1.5 block text-sm font-medium text-slate-300">
+              Project (optional)
+            </label>
+            <select
+              id="project"
+              value={projectId ?? ''}
+              onChange={(e) => setProjectId(e.target.value ? Number(e.target.value) : null)}
+              className="w-full max-w-xs rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-slate-100 shadow-sm focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+            >
+              <option value="">— None —</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
         <div>
           <label htmlFor="backend" className="mb-1.5 block text-sm font-medium text-slate-300">
             Backend
@@ -109,7 +195,9 @@ export default function RunPipeline({ apiBase }) {
             onChange={(e) => setFast(e.target.checked)}
             className="h-4 w-4 rounded border-slate-600 bg-slate-800 text-sky-500 focus:ring-sky-500"
           />
-          <label htmlFor="fast" className="text-sm text-slate-300">Fast</label>
+          <label htmlFor="fast" className="text-sm text-slate-300">
+            Fast
+          </label>
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -128,15 +216,27 @@ export default function RunPipeline({ apiBase }) {
           </button>
         </div>
       </form>
-      {taskId && !result && !error && (
+
+      {taskId && (logLines.length > 0 || !taskData?.result) && (
+        <div className="mt-4 rounded-xl border border-slate-700 bg-slate-900/80 overflow-hidden">
+          <div className="flex items-center gap-2 border-b border-slate-700 bg-slate-800/60 px-3 py-2 text-sm text-slate-400">
+            <Terminal className="h-4 w-4" />
+            Live log (task: {taskId})
+          </div>
+          <div className="max-h-48 overflow-y-auto p-3 font-mono text-xs text-slate-300 whitespace-pre-wrap">
+            {logLines.length ? logLines.map((line, i) => <div key={i}>{line}</div>) : 'Waiting for output…'}
+            <div ref={logEndRef} />
+          </div>
+        </div>
+      )}
+
+      {taskId && !result && !error && logLines.length === 0 && (
         <div className="mt-4 flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800/60 px-4 py-3 text-sm text-slate-400">
           <Loader2 className="h-4 w-4 animate-spin shrink-0" />
           <span>Task ID: {taskId} — {statusLabel}</span>
         </div>
       )}
-      {error && (
-        <p className="mt-4 text-sm text-red-400">{error}</p>
-      )}
+      {error && <p className="mt-4 text-sm text-red-400">{error}</p>}
       {result && (
         <section className="mt-6 rounded-xl border border-slate-700/60 bg-slate-800/60 p-4">
           <h2 className="text-lg font-medium text-slate-100">Result</h2>
