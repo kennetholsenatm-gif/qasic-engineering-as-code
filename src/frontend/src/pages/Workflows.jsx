@@ -1,4 +1,4 @@
-import { useCallback, useState, useEffect } from 'react'
+import { useCallback, useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ReactFlow,
@@ -14,7 +14,7 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import TaskNode from '../components/TaskNode'
-import { Save, Play, CheckCircle, Loader2, GitBranch } from 'lucide-react'
+import { Save, Play, CheckCircle, Loader2, GitBranch, Key, FileCode } from 'lucide-react'
 
 const nodeTypes = { taskNode: TaskNode }
 
@@ -33,6 +33,13 @@ function fetchDags(apiBase, projectId) {
 function fetchDag(apiBase, dagId) {
   return fetch(`${apiBase}/api/dag/${dagId}`).then((r) => {
     if (!r.ok) throw new Error(r.statusText)
+    return r.json()
+  })
+}
+
+function fetchCredentialsStatus(apiBase) {
+  return fetch(`${apiBase}/api/settings/credentials`).then((r) => {
+    if (!r.ok) return { ibm_quantum_token_configured: false, credentials_source: 'vault' }
     return r.json()
   })
 }
@@ -90,6 +97,12 @@ function WorkflowsInner({ apiBase }) {
   const [validationResult, setValidationResult] = useState(null)
   const [runResult, setRunResult] = useState(null)
   const [selectedNodeId, setSelectedNodeId] = useState(null)
+  const [ibmToken, setIbmToken] = useState('')
+  const [externalCredsPath, setExternalCredsPath] = useState('')
+  const [qasmString, setQasmString] = useState('')
+  const [circuitName, setCircuitName] = useState('')
+  const [runMode, setRunMode] = useState('dag')
+  const circuitFileInputRef = useRef(null)
   const queryClient = useQueryClient()
   const { screenToFlowPosition } = useReactFlow()
 
@@ -110,6 +123,12 @@ function WorkflowsInner({ apiBase }) {
     queryFn: () => fetchDag(apiBase, dagId),
     enabled: !!dagId,
   })
+
+  const { data: credentialsStatus, refetch: refetchCredentials } = useQuery({
+    queryKey: ['credentials-status', apiBase],
+    queryFn: () => fetchCredentialsStatus(apiBase),
+  })
+  const credStatus = credentialsStatus || {}
 
   const [nodes, setNodes, onNodesChange] = useNodesState([])
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
@@ -233,7 +252,15 @@ function WorkflowsInner({ apiBase }) {
   const runMutation = useMutation({
     mutationFn: async () => {
       if (!dagId) throw new Error('Save the workflow first.')
-      const res = await fetch(`${apiBase}/api/dag/${dagId}/run`, { method: 'POST' })
+      const body =
+        runMode === 'circuit_pipeline' && qasmString.trim()
+          ? { qasm_string: qasmString.trim(), circuit_name: circuitName.trim() || 'circuit', run_mode: 'circuit_pipeline' }
+          : { run_mode: 'dag' }
+      const res = await fetch(`${apiBase}/api/dag/${dagId}/run`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.detail || res.statusText)
       return data
@@ -243,6 +270,62 @@ function WorkflowsInner({ apiBase }) {
       queryClient.invalidateQueries({ queryKey: ['dag-runs', apiBase, dagId] })
     },
   })
+
+  const saveCredentialsMutation = useMutation({
+    mutationFn: async (payload) => {
+      const res = await fetch(`${apiBase}/api/settings/credentials`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.detail || res.statusText)
+      return data
+    },
+    onSuccess: () => {
+      refetchCredentials()
+    },
+  })
+
+  const setCredentialsSourceMutation = useMutation({
+    mutationFn: async ({ credentials_source, credentials_path }) => {
+      const res = await fetch(`${apiBase}/api/settings/credentials/source`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ credentials_source, credentials_path: credentials_path || '' }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.detail || res.statusText)
+      return data
+    },
+    onSuccess: () => {
+      refetchCredentials()
+    },
+  })
+
+  function handleSaveCredentials() {
+    const payload = {}
+    if (ibmToken.trim()) payload.ibm_quantum_token = ibmToken.trim()
+    if (Object.keys(payload).length === 0) return
+    saveCredentialsMutation.mutate(payload)
+  }
+
+  function handleUseExternalFile() {
+    const path = externalCredsPath.trim()
+    if (!path) return
+    setCredentialsSourceMutation.mutate({ credentials_source: 'file', credentials_path: path })
+  }
+
+  function handleQasmFileChange(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      if (typeof reader.result === 'string') setQasmString(reader.result)
+    }
+    reader.readAsText(file)
+    if (circuitFileInputRef.current) circuitFileInputRef.current.value = ''
+  }
 
   const { data: runsData } = useQuery({
     queryKey: ['dag-runs', apiBase, dagId],
@@ -339,8 +422,18 @@ function WorkflowsInner({ apiBase }) {
           <button
             type="button"
             onClick={() => runMutation.mutate()}
-            disabled={runMutation.isPending || !dagId}
-            title={!dagId ? 'Save the workflow first, then Run' : 'Deploy and run this DAG'}
+            disabled={
+              runMutation.isPending ||
+              !dagId ||
+              (runMode === 'circuit_pipeline' && !qasmString.trim())
+            }
+            title={
+              !dagId
+                ? 'Save the workflow first, then Run'
+                : runMode === 'circuit_pipeline' && !qasmString.trim()
+                  ? 'Enter a circuit for circuit-driven pipeline'
+                  : 'Deploy and run this DAG'
+            }
             className="inline-flex items-center gap-1.5 rounded-lg bg-green-600 px-3 py-1.5 text-sm text-white hover:bg-green-500 disabled:opacity-60"
           >
             {runMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
@@ -426,6 +519,137 @@ function WorkflowsInner({ apiBase }) {
           </ReactFlow>
         </div>
       </main>
+
+      <aside className="w-72 shrink-0 rounded-xl border border-slate-700 bg-slate-800/80 p-3 overflow-y-auto space-y-4">
+        <section>
+          <h2 className="text-sm font-semibold text-slate-300 mb-2 flex items-center gap-1.5">
+            <Key className="h-4 w-4 text-sky-400" />
+            API credentials
+          </h2>
+          <p className="text-xs text-slate-500 mb-2">Stored in vault; used when running pipeline (e.g. IBM QPU).</p>
+          {credStatus.ibm_quantum_token_configured && (
+            <p className="text-xs text-green-400 mb-2">IBM Quantum token configured</p>
+          )}
+          {credStatus.credentials_source === 'file' && credStatus.credentials_path && (
+            <p className="text-xs text-slate-400 mb-2">Using external file</p>
+          )}
+          <div className="space-y-2">
+            <label className="block text-xs text-slate-500">IBM Quantum token</label>
+            <input
+              type="password"
+              value={ibmToken}
+              onChange={(e) => setIbmToken(e.target.value)}
+              placeholder="Optional"
+              className="w-full rounded border border-slate-600 bg-slate-800 text-slate-200 text-sm px-2 py-1.5 placeholder:text-slate-500"
+              autoComplete="off"
+            />
+            <button
+              type="button"
+              onClick={handleSaveCredentials}
+              disabled={saveCredentialsMutation.isPending || !ibmToken.trim()}
+              className="w-full inline-flex items-center justify-center gap-1.5 rounded-lg bg-sky-600 px-2 py-1.5 text-sm text-white hover:bg-sky-500 disabled:opacity-60"
+            >
+              {saveCredentialsMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              Save to vault
+            </button>
+          </div>
+          <div className="mt-3 pt-3 border-t border-slate-700">
+            <label className="block text-xs text-slate-500 mb-1">Use external file (path)</label>
+            <input
+              type="text"
+              value={externalCredsPath}
+              onChange={(e) => setExternalCredsPath(e.target.value)}
+              placeholder="/path/to/credentials.json"
+              className="w-full rounded border border-slate-600 bg-slate-800 text-slate-200 text-sm px-2 py-1.5 placeholder:text-slate-500 mb-1"
+            />
+            <div className="flex gap-1">
+              <button
+                type="button"
+                onClick={handleUseExternalFile}
+                disabled={setCredentialsSourceMutation.isPending || !externalCredsPath.trim()}
+                className="flex-1 rounded-lg border border-slate-600 bg-slate-700 px-2 py-1.5 text-sm text-slate-200 hover:bg-slate-600 disabled:opacity-60"
+              >
+                Use external file
+              </button>
+              <button
+                type="button"
+                onClick={() => setCredentialsSourceMutation.mutate({ credentials_source: 'vault', credentials_path: '' })}
+                disabled={setCredentialsSourceMutation.isPending}
+                className="rounded-lg border border-slate-600 bg-slate-700 px-2 py-1.5 text-sm text-slate-200 hover:bg-slate-600 disabled:opacity-60"
+                title="Use vault (container) again"
+              >
+                Use vault
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section>
+          <h2 className="text-sm font-semibold text-slate-300 mb-2 flex items-center gap-1.5">
+            <FileCode className="h-4 w-4 text-sky-400" />
+            Circuit (drives pipeline)
+          </h2>
+          <p className="text-xs text-slate-500 mb-2">OpenQASM to run the full pipeline (qasm→ASIC, routing, inverse, HEaC).</p>
+          <div className="space-y-2 mb-2">
+            <label className="block text-xs text-slate-500">Run as</label>
+            <div className="flex gap-3">
+              <label className="flex items-center gap-1.5 text-sm text-slate-300 cursor-pointer">
+                <input
+                  type="radio"
+                  name="runMode"
+                  checked={runMode === 'dag'}
+                  onChange={() => setRunMode('dag')}
+                  className="rounded border-slate-600 text-sky-500"
+                />
+                DAG (node-by-node)
+              </label>
+              <label className="flex items-center gap-1.5 text-sm text-slate-300 cursor-pointer">
+                <input
+                  type="radio"
+                  name="runMode"
+                  checked={runMode === 'circuit_pipeline'}
+                  onChange={() => setRunMode('circuit_pipeline')}
+                  className="rounded border-slate-600 text-sky-500"
+                />
+                Circuit-driven pipeline
+              </label>
+            </div>
+          </div>
+          {runMode === 'circuit_pipeline' && (
+            <p className="text-xs text-amber-400 mb-2">Circuit required for Run.</p>
+          )}
+          <textarea
+            value={qasmString}
+            onChange={(e) => setQasmString(e.target.value)}
+            placeholder={'OPENQASM 2.0;\ninclude "qelib1.inc";\nqreg q[3];\n...'}
+            rows={6}
+            className="w-full rounded border border-slate-600 bg-slate-800 px-2 py-1.5 font-mono text-sm text-slate-100 placeholder:text-slate-500"
+          />
+          <div className="flex flex-wrap items-center gap-2 mt-2">
+            <input
+              ref={circuitFileInputRef}
+              type="file"
+              accept=".qasm,.qasm2"
+              onChange={handleQasmFileChange}
+              className="hidden"
+              id="workflow-qasm-file"
+            />
+            <label
+              htmlFor="workflow-qasm-file"
+              className="cursor-pointer rounded border border-slate-600 bg-slate-700 px-2 py-1 text-xs text-slate-200 hover:bg-slate-600"
+            >
+              Upload .qasm
+            </label>
+            <input
+              type="text"
+              value={circuitName}
+              onChange={(e) => setCircuitName(e.target.value)}
+              placeholder="Circuit name"
+              className="w-28 rounded border border-slate-600 bg-slate-800 px-2 py-1 text-sm text-slate-200 placeholder:text-slate-500"
+            />
+          </div>
+        </section>
+      </aside>
     </div>
   )
 }

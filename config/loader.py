@@ -35,6 +35,8 @@ class AppPathsConfig(BaseModel):
     pipeline_base: str = "pipeline_result"
     engineering_dir: str = "engineering"
     docs_dir: str = "docs"
+    # Credentials vault file (in container or host path). Env: QASIC_CREDENTIALS_FILE.
+    credentials_file: str = ""
 
 
 class CorsConfig(BaseModel):
@@ -59,6 +61,8 @@ class AppConfig(BaseModel):
         repo_root = repo_root or REPO_ROOT
         if os.environ.get("QASIC_PIPELINE_BASE"):
             paths["pipeline_base"] = os.environ["QASIC_PIPELINE_BASE"]
+        if os.environ.get("QASIC_CREDENTIALS_FILE"):
+            paths["credentials_file"] = os.environ["QASIC_CREDENTIALS_FILE"]
         if os.environ.get("BACKEND_CORS_ORIGINS"):
             cors["allow_origins"] = os.environ["BACKEND_CORS_ORIGINS"]
         return cls(

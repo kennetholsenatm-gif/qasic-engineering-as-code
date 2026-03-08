@@ -211,9 +211,18 @@ def run_pipeline_with_circuit_task(
     model: str = "mlp",
     heac: bool = False,
     hardware: bool = False,
+    run_id: int | None = None,
 ):
-    """Run qasm_to_asic then routing (circuit-derived) then run_pipeline.py --skip-routing (inverse + optional HEaC)."""
+    """Run qasm_to_asic then routing (circuit-derived) then run_pipeline.py --skip-routing (inverse + optional HEaC). Loads credentials from vault into env. If run_id is set, updates DAG run status on completion."""
     task_id = self.request.id if getattr(self.request, "id", None) else None
+    try:
+        from config import get_app_config
+        from src.backend.credentials_vault import load_credentials_into_env
+        cfg = get_app_config()
+        creds_path = getattr(cfg.paths, "credentials_file", None) or ""
+        load_credentials_into_env(creds_path, REPO_ROOT)
+    except Exception:
+        pass
     _publish_progress(task_id, "Starting pipeline with circuit", step="pipeline", done=False)
     try:
         from src.core_compute.engineering.qasm_to_asic_pipeline import run_qasm_to_asic
@@ -230,6 +239,12 @@ def run_pipeline_with_circuit_task(
         )
     except Exception as e:
         _publish_progress(task_id, str(e), step="pipeline", done=True)
+        if run_id is not None:
+            try:
+                from storage.db import update_dag_run
+                update_dag_run(run_id, status="failed", error_message=str(e))
+            except Exception:
+                pass
         return {"success": False, "error": str(e)}
     graph = raw.get("_interaction_graph")
     if graph is None or graph.number_of_nodes() == 0:
@@ -253,6 +268,12 @@ def run_pipeline_with_circuit_task(
     code, out, err = _run_cmd(cmd, timeout=1800)
     if code != 0:
         _publish_progress(task_id, f"Pipeline failed: {err or out}", step="pipeline", done=True)
+        if run_id is not None:
+            try:
+                from storage.db import update_dag_run
+                update_dag_run(run_id, status="failed", error_message=err or out)
+            except Exception:
+                pass
         try:
             from storage.db import update_pipeline_run
             update_pipeline_run(task_id=task_id, status="failed", error_message=err or out)
@@ -260,6 +281,12 @@ def run_pipeline_with_circuit_task(
             pass
         return {"success": False, "exit_code": code, "stderr": err, "stdout": out, "circuit_to_asic": _circuit_to_asic_result_serializable(raw)}
     _publish_progress(task_id, "Pipeline completed", step="pipeline", done=True)
+    if run_id is not None:
+        try:
+            from storage.db import update_dag_run
+            update_dag_run(run_id, status="success")
+        except Exception:
+            pass
     try:
         from storage.db import update_pipeline_run
         update_pipeline_run(

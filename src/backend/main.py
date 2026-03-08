@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Literal
 
 import asyncio
-from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import Body, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
@@ -303,6 +303,68 @@ class DAGValidateRequest(BaseModel):
     edges: list = []
 
 
+class RunDagRequest(BaseModel):
+    qasm_string: str | None = None
+    circuit_name: str | None = None
+    run_mode: Literal["dag", "circuit_pipeline"] = "dag"
+
+
+# --- Settings: credentials vault (no raw secrets in response) ---
+
+class CredentialsSaveRequest(BaseModel):
+    ibm_quantum_token: str | None = None
+    aws_access_key_id: str | None = None
+    aws_secret_access_key: str | None = None
+
+
+class CredentialsSourceRequest(BaseModel):
+    credentials_source: Literal["vault", "file"] = "vault"
+    credentials_path: str | None = None
+
+
+@app.get("/api/settings/credentials")
+def get_credentials_api():
+    """Return credentials status only (which keys configured, source, path). Never returns secret values."""
+    try:
+        from src.backend.credentials_vault import get_credentials_status
+        cfg = _get_app_cfg()
+        path = getattr(cfg.paths, "credentials_file", None) or ""
+        return get_credentials_status(path, REPO_ROOT)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=_sanitize_detail(e, "Failed to read credentials status."))
+
+
+@app.post("/api/settings/credentials")
+def save_credentials_api(req: CredentialsSaveRequest):
+    """Save provided credentials to vault. Validate payload size; only allowed keys stored."""
+    try:
+        from src.backend.credentials_vault import write_vault
+        cfg = _get_app_cfg()
+        path = getattr(cfg.paths, "credentials_file", None) or ""
+        payload = {k: v for k, v in req.model_dump().items() if v is not None and v != ""}
+        if len(json.dumps(payload)) > 16 * 1024:
+            raise HTTPException(status_code=400, detail="Credentials payload too large.")
+        write_vault(path, REPO_ROOT, payload)
+        return {"message": "Credentials saved to vault."}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=_sanitize_detail(e, "Failed to save credentials."))
+
+
+@app.post("/api/settings/credentials/source")
+def set_credentials_source_api(req: CredentialsSourceRequest):
+    """Set credentials source to vault or external file (path required for file)."""
+    try:
+        from src.backend.credentials_vault import set_credentials_source
+        set_credentials_source(REPO_ROOT, req.credentials_source, req.credentials_path or "")
+        return {"message": "Credentials source updated."}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=_sanitize_detail(e, "Failed to set credentials source."))
+
+
 @app.get("/api/dag/task-types")
 def get_dag_task_types():
     """Return task type registry for palette and validation (inputs, outputs, backends)."""
@@ -391,8 +453,8 @@ def validate_dag_api(req: DAGValidateRequest):
 
 @app.post("/api/dag/{dag_id}/run")
 @limit_heavy
-def run_dag_api(request: Request, dag_id: int):
-    """Create a DAG run and enqueue execution (Celery). Returns run_id and task_id when Celery available."""
+def run_dag_api(request: Request, dag_id: int, body: RunDagRequest | None = Body(None)):
+    """Create a DAG run and enqueue execution (Celery). Optional body: run_mode=circuit_pipeline + qasm_string runs full pipeline from circuit. Returns run_id and task_id when Celery available."""
     try:
         from storage.db import get_dag, create_dag_run, update_dag_run, is_enabled
         if not is_enabled():
@@ -400,6 +462,33 @@ def run_dag_api(request: Request, dag_id: int):
         d = get_dag(dag_id)
         if not d:
             raise HTTPException(status_code=404, detail="DAG not found.")
+        req = body or RunDagRequest()
+        run_mode = req.run_mode or "dag"
+        qasm_string = (req.qasm_string or "").strip()
+        circuit_name = (req.circuit_name or "circuit").strip() or "circuit"
+
+        if run_mode == "circuit_pipeline" and qasm_string:
+            _validate_qasm_string(qasm_string)
+            if not _celery_available():
+                raise HTTPException(status_code=503, detail="Celery/Redis required for circuit-driven pipeline (set CELERY_BROKER_URL).")
+            run_id = create_dag_run(dag_id=dag_id, status="pending", nodes_snapshot=[], edges_snapshot=[])
+            if run_id is None:
+                raise HTTPException(status_code=500, detail="Failed to create run.")
+            from src.backend.tasks import run_pipeline_with_circuit_task
+            task = run_pipeline_with_circuit_task.delay(
+                qasm_string=qasm_string,
+                circuit_name=circuit_name,
+                output_base=PIPELINE_BASE,
+                fast=False,
+                routing_method="qaoa",
+                model="mlp",
+                heac=False,
+                hardware=False,
+                run_id=run_id,
+            )
+            update_dag_run(run_id, celery_task_id=task.id)
+            return {"run_id": run_id, "task_id": task.id, "status": "pending", "message": "Circuit-driven pipeline enqueued."}
+
         nodes = d.get("nodes") or []
         edges = d.get("edges") or []
         run_id = create_dag_run(dag_id=dag_id, status="pending", nodes_snapshot=nodes, edges_snapshot=edges)

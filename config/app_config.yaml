@@ -9,6 +9,8 @@ paths:
   pipeline_base: "pipeline_result"
   engineering_dir: "src/core_compute/engineering"
   docs_dir: "docs"
+  # Credentials vault: set to a path (e.g. storage/credentials.json) or override with QASIC_CREDENTIALS_FILE
+  credentials_file: ""
 
 cors:
   # Production: set BACKEND_CORS_ORIGINS to comma-separated whitelist (e.g. https://app.example.com). Never use allow_credentials with "*".
