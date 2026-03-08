@@ -104,7 +104,6 @@ jobs:
       - name: Run pipeline (routing + inverse + HEaC, --fast, no Meep)
         run: |
           python engineering/run_pipeline.py -o ci_result --heac --fast
-        working-directory: ${{ github.workspace }}
       - name: Thermodynamic validator
         run: |
           if [ -f engineering/ci_result_inverse_phases.npy ]; then
@@ -114,32 +113,29 @@ jobs:
           else
             echo "No phases/inverse output; skipping thermodynamic validator"
           fi
-        working-directory: ${{ github.workspace }}
-      - name: HIL-style: compile pulse + calibration + routing
+      - name: HIL compile pulse and calibration and routing
+        run: python -m pulse --circuit teleport -o engineering/ci_schedule.json
+      - name: HIL calibration and routing
         run: |
-          python -m pulse --circuit teleport -o engineering/ci_schedule.json
           if [ -f engineering/ci_baseline/ci_synthetic_telemetry.json ]; then
             python -m engineering.calibration.run_calibration_cycle engineering/ci_baseline/ci_synthetic_telemetry.json -o engineering/ci_decoherence_from_calibration.json --n-nodes 3
             if [ -f engineering/ci_decoherence_from_calibration.json ]; then
               python -m engineering.routing_qubo_qaoa -o engineering/ci_hil_routing.json --decoherence-file engineering/ci_decoherence_from_calibration.json
             fi
           fi
-        working-directory: ${{ github.workspace }}
       - name: Run HIL assertions
         run: python -m pytest tests/test_hil_ci.py -v
-        working-directory: ${{ github.workspace }}
+      - name: Prepare pipeline artifacts
+        run: |
+          mkdir -p ci-artifacts
+          for f in engineering/ci_result_routing.json engineering/ci_result_inverse.json engineering/ci_result_inverse_phases.npy engineering/ci_result_geometry_manifest.json engineering/ci_schedule.json engineering/ci_decoherence_from_calibration.json engineering/ci_hil_routing.json; do
+            [ -f "$f" ] && cp "$f" ci-artifacts/
+          done
       - name: Upload pipeline artifacts
         uses: actions/upload-artifact@v4
         with:
           name: pipeline-outputs
-          path: |
-            engineering/ci_result_routing.json
-            engineering/ci_result_inverse.json
-            engineering/ci_result_inverse_phases.npy
-            engineering/ci_result_geometry_manifest.json
-            engineering/ci_schedule.json
-            engineering/ci_decoherence_from_calibration.json
-            engineering/ci_hil_routing.json
+          path: ci-artifacts
           if-no-files-found: ignore
 
   container-scan:
@@ -177,6 +173,11 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: pipeline-outputs
+      - name: Copy artifacts to engineering
+        run: |
+          for f in ci_result_routing.json ci_result_inverse.json ci_result_inverse_phases.npy ci_result_geometry_manifest.json ci_schedule.json ci_decoherence_from_calibration.json ci_hil_routing.json; do
+            [ -f "$f" ] && cp "$f" engineering/
+          done
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'

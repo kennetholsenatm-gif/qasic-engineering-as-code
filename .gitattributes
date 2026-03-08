@@ -1,0 +1,3 @@
+# Ensure workflow files use LF (GitHub Actions expects this)
+.github/workflows/*.yml text eol=lf
+.github/workflows/*.yaml text eol=lf
