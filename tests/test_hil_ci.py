@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-ENGINEERING = REPO_ROOT / "engineering"
+ENGINEERING = REPO_ROOT / "src" / "core_compute" / "engineering"
 
 
 def test_hil_schedule_has_instructions(tmp_path):
@@ -20,7 +20,7 @@ def test_hil_schedule_has_instructions(tmp_path):
     import subprocess
     import sys
     schedule_path = tmp_path / "ci_schedule.json"
-    cmd = [sys.executable, "-m", "pulse", "--circuit", "teleport", "-o", str(schedule_path)]
+    cmd = [sys.executable, "-m", "src.core_compute.pulse", "--circuit", "teleport", "-o", str(schedule_path)]
     rc = subprocess.run(cmd, cwd=str(REPO_ROOT), capture_output=True, text=True, timeout=30)
     assert rc.returncode == 0, (rc.stdout or "") + (rc.stderr or "")
     assert schedule_path.exists()
@@ -44,7 +44,7 @@ def test_hil_calibration_cycle_exit_zero(tmp_path):
         pytest.skip("ci_synthetic_telemetry.json not found")
     out_path = tmp_path / "decoherence_from_calibration.json"
     cmd = [
-        sys.executable, "-m", "engineering.calibration.run_calibration_cycle",
+        sys.executable, "-m", "src.core_compute.engineering.calibration.run_calibration_cycle",
         str(telemetry),
         "-o", str(out_path),
         "--n-nodes", "3",
@@ -68,7 +68,7 @@ def test_hil_routing_with_calibration_decoherence(tmp_path):
         pytest.skip("ci_synthetic_telemetry.json not found")
     decoherence_path = tmp_path / "ci_decoherence.json"
     cal_cmd = [
-        sys.executable, "-m", "engineering.calibration.run_calibration_cycle",
+        sys.executable, "-m", "src.core_compute.engineering.calibration.run_calibration_cycle",
         str(telemetry), "-o", str(decoherence_path), "--n-nodes", "3",
     ]
     rc = subprocess.run(cal_cmd, cwd=str(REPO_ROOT), capture_output=True, text=True, timeout=30)
@@ -76,7 +76,7 @@ def test_hil_routing_with_calibration_decoherence(tmp_path):
         pytest.skip("Calibration step failed")
     routing_path = tmp_path / "ci_hil_routing.json"
     route_cmd = [
-        sys.executable, "-m", "engineering.routing_qubo_qaoa",
+        sys.executable, "-m", "src.core_compute.engineering.routing_qubo_qaoa",
         "-o", str(routing_path),
         "--decoherence-file", str(decoherence_path),
     ]

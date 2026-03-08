@@ -1255,6 +1255,7 @@ def get_docs_links():
 
 
 _ALLOWED_DOC_PATHS = frozenset({
+    "docs/README.md",
     "docs/app/architecture_overview.md",
     "docs/app/QUANTUM_ASIC.md",
     "docs/research/WHITEPAPER_Holographic_Metasurfaces_Quantum_SATCOM.md",

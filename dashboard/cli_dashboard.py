@@ -14,7 +14,7 @@ import webbrowser
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-ENGINEERING_DIR = REPO_ROOT / "engineering"
+ENGINEERING_DIR = REPO_ROOT / "src" / "core_compute" / "engineering"
 DOCS_DIR = REPO_ROOT / "docs"
 
 # Default pipeline output base name (must match run_pipeline.py default)

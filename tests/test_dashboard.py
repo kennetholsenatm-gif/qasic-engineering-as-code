@@ -14,5 +14,5 @@ def test_dashboard_import():
 def test_dashboard_repo_root_resolved():
     from dashboard.cli_dashboard import REPO_ROOT, ENGINEERING_DIR
     assert REPO_ROOT.is_dir()
-    assert (REPO_ROOT / "engineering").exists()
-    assert ENGINEERING_DIR == REPO_ROOT / "engineering"
+    assert (REPO_ROOT / "src" / "core_compute" / "engineering").exists()
+    assert ENGINEERING_DIR == REPO_ROOT / "src" / "core_compute" / "engineering"

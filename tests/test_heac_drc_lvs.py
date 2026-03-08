@@ -9,9 +9,9 @@ from pathlib import Path
 
 import pytest
 
-# Repo root
+# Repo root (tests/ is one level below repo root)
 REPO_ROOT = Path(__file__).resolve().parents[1]
-ENGINEERING = REPO_ROOT / "engineering"
+ENGINEERING = REPO_ROOT / "src" / "core_compute" / "engineering"
 HEAC = ENGINEERING / "heac"
 
 
