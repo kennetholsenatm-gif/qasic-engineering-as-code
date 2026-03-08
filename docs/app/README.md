@@ -1,6 +1,6 @@
 # Docs
 
-Documentation and whitepapers for **QASIC Engineering-as-Code** ([GitHub](https://github.com/kennetholsenatm-gif/qasic-engineering-as-code)). For quick start and repo layout, see the [main README](../README.md).
+Documentation and whitepapers for **QASIC Engineering-as-Code** ([GitHub](https://github.com/kennetholsenatm-gif/qasic-engineering-as-code)). For quick start and repo layout, see the [main README](../../README.md).
 
 ## Document index
 
@@ -39,14 +39,14 @@ Documentation and whitepapers for **QASIC Engineering-as-Code** ([GitHub](https:
 | [ORCHESTRATION.md](ORCHESTRATION.md) | Prefect 2 DAG for pipeline and calibration; retries and server |
 | [superscreen_integration.md](superscreen_integration.md) | SuperScreen 2D London equation / Meissner screening integration |
 
-**How to read:** Each whitepaper has a **Markdown (.md)** version for GitHub and quick reading; the **LaTeX (.tex)** source is for full equations and PDF build. For vision and protocols → [WHITEPAPER_Holographic_Metasurfaces_Quantum_SATCOM.md](WHITEPAPER_Holographic_Metasurfaces_Quantum_SATCOM.md). For EaC roadmap, cryogenic metamaterials, computational materials science, and terrestrial backhaul → use the corresponding .md files above. See the main [README](../README.md) for repo layout.
+**How to read:** Each whitepaper has a **Markdown (.md)** version for GitHub and quick reading; the **LaTeX (.tex)** source is for full equations and PDF build. For vision and protocols → [WHITEPAPER_Holographic_Metasurfaces_Quantum_SATCOM.md](WHITEPAPER_Holographic_Metasurfaces_Quantum_SATCOM.md). For EaC roadmap, cryogenic metamaterials, computational materials science, and terrestrial backhaul → use the corresponding .md files above. See the main [README](../../README.md) for repo layout.
 
 ### Building PDFs (TeX Live)
 
 All LaTeX sources are intended to be compiled with **XeLaTeX** (Noto Sans, Unicode). The documents use `babel` with `bidi=bidi` for XeLaTeX compatibility (do not use `bidi=basic`, which is LuaTeX-only). With [TeX Live](https://tug.org/texlive/) installed and `xelatex` on your PATH (if you just installed TeX Live, open a new terminal or add TeX Live’s `bin` folder to PATH, e.g. `C:\texlive\2024\bin\windows`):
 
 - **From repo root:**  
-  `.\docs\build_pdfs.ps1`  
-  This builds all LaTeX PDFs (two passes each for references) and writes them in `docs/`.
-- **Manual (from `docs/`):**  
-  `xelatex WHITEPAPER_Holographic_Metasurfaces_Quantum_SATCOM.tex` (run twice), then the same for `Cryogenic_Metamaterial_Architectures_Quantum_SATCOM.tex`.
+  `.\docs\research\build_pdfs.ps1`  
+  This builds all LaTeX PDFs (two passes each for references) and writes them in `docs/research/`.
+- **Manual (from `docs/research/`):**  
+  `xelatex WHITEPAPER_Holographic_Metasurfaces_Quantum_SATCOM.tex` (run twice), then the same for other .tex files.
