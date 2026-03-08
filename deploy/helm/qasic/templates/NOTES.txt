@@ -1,0 +1,13 @@
+QASIC Engineering-as-Code is deployed.
+
+  API:      http://{{ include "qasic.fullname" . }}-api:{{ .Values.api.port }} (or 'api:{{ .Values.api.port }}' if shortServiceName is true)
+  Frontend: http://{{ include "qasic.fullname" . }}-frontend:{{ .Values.frontend.port }}
+  Redis:    {{ include "qasic.redis.host" . }}
+
+Celery workers are scaled by KEDA based on Redis queue length (when keda.enabled=true).
+To access the application, use port-forward or configure Ingress:
+
+  kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "qasic.fullname" . }}-frontend 8080:{{ .Values.frontend.port }}
+  kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "qasic.fullname" . }}-api 8000:{{ .Values.api.port }}
+
+Then open http://localhost:8080

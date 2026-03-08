@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "qasic.fullname" . }}-api
+  labels:
+    app.kubernetes.io/name: qasic-api
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.replicaCount.api }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: qasic-api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: qasic-api
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: api
+          image: "{{ .Values.image.registry }}{{ .Values.image.api.repository }}:{{ .Values.image.api.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.api.port }}
+              name: http
+          env:
+            - name: CELERY_BROKER_URL
+              value: "{{ include "qasic.celery.broker" . }}"
+            - name: CELERY_RESULT_BACKEND
+              value: "{{ include "qasic.celery.broker" . }}"
+            - name: DATABASE_URL
+              value: "{{ include "qasic.postgres.url" . }}"
+            {{- range .Values.api.env }}
+            - name: {{ .name }}
+              value: {{ .value | quote }}
+            {{- end }}
+          {{- if .Values.api.existingSecret }}
+          envFrom:
+            - secretRef:
+                name: {{ .Values.api.existingSecret }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.api.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5

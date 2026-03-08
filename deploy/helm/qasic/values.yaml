@@ -1,0 +1,110 @@
+# QASIC Helm values - cloud-agnostic (EKS, GKE, AKS, OneKE, bare metal)
+# Override per environment; use --set or -f for prod.
+
+replicaCount:
+  api: 1
+  frontend: 1
+  celeryWorker:
+    min: 1
+    max: 10
+
+image:
+  registry: ""
+  pullPolicy: IfNotPresent
+  api:
+    repository: qasic-api
+    tag: latest
+  frontend:
+    repository: qasic-frontend
+    tag: latest
+
+# Use in-cluster Redis/Postgres or set URLs for external (e.g. ElastiCache, RDS)
+redis:
+  enabled: true
+  image: redis:7-alpine
+  port: 6379
+  # When enabled: false, set externalHost (e.g. my-redis:6379) and ensure CELERY_BROKER_URL is set via env.
+  externalHost: ""
+
+postgres:
+  enabled: true
+  image: postgres:15-alpine
+  port: 5432
+  db: qasic
+  user: qasic
+  password: "qasic"
+  # When enabled: false, set externalUrl (postgresql://user:pass@host:5432/db) and pass via api/celery env.
+  externalUrl: ""
+
+# KEDA: scale celery-worker based on Redis queue length (works on any K8s cluster)
+keda:
+  enabled: true
+  celeryQueueName: "celery"   # Celery default queue = Redis list name
+  listLengthTarget: "5"       # target tasks per worker; scale when queue length exceeds this
+  activationListLength: "0"   # scale to 0 when queue empty (optional, set to "0" to allow scale to zero)
+
+api:
+  port: 8000
+  # Set shortServiceName: true to create a Service named "api" (for frontend nginx proxy_pass http://api:8000). Use when one release per namespace.
+  shortServiceName: false
+  env: []
+  # Example: BACKEND_CORS_ORIGINS, QASIC_DEBUG
+  existingSecret: ""   # optional: secret name for IBM_QUANTUM_TOKEN etc.
+  resources:
+    limits: { cpu: "1000m", memory: "1Gi" }
+    requests: { cpu: "100m", memory: "256Mi" }
+
+frontend:
+  port: 8080
+  apiUrl: ""   # leave empty to use internal service (qasic-api); set for external API URL
+  resources:
+    limits: { cpu: "200m", memory: "128Mi" }
+    requests: { cpu: "50m", memory: "64Mi" }
+
+celeryWorker:
+  logLevel: info
+  env: []
+  existingSecret: ""
+  resources:
+    limits: { cpu: "2000m", memory: "2Gi" }
+    requests: { cpu: "200m", memory: "512Mi" }
+
+# Optional: MLflow + Grafana (same as docker-compose.full)
+mlflow:
+  enabled: false
+  port: 5000
+  image: python:3.11-slim
+  resources:
+    limits: { cpu: "500m", memory: "512Mi" }
+
+grafana:
+  enabled: false
+  port: 3000
+  image: grafana/grafana:10.2-alpine
+  adminPassword: ""   # set in prod
+  resources:
+    limits: { cpu: "500m", memory: "512Mi" }
+
+influxdb:
+  enabled: false
+  port: 8086
+
+# Ingress: enable for external access; configure per cloud (e.g. ALB, GCE, nginx)
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: qasic.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+          service: frontend
+        - path: /api
+          pathType: Prefix
+          service: api
+  tls: []
+
+serviceAccount:
+  create: true
+  name: ""

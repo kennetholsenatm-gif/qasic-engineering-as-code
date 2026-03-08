@@ -1,0 +1,24 @@
+{{- if and .Values.redis.enabled .Values.keda.enabled }}
+# KEDA scales celery-worker based on Redis queue length. Works on any K8s (EKS, GKE, AKS, OneKE, bare metal).
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ include "qasic.fullname" . }}-celery
+  labels:
+    app.kubernetes.io/name: qasic-celery-worker
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "qasic.fullname" . }}-celery-worker
+  minReplicaCount: {{ .Values.replicaCount.celeryWorker.min }}
+  maxReplicaCount: {{ .Values.replicaCount.celeryWorker.max }}
+  triggers:
+    - type: redis
+      metadata:
+        address: {{ include "qasic.redis.host" . }}
+        listName: {{ .Values.keda.celeryQueueName | quote }}
+        listLength: {{ .Values.keda.listLengthTarget | quote }}
+        activationListLength: {{ .Values.keda.activationListLength | quote }}
+{{- end }}

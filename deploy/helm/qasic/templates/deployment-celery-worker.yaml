@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "qasic.fullname" . }}-celery-worker
+  labels:
+    app.kubernetes.io/name: qasic-celery-worker
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.replicaCount.celeryWorker.min }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: qasic-celery-worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: qasic-celery-worker
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: celery-worker
+          image: "{{ .Values.image.registry }}{{ .Values.image.api.repository }}:{{ .Values.image.api.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["celery", "-A", "app.celery_app", "worker", "-l", {{ .Values.celeryWorker.logLevel | quote }}]
+          env:
+            - name: CELERY_BROKER_URL
+              value: "{{ include "qasic.celery.broker" . }}"
+            - name: CELERY_RESULT_BACKEND
+              value: "{{ include "qasic.celery.broker" . }}"
+            - name: DATABASE_URL
+              value: "{{ include "qasic.postgres.url" . }}"
+            {{- range .Values.celeryWorker.env }}
+            - name: {{ .name }}
+              value: {{ .value | quote }}
+            {{- end }}
+          {{- if .Values.celeryWorker.existingSecret }}
+          envFrom:
+            - secretRef:
+                name: {{ .Values.celeryWorker.existingSecret }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.celeryWorker.resources | nindent 12 }}

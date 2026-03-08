@@ -1,0 +1,17 @@
+# QASIC Engineering-as-Code: cloud-agnostic Kubernetes deployment
+# Portable across AWS (EKS), GCP (GKE), Azure (AKS), OpenNebula (OneKE), bare metal
+apiVersion: v2
+name: qasic
+description: QASIC Engineering-as-Code stack - API, Frontend, Celery workers (KEDA-scaled), Redis, Postgres, optional MLflow/Grafana
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - qasic
+  - quantum
+  - engineering-as-code
+  - celery
+  - keda
+maintainers:
+  - name: QASIC
+    email: ""
