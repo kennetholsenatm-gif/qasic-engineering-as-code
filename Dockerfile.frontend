@@ -2,11 +2,9 @@
 FROM node:20-alpine AS builder
 
 WORKDIR /app
-# package-lock.json required for npm ci (supply chain integrity). Generate with: cd frontend && npm install && git add package-lock.json
-COPY frontend/package.json frontend/package-lock.json ./
-RUN npm ci
-
-COPY frontend/ .
+# Copy entire frontend (no package-lock.json in repo; npm install uses package.json)
+COPY frontend/ ./
+RUN npm install
 RUN npm run build
 
 FROM nginx:alpine

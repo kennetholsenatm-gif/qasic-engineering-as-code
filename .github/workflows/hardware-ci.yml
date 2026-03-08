@@ -101,6 +101,7 @@ jobs:
         run: |
           pip install -r requirements.txt
           pip install -r engineering/requirements-engineering.txt
+          pip install -r requirements-test.txt
       - name: Run pipeline (routing + inverse + HEaC, --fast, no Meep)
         run: |
           python engineering/run_pipeline.py -o ci_result --heac --fast
@@ -124,7 +125,9 @@ jobs:
             fi
           fi
       - name: Run HIL assertions
-        run: python -m pytest tests/test_hil_ci.py -v
+        run: |
+          pip install pytest
+          python -m pytest tests/test_hil_ci.py -v
       - name: Prepare pipeline artifacts
         run: |
           mkdir -p ci-artifacts
