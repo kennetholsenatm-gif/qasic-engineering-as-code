@@ -32,10 +32,17 @@ PIPELINE_BASE = "pipeline_result"
 ROUTING_JSON = ENGINEERING_DIR / f"{PIPELINE_BASE}_routing.json"
 INVERSE_JSON = ENGINEERING_DIR / f"{PIPELINE_BASE}_inverse.json"
 
+# CORS: use BACKEND_CORS_ORIGINS (comma-separated) in production; default "*" for dev
+_cors_origins = os.environ.get("BACKEND_CORS_ORIGINS", "*").strip()
+if _cors_origins == "*":
+    _allow_origins = ["*"]
+else:
+    _allow_origins = [o.strip() for o in _cors_origins.split(",") if o.strip()] or ["*"]
+
 app = FastAPI(title="QASIC Engineering-as-Code API", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_allow_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -66,11 +73,17 @@ class RunRoutingRequest(BaseModel):
     topology: str | None = None  # linear_chain | star | repeater_chain
     qubits: int | None = None
     hub: int | None = None  # for star
+    routing_method: str | None = None  # qaoa (default) | rl
 
 
 class RunPipelineRequest(BaseModel):
     backend: str = "sim"
     fast: bool = False
+    routing_method: str | None = None  # qaoa (default) | rl
+    model: str | None = None  # mlp (default) | gnn
+    heac: bool = False
+    skip_routing: bool = False
+    skip_inverse: bool = False
 
 
 class RunInverseRequest(BaseModel):
@@ -294,26 +307,35 @@ async def websocket_job_status(websocket: WebSocket, job_id: str):
 
 @app.post("/api/run/routing")
 def run_routing(req: RunRoutingRequest):
-    """Run QUBO routing (QAOA or classical) on sim or IBM hardware."""
+    """Run QUBO routing (QAOA or RL) on sim or IBM hardware."""
     use_hardware = req.backend.lower() == "hardware"
+    use_rl = (req.routing_method or "qaoa").lower() == "rl"
     with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
         out_path = f.name
     try:
-        cmd = [
-            sys.executable,
-            str(ENGINEERING_DIR / "routing_qubo_qaoa.py"),
-            "-o", out_path,
-        ]
-        if use_hardware:
-            cmd.append("--hardware")
-        if req.fast:
-            cmd.append("--fast")
-        if req.topology:
-            cmd.extend(["--topology", req.topology])
-        if req.qubits is not None:
-            cmd.extend(["--qubits", str(req.qubits)])
-        if req.hub is not None and req.topology == "star":
-            cmd.extend(["--hub", str(req.hub)])
+        if use_rl:
+            cmd = [
+                sys.executable,
+                str(ENGINEERING_DIR / "routing_rl.py"),
+                "-o", out_path,
+                "--qubits", str(req.qubits if req.qubits is not None else 3),
+            ]
+        else:
+            cmd = [
+                sys.executable,
+                str(ENGINEERING_DIR / "routing_qubo_qaoa.py"),
+                "-o", out_path,
+            ]
+            if use_hardware:
+                cmd.append("--hardware")
+            if req.fast:
+                cmd.append("--fast")
+            if req.topology:
+                cmd.extend(["--topology", req.topology])
+            if req.qubits is not None:
+                cmd.extend(["--qubits", str(req.qubits)])
+            if req.hub is not None and req.topology == "star":
+                cmd.extend(["--hub", str(req.hub)])
         code, err = _run(cmd)
         if code != 0:
             raise HTTPException(status_code=503, detail=err or "Routing run failed")
@@ -334,12 +356,22 @@ def run_routing(req: RunRoutingRequest):
 
 @app.post("/api/run/pipeline")
 def run_pipeline(req: RunPipelineRequest):
-    """Run full pipeline: routing then inverse design."""
+    """Run full pipeline: routing then inverse design. Optional: routing_method, model, heac."""
     cmd = [sys.executable, str(ENGINEERING_DIR / "run_pipeline.py")]
     if req.backend.lower() == "hardware":
         cmd.append("--hardware")
     if req.fast:
         cmd.append("--fast")
+    if req.routing_method and req.routing_method.lower() in ("qaoa", "rl"):
+        cmd.extend(["--routing-method", req.routing_method.lower()])
+    if req.model and req.model.lower() in ("mlp", "gnn"):
+        cmd.extend(["--model", req.model.lower()])
+    if req.heac:
+        cmd.append("--heac")
+    if req.skip_routing:
+        cmd.append("--skip-routing")
+    if req.skip_inverse:
+        cmd.append("--skip-inverse")
     code, err = _run(cmd)
     if code != 0:
         raise HTTPException(status_code=503, detail=err or "Pipeline run failed")
@@ -547,6 +579,7 @@ def get_docs_links():
         {"name": "Docs index", "path": "docs/README.md", "url": None},
         {"name": "Engineering README", "path": "engineering/README.md", "url": None},
         {"name": "Channel noise & DV illumination", "path": "docs/CHANNEL_NOISE.md", "url": None},
+        {"name": "QKD (BB84, E91)", "path": "docs/QKD.md", "url": None},
         {"name": "Topology builder & viz", "path": "docs/TOPOLOGY_BUILDER.md", "url": None},
         {"name": "CV quantum radar (TMSV)", "path": "docs/CV_QUANTUM_RADAR.md", "url": None},
         {"name": "EaC distributed roadmap (MD)", "path": "docs/Engineering_as_Code_Distributed_Computational_Roadmap.md", "url": None},
@@ -572,6 +605,7 @@ _ALLOWED_DOC_PATHS = frozenset({
     "docs/Whitepaper_Unified_Quantum_Metasurfaces_SATCOM.md",
     "docs/README.md",
     "docs/CHANNEL_NOISE.md",
+    "docs/QKD.md",
     "docs/TOPOLOGY_BUILDER.md",
     "docs/CV_QUANTUM_RADAR.md",
     "docs/quantum-terrestrial-backhaul.md",

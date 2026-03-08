@@ -79,6 +79,8 @@ qasic-engineering-as-code/
 │   ├── teleportation.py      # Teleport one qubit
 │   ├── tamper_evident.py     # Thief intercept → fidelity drop
 │   ├── commitment.py         # Toy bit commitment
+│   ├── qkd.py                # BB84 and E91 QKD (pedagogical)
+│   ├── bitflip_code.py       # 3-qubit bit-flip repetition code (QEC)
 │   ├── noise.py              # NoiseModel, run_teleport_with_noise, run_thief_with_noise
 │   ├── quantum_illumination.py  # DV toy: Bell probe vs thermal loss, Chernoff comparison
 │   └── quantum_radar.py      # CV toy: TMSV + lossy thermal BS, mutual info, SNR; see docs/CV_QUANTUM_RADAR.md

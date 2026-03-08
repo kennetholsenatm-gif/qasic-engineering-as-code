@@ -4,7 +4,13 @@ Uses ASIC linear chain 0—1—2; data on qubit 1. Syndrome inferred from state 
 """
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
 import numpy as np
+
+if str(Path(__file__).resolve().parents[1]) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from state import State, product_state
 from state.gates import X, CNOT

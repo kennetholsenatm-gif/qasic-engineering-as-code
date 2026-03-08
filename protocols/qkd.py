@@ -1,11 +1,18 @@
 """
 Pedagogical QKD: BB84 and E91 (Ekert 91). Pure Python/NumPy using state layer.
 BB84: prepare-and-measure; E91: entangled pairs + CHSH.
+See docs/QKD.md for basis angles and CHSH reference.
 """
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
 import numpy as np
 from typing import Any
+
+if str(Path(__file__).resolve().parents[1]) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from state import State, ket0, ket1
 from state.gates import H
@@ -115,14 +122,10 @@ def run_e91(
         np.random.seed(seed)
     from state import bell_pair
     from state.gates import H
-    # Three bases: 0 = Z, 1 = X, 2 = (Z+X)/sqrt2 ≈ 45°. For 45° we use H then a 45° rotation;
-    # for simplicity use Z, X, and a third we'll implement as Ry(pi/4) then measure Z.
-    # Actually E91 uses angles 0, 45°, 90° for Alice and 22.5°, 67.5° for Bob for CHSH.
-    # We'll use bases 0=Z, 1=X, 2=W (45°) and compute correlations.
+
     def measure_bell_in_basis(state: State, basis_alice: int, basis_bob: int) -> tuple[int, int]:
-        """Measure Bell pair: Alice measures in basis_alice (0=Z,1=X,2=W), Bob in basis_bob. Return (a, b)."""
+        """Measure Bell pair: Alice in basis_alice (0=Z, 1=X, 2=W), Bob in basis_bob. Return (a, b)."""
         s = state.copy()
-        # Apply basis rotations. Bell is (|00>+|11>)/sqrt2. For Z: no change. For X: H. For W (45°): we use (H then T or similar). Simplest: 0=Z, 1=X, 2=we do H then S? Actually E91: Alice angles 0, 45, 90; Bob 22.5, 67.5. So we need rotation by angle. For state (|00>+|11>)/sqrt2, correlation E(a,b) = cos(2(a-b)). So we need rotation gates. Use: basis 0 = Z (identity), 1 = X (H), 2 = 45° = Ry(pi/4) or similar. In our state layer we have H, X. For 45° we can use a custom gate or approximate. Let me use: 0=Z, 1=X, 2=H (which is 90° from Z). So we have Z, X, and H. Then we have 3x3 correlation matrix. For CHSH we need specific angles; S = E(0,22.5)-E(0,67.5)+E(45,22.5)+E(45,67.5). So let's just do: Alice and Bob each pick from {0,1,2}. When same basis we get perfect (anti)correlation for Bell. When different we get cos^2. We'll compute S with a simplified formula: use bases 0,1,2 and record E(a,b). Then S = E(0,0)-E(0,1)+E(1,0)+E(1,1) for standard CHSH (with appropriate angles). For simplicity we'll report correlation when same basis and a coarse S estimate.
         if basis_alice == 1:
             s = s.apply(H, [0])
         elif basis_alice == 2:
