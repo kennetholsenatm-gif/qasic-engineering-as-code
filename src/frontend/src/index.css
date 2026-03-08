@@ -28,3 +28,7 @@ pre { background: #1e293b; padding: 1rem; border-radius: 8px; overflow: auto; fo
 table { border-collapse: collapse; width: 100%; }
 th, td { padding: 0.35rem 0.75rem; text-align: left; border: 1px solid #334155; }
 th { background: #1e293b; }
+
+/* Monaco QASM error line (red squiggly) */
+.monaco-editor .qasm-error-line { background: rgba(248, 113, 113, 0.15); }
+.monaco-editor .qasm-error-margin { background: rgba(248, 113, 113, 0.4); }

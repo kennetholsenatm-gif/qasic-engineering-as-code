@@ -15,16 +15,31 @@ from .circuit import Op
 from .gate_set import DEFAULT_GATE_SET, GateSet
 
 
+class QasmParseError(ValueError):
+    """Raised when QASM parse or validation fails. Optional line number for editor underlining."""
+    def __init__(self, message: str, line: int | None = None):
+        super().__init__(message)
+        self.line = line
+
+
 # ASIC-supported gates: H, X, Z, CNOT, Rx(theta)
 _SUPPORTED_1Q = {"h", "x", "z"}
 _SUPPORTED_1Q_PARAM = {"rx"}
 _SUPPORTED_2Q = {"cx", "cnot"}
 
 
+def _strip_line_comment(s: str) -> str:
+    """Remove // and rest of line (OpenQASM 2 style)."""
+    i = s.find("//")
+    if i >= 0:
+        s = s[:i].rstrip()
+    return s.strip()
+
+
 def _parse_qasm2_line(line: str) -> tuple[str, list[int], Any] | None:
     """Parse a single gate line (OpenQASM 2 style). Returns (gate, targets, param) or None."""
-    line = line.strip()
-    if not line or line.startswith("//") or line.startswith("OPENQASM") or line.startswith("include") or line.startswith("qreg") or line.startswith("creg"):
+    line = _strip_line_comment(line.strip())
+    if not line or line.startswith("OPENQASM") or line.startswith("include") or line.startswith("qreg") or line.startswith("creg") or line.startswith("barrier"):
         return None
     # Gate: gate_name q[0], q[1]; or gate_name(angle) q[0];
     m = re.match(r"(\w+)\s*\(\s*([^)]+)\s*\)\s+q\[(\d+)\](?:\s*,\s*q\[(\d+)\])?;?", line, re.IGNORECASE)
@@ -49,11 +64,15 @@ def _parse_qasm2_line(line: str) -> tuple[str, list[int], Any] | None:
 
 
 def _qasm2_to_ops(qasm_text: str) -> list[Op]:
-    """Parse OpenQASM 2 text (no include) into list of Op. Reject unsupported gates."""
+    """Parse OpenQASM 2 text (no include) into list of Op. Reject unsupported gates. Raises QasmParseError with line number."""
     ops: list[Op] = []
-    for line in qasm_text.splitlines():
+    for line_no, line in enumerate(qasm_text.splitlines(), start=1):
         parsed = _parse_qasm2_line(line)
         if parsed is None:
+            # Report line number for lines that look like statements but don't parse
+            stripped = _strip_line_comment(line.strip())
+            if stripped and (stripped.endswith(";") or "q[" in stripped):
+                raise QasmParseError("Unrecognized or malformed line", line=line_no)
             continue
         gate, targets, param = parsed
         if gate in _SUPPORTED_1Q:
@@ -63,7 +82,10 @@ def _qasm2_to_ops(qasm_text: str) -> list[Op]:
         elif gate in _SUPPORTED_2Q and len(targets) == 2:
             ops.append(Op(gate="CNOT", targets=targets, param=None))
         else:
-            raise ValueError(f"Unsupported or malformed gate: {gate} {targets} (ASIC supports H, X, Z, Rx, CNOT)")
+            raise QasmParseError(
+                f"Unsupported or malformed gate: {gate} {targets} (ASIC supports H, X, Z, Rx, CNOT)",
+                line=line_no,
+            )
     return ops
 
 
@@ -110,7 +132,7 @@ def _quantum_circuit_to_ops(circuit: Any) -> list[Op]:
 
 
 def load_qasm_string(qasm_text: str) -> list[Op]:
-    """Load from string (OpenQASM 2 style, no include)."""
+    """Load from string (OpenQASM 2 style, no include). Raises QasmParseError with line number on parse error."""
     return _qasm2_to_ops(qasm_text)
 
 

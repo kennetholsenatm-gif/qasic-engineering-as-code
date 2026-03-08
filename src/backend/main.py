@@ -140,6 +140,10 @@ class RunPipelineRequest(BaseModel):
     full_pipeline_with_circuit: bool = False
 
 
+class ValidateQasmRequest(BaseModel):
+    qasm_string: str = ""
+
+
 class RunInverseRequest(BaseModel):
     phase_band: str | None = None
     routing_result_path: str | None = None
@@ -540,6 +544,55 @@ def list_dag_runs_api(dag_id: int, limit: int = 50):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=_sanitize_detail(e, "Failed to list runs."))
+
+
+@app.post("/api/validate_qasm")
+def validate_qasm_api(body: ValidateQasmRequest = Body(...)):
+    """Validate QASM string for parse and gate support. Returns valid flag and optional error/line for editor."""
+    qasm_string = (body.qasm_string or "").strip()
+    if not qasm_string:
+        return {"valid": True}
+    if len(qasm_string) > QASM_STRING_MAX_LENGTH:
+        return {
+            "valid": False,
+            "error": f"QASM string too long (max {QASM_STRING_MAX_LENGTH} characters)",
+            "line": None,
+        }
+    try:
+        from src.core_compute.asic.qasm_loader import interaction_graph_from_qasm_string
+        interaction_graph_from_qasm_string(qasm_string)
+        return {"valid": True}
+    except Exception as e:
+        line = getattr(e, "line", None)
+        msg = str(e) if os.environ.get("QASIC_DEBUG", "").strip().lower() in ("1", "true", "yes") else "Invalid QASM: parse or gate error"
+        if log:
+            log.exception("QASM validation failed: %s", e)
+        return {"valid": False, "error": msg, "line": line}
+
+
+@app.post("/api/circuit/topology")
+def circuit_topology_api(body: ValidateQasmRequest = Body(...)):
+    """Build qubit interaction graph from QASM for Circuit Topology DAG (EaC view). Returns nodes/edges for React Flow."""
+    qasm_string = (body.qasm_string or "").strip()
+    if not qasm_string:
+        raise HTTPException(status_code=400, detail="qasm_string is required")
+    if len(qasm_string) > QASM_STRING_MAX_LENGTH:
+        raise HTTPException(
+            status_code=400,
+            detail=f"QASM string too long (max {QASM_STRING_MAX_LENGTH} characters)",
+        )
+    try:
+        from src.core_compute.asic.qasm_loader import interaction_graph_from_qasm_string
+        G = interaction_graph_from_qasm_string(qasm_string)
+    except Exception as e:
+        line = getattr(e, "line", None)
+        msg = _sanitize_detail(e, "Invalid QASM: parse or gate error")
+        raise HTTPException(status_code=400, detail=msg)
+    nodes = [{"id": f"q{i}", "label": f"q{i}"} for i in sorted(G.nodes())]
+    edges = []
+    for i, (u, v) in enumerate(G.edges()):
+        edges.append({"id": f"e{u}-{v}", "source": f"q{u}", "target": f"q{v}"})
+    return {"nodes": nodes, "edges": edges}
 
 
 @app.get("/api/pipeline/dag")

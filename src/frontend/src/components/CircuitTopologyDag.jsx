@@ -9,30 +9,16 @@ import {
   useNodesState,
   useEdgesState,
   MarkerType,
-  Handle,
-  Position,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import dagre from 'dagre'
 
-function PipelineNode({ data }) {
-  return (
-    <div className={`rounded-lg border px-2 py-1 text-xs font-medium ${data?.className || 'bg-slate-700/80 border-slate-500 text-slate-300'}`}>
-      <Handle type="target" position={Position.Left} className="!w-1.5 !h-1.5 !border-slate-500" />
-      {data?.label}
-      <Handle type="source" position={Position.Right} className="!w-1.5 !h-1.5 !border-slate-500" />
-    </div>
-  )
-}
-
-const nodeTypes = { pipeline: PipelineNode }
-
-const NODE_WIDTH = 140
+const NODE_WIDTH = 80
 const NODE_HEIGHT = 36
 
 function getLayoutedElements(apiNodes, apiEdges, direction = 'LR') {
   const g = new dagre.graphlib.Graph()
-  g.setGraph({ rankdir: direction, nodesep: 50, ranksep: 60 })
+  g.setGraph({ rankdir: direction, nodesep: 40, ranksep: 50 })
   g.setDefaultEdgeLabel(() => ({}))
   apiNodes.forEach((n) => g.setNode(n.id, { width: NODE_WIDTH, height: NODE_HEIGHT }))
   ;(apiEdges || []).forEach((e) => g.setEdge(e.source, e.target))
@@ -51,24 +37,23 @@ function getLayoutedElements(apiNodes, apiEdges, direction = 'LR') {
   })
 }
 
-function fetchDag(apiBase) {
-  return fetch(`${apiBase}/api/pipeline/dag`).then((r) => {
-    if (!r.ok) throw new Error(r.statusText)
+function fetchTopology(apiBase, qasmString) {
+  return fetch(`${apiBase}/api/circuit/topology`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ qasm_string: qasmString }),
+  }).then((r) => {
+    if (!r.ok) return r.json().then((d) => Promise.reject(new Error(d.detail || r.statusText)))
     return r.json()
   })
 }
 
-const statusClass = {
-  pending: 'bg-slate-700/80 border-slate-500 text-slate-300',
-  running: 'ring-2 ring-sky-400 bg-sky-900/40 text-slate-100 animate-pulse',
-  success: 'bg-emerald-900/60 border-emerald-500 text-slate-100',
-  failed: 'bg-red-900/50 border-red-500 text-slate-100',
-}
-
-export default function PipelineDag({ apiBase, activeStep = null, nodeStatuses = {}, className = '' }) {
-  const { data, error, isLoading } = useQuery({
-    queryKey: ['pipeline-dag', apiBase],
-    queryFn: () => fetchDag(apiBase),
+export default function CircuitTopologyDag({ apiBase, qasmString, isValid = false, className = '' }) {
+  const trimmed = (qasmString || '').trim()
+  const { data, error, isLoading, isFetching } = useQuery({
+    queryKey: ['circuit-topology', apiBase, trimmed],
+    queryFn: () => fetchTopology(apiBase, trimmed),
+    enabled: !!trimmed && !!isValid,
   })
 
   const { initialNodes, initialEdges } = useMemo(() => {
@@ -81,16 +66,8 @@ export default function PipelineDag({ apiBase, activeStep = null, nodeStatuses =
       type: 'smoothstep',
       markerEnd: { type: MarkerType.ArrowClosed },
     }))
-    nodes.forEach((n) => {
-      const status = nodeStatuses[n.id] || (activeStep && n.id === activeStep ? 'running' : 'pending')
-      const base = 'rounded-lg border px-2 py-1 text-xs font-medium'
-      n.data = {
-        ...n.data,
-        className: `${base} ${statusClass[status] || statusClass.pending}`,
-      }
-    })
     return { initialNodes: nodes, initialEdges: edges }
-  }, [data, activeStep, nodeStatuses])
+  }, [data])
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
@@ -99,9 +76,29 @@ export default function PipelineDag({ apiBase, activeStep = null, nodeStatuses =
     if (initialEdges.length) setEdges(initialEdges)
   }, [initialNodes, initialEdges, setNodes, setEdges])
 
-  if (isLoading) return <div className={`rounded-lg border border-slate-700 bg-slate-800/60 p-6 ${className}`}>Loading DAG…</div>
+  if (!trimmed) {
+    return (
+      <div className={`rounded-lg border border-slate-700 bg-slate-800/60 p-6 text-slate-400 ${className}`}>
+        Enter valid OpenQASM to see circuit topology.
+      </div>
+    )
+  }
+  if (!isValid) {
+    return (
+      <div className={`rounded-lg border border-slate-700 bg-slate-800/60 p-6 text-slate-400 ${className}`}>
+        Enter valid OpenQASM to see circuit topology.
+      </div>
+    )
+  }
+  if (isLoading || isFetching) return <div className={`rounded-lg border border-slate-700 bg-slate-800/60 p-6 ${className}`}>Loading topology…</div>
   if (error) return <div className={`rounded-lg border border-slate-700 bg-slate-800/60 p-6 text-red-400 ${className}`}>{error.message}</div>
-  if (!initialNodes.length) return null
+  if (!initialNodes.length) {
+    return (
+      <div className={`rounded-lg border border-slate-700 bg-slate-800/60 p-6 text-slate-400 ${className}`}>
+        No qubit interactions (single-qubit gates only).
+      </div>
+    )
+  }
 
   return (
     <div className={`h-[360px] rounded-lg border border-slate-700 bg-slate-900 overflow-hidden ${className}`}>
@@ -111,7 +108,6 @@ export default function PipelineDag({ apiBase, activeStep = null, nodeStatuses =
           edges={edges.length ? edges : initialEdges}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
-          nodeTypes={nodeTypes}
           fitView
           fitViewOptions={{ padding: 0.2 }}
           minZoom={0.2}
@@ -121,10 +117,10 @@ export default function PipelineDag({ apiBase, activeStep = null, nodeStatuses =
           elementsSelectable={false}
           proOptions={{ hideAttribution: true }}
         >
-        <Background variant="dots" gap={12} size={0.5} className="bg-slate-900" />
-        <Controls className="!bg-slate-800 !border-slate-600 !rounded-lg" />
-        <MiniMap nodeColor="#0f172a" maskColor="rgba(15,23,42,0.8)" className="!bg-slate-800 !rounded-lg" />
-      </ReactFlow>
+          <Background variant="dots" gap={12} size={0.5} className="bg-slate-900" />
+          <Controls className="!bg-slate-800 !border-slate-600 !rounded-lg" />
+          <MiniMap nodeColor="#0f172a" maskColor="rgba(15,23,42,0.8)" className="!bg-slate-800 !rounded-lg" />
+        </ReactFlow>
       </ReactFlowProvider>
     </div>
   )

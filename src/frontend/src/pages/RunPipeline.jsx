@@ -1,7 +1,10 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { Loader2, Terminal } from 'lucide-react'
+import { Loader2, Terminal, CheckCircle, AlertCircle } from 'lucide-react'
+import { useDropzone } from 'react-dropzone'
+import Editor from '@monaco-editor/react'
 import PipelineDag from '../components/PipelineDag'
+import CircuitTopologyDag from '../components/CircuitTopologyDag'
 
 const POLL_INTERVAL_MS = 2000
 
@@ -36,6 +39,12 @@ export default function RunPipeline({ apiBase }) {
   const [circuitName, setCircuitName] = useState('')
   const [fullPipelineWithCircuit, setFullPipelineWithCircuit] = useState(false)
   const fileInputRef = useRef(null)
+  const [validationResult, setValidationResult] = useState(null) // { valid, error?, line? }
+  const [nodeStatuses, setNodeStatuses] = useState({}) // { [stepId]: 'pending' | 'running' | 'success' | 'failed' }
+  const editorRef = useRef(null)
+  const monacoRef = useRef(null)
+  const validationTimeoutRef = useRef(null)
+  const hasSuggestedCircuitDrivenRef = useRef(false)
 
   const { data: projectsData } = useQuery({
     queryKey: ['projects', apiBase],
@@ -104,14 +113,33 @@ export default function RunPipeline({ apiBase }) {
 
   useEffect(() => {
     if (!taskId || !apiBase) return
+    setNodeStatuses({})
     const url = `${apiBase.replace(/\/$/, '')}/api/tasks/${taskId}/stream`
     const es = new EventSource(url)
     eventSourceRef.current = es
     es.onmessage = (ev) => {
       try {
         const payload = JSON.parse(ev.data)
-        setLogLines((prev) => [...prev, payload.message || ev.data])
-        if (payload.done) es.close()
+        const msg = payload.message || ev.data
+        setLogLines((prev) => [...prev, msg])
+        const step = payload.step
+        const done = !!payload.done
+        if (step) {
+          setNodeStatuses((prev) => {
+            const next = { ...prev }
+            const isError = done && typeof msg === 'string' && (msg.toLowerCase().includes('fail') || msg.toLowerCase().includes('error'))
+            if (done) {
+              next[step] = isError ? 'failed' : 'success'
+            } else {
+              Object.keys(next).forEach((k) => {
+                if (next[k] === 'running') next[k] = 'success'
+              })
+              next[step] = 'running'
+            }
+            return next
+          })
+        }
+        if (done) es.close()
       } catch {
         setLogLines((prev) => [...prev, ev.data])
       }
@@ -126,6 +154,99 @@ export default function RunPipeline({ apiBase }) {
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [logLines])
+
+  // When QASM becomes non-empty for the first time in session, default circuit-driven to true (once)
+  useEffect(() => {
+    if (qasmString.trim() && !hasSuggestedCircuitDrivenRef.current) {
+      hasSuggestedCircuitDrivenRef.current = true
+      setFullPipelineWithCircuit(true)
+    }
+  }, [qasmString])
+
+  // Debounced live validation (500 ms)
+  useEffect(() => {
+    if (validationTimeoutRef.current) clearTimeout(validationTimeoutRef.current)
+    const s = qasmString.trim()
+    if (!s) {
+      setValidationResult(null)
+      return
+    }
+    validationTimeoutRef.current = setTimeout(() => {
+      fetch(`${apiBase}/api/validate_qasm`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ qasm_string: s }),
+      })
+        .then((r) => r.json())
+        .then((data) => setValidationResult(data))
+        .catch(() => setValidationResult({ valid: false, error: 'Validation request failed', line: null }))
+    }, 500)
+    return () => {
+      if (validationTimeoutRef.current) clearTimeout(validationTimeoutRef.current)
+    }
+  }, [qasmString, apiBase])
+
+  const decorationIdsRef = useRef([])
+  // Monaco decorations for error line
+  useEffect(() => {
+    const editor = editorRef.current
+    const monaco = monacoRef.current
+    if (decorationIdsRef.current.length) {
+      editor?.deltaDecorations(decorationIdsRef.current, [])
+      decorationIdsRef.current = []
+    }
+    if (!editor || !monaco || !validationResult || validationResult.valid !== false || validationResult.line == null) return
+    const line = Math.max(1, Math.min(validationResult.line, editor.getModel()?.getLineCount() ?? 1))
+    const deco = [
+      {
+        range: new monaco.Range(line, 1, line, 1),
+        options: { isWholeLine: true, className: 'qasm-error-line', glyphMarginClassName: 'qasm-error-margin' },
+      },
+    ]
+    decorationIdsRef.current = editor.deltaDecorations([], deco)
+    return () => {
+      if (editorRef.current && decorationIdsRef.current.length) {
+        editorRef.current.deltaDecorations(decorationIdsRef.current, [])
+        decorationIdsRef.current = []
+      }
+    }
+  }, [validationResult])
+
+  const onEditorMount = useCallback((editor, monaco) => {
+    editorRef.current = editor
+    monacoRef.current = monaco
+    monaco.languages.register({ id: 'openqasm' })
+    monaco.languages.setMonarchTokensProvider('openqasm', {
+      keywords: ['OPENQASM', 'include', 'qreg', 'creg', 'barrier', 'gate', 'opaque', 'if', 'reset'],
+      gates: ['h', 'x', 'y', 'z', 's', 't', 'sdg', 'tdg', 'cx', 'cnot', 'rx', 'ry', 'rz', 'cz', 'swap', 'id', 'u1', 'u2', 'u3'],
+      tokenizer: {
+        root: [
+          [/\/\/.*$/, 'comment'],
+          [/\b(OPENQASM|include|qreg|creg|barrier|gate|opaque|if|reset)\b/, 'keyword'],
+          [/\b(h|x|y|z|s|t|cx|cnot|rx|ry|rz|swap|id|u1|u2|u3)\b/i, 'keyword.control'],
+          [/q\[\d+\]/, 'string'],
+          [/[a-zA-Z_]\w*/, 'identifier'],
+          [/\d+\.?\d*/, 'number'],
+        ],
+      },
+    })
+    monaco.editor.setModelLanguage(editor.getModel(), 'openqasm')
+  }, [])
+
+  const dropzone = useDropzone({
+    accept: { 'text/plain': ['.qasm', '.qasm2'], 'application/octet-stream': ['.qasm', '.qasm2'] },
+    maxFiles: 1,
+    onDropAccepted: (files) => {
+      const f = files[0]
+      if (f) {
+        const reader = new FileReader()
+        reader.onload = () => { if (typeof reader.result === 'string') setQasmString(reader.result) }
+        reader.readAsText(f)
+      }
+    },
+    noClick: true,
+    noKeyboard: true,
+  })
 
   const loading = submitMutation.isPending || (!!taskId && taskStatus !== 'error')
   const statusLabel = taskId
@@ -170,6 +291,8 @@ export default function RunPipeline({ apiBase }) {
   }
 
   const activeStep = taskData?.status === 'STARTED' ? 'routing' : null
+  const [dagTab, setDagTab] = useState('pipeline') // 'pipeline' | 'topology'
+  const isQasmValid = validationResult?.valid === true
 
   return (
     <>
@@ -179,42 +302,87 @@ export default function RunPipeline({ apiBase }) {
       </p>
 
       <section className="mt-6">
-        <h2 className="mb-2 text-sm font-medium text-slate-400">Pipeline DAG</h2>
-        <PipelineDag apiBase={apiBase} activeStep={activeStep} />
+        <div className="mb-2 flex items-center gap-2">
+          <h2 className="text-sm font-medium text-slate-400">DAG</h2>
+          <div className="flex rounded-lg border border-slate-600 bg-slate-800/60 p-0.5">
+            <button
+              type="button"
+              onClick={() => setDagTab('pipeline')}
+              className={`rounded-md px-3 py-1 text-sm ${dagTab === 'pipeline' ? 'bg-slate-600 text-slate-100' : 'text-slate-400 hover:text-slate-200'}`}
+            >
+              Pipeline (DevOps)
+            </button>
+            <button
+              type="button"
+              onClick={() => setDagTab('topology')}
+              className={`rounded-md px-3 py-1 text-sm ${dagTab === 'topology' ? 'bg-slate-600 text-slate-100' : 'text-slate-400 hover:text-slate-200'}`}
+            >
+              Circuit Topology (EaC)
+            </button>
+          </div>
+        </div>
+        {dagTab === 'pipeline' && <PipelineDag apiBase={apiBase} activeStep={activeStep} nodeStatuses={nodeStatuses} />}
+        {dagTab === 'topology' && (
+          <CircuitTopologyDag apiBase={apiBase} qasmString={qasmString} isValid={isQasmValid} />
+        )}
       </section>
 
       <section className="mt-6">
         <h2 className="mb-2 text-sm font-medium text-slate-400">Quantum circuit (optional)</h2>
         <p className="mb-2 text-xs text-slate-500">
-          Paste OpenQASM 2 or upload a .qasm file to run the Algorithm-to-ASIC pipeline. Leave empty to run the default pipeline only.
+          Paste OpenQASM 2 or drop a .qasm file to run the Algorithm-to-ASIC pipeline. Leave empty to run the default pipeline only.
         </p>
         <div className="space-y-2">
-          <textarea
-            id="qasm"
-            value={qasmString}
-            onChange={(e) => setQasmString(e.target.value)}
-            placeholder={'OPENQASM 2.0;\ninclude "qelib1.inc";\nqreg q[3];\nh q[0];\ncx q[0],q[1];\n...'}
-            rows={8}
-            className="w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 font-mono text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
-          />
+          <div
+            {...dropzone.getRootProps()}
+            className={`min-h-[200px] rounded-lg border bg-slate-800 overflow-hidden ${dropzone.isDragActive ? 'border-sky-500 ring-1 ring-sky-500' : 'border-slate-600'}`}
+          >
+            <input {...dropzone.getInputProps()} />
+            <Editor
+              height="200px"
+              defaultLanguage="openqasm"
+              value={qasmString}
+              onChange={(v) => setQasmString(v ?? '')}
+              onMount={onEditorMount}
+              theme="vs-dark"
+              options={{
+                minimap: { enabled: false },
+                fontSize: 13,
+                lineNumbers: 'on',
+                scrollBeyondLastLine: false,
+                wordWrap: 'on',
+                padding: { top: 8 },
+              }}
+              loading={null}
+            />
+          </div>
           <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="rounded-lg border border-slate-600 bg-slate-700 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-600"
+            >
+              Upload .qasm file
+            </button>
             <input
               ref={fileInputRef}
               type="file"
               accept=".qasm,.qasm2"
               onChange={handleQasmFileChange}
               className="hidden"
-              id="qasm-file"
             />
-            <label
-              htmlFor="qasm-file"
-              className="cursor-pointer rounded-lg border border-slate-600 bg-slate-700 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-600"
-            >
-              Upload .qasm file
-            </label>
             <label htmlFor="circuit-name" className="text-sm text-slate-400">
               Circuit name
             </label>
+            {validationResult && (
+              <span className="flex items-center gap-1.5 text-sm">
+                {validationResult.valid ? (
+                  <><CheckCircle className="h-4 w-4 text-emerald-500" aria-hidden /> Valid</>
+                ) : (
+                  <><AlertCircle className="h-4 w-4 text-red-400" aria-hidden /> Invalid</>
+                )}
+              </span>
+            )}
             <input
               id="circuit-name"
               type="text"
@@ -224,22 +392,33 @@ export default function RunPipeline({ apiBase }) {
               className="w-40 rounded-lg border border-slate-600 bg-slate-800 px-3 py-1.5 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
             />
           </div>
+          {validationResult && !validationResult.valid && validationResult.error && (
+            <p className="text-sm text-red-400" role="alert">
+              {validationResult.error}
+              {validationResult.line != null && ` (line ${validationResult.line})`}
+            </p>
+          )}
         </div>
       </section>
 
       <form onSubmit={handleSubmit} className="mt-6 space-y-4">
         {qasmString.trim() && (
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              id="full-pipeline-circuit"
-              checked={fullPipelineWithCircuit}
-              onChange={(e) => setFullPipelineWithCircuit(e.target.checked)}
-              className="h-4 w-4 rounded border-slate-600 bg-slate-800 text-sky-500 focus:ring-sky-500"
-            />
-            <label htmlFor="full-pipeline-circuit" className="text-sm text-slate-300">
-              Run full pipeline (routing + inverse) using this circuit&apos;s topology
-            </label>
+          <div className="rounded-xl border border-sky-500/50 bg-sky-950/30 px-4 py-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <input
+                type="checkbox"
+                id="full-pipeline-circuit"
+                checked={fullPipelineWithCircuit}
+                onChange={(e) => setFullPipelineWithCircuit(e.target.checked)}
+                className="h-4 w-4 rounded border-slate-600 bg-slate-800 text-sky-500 focus:ring-sky-500"
+              />
+              <label htmlFor="full-pipeline-circuit" className="text-sm font-medium text-slate-200">
+                Circuit-driven pipeline
+              </label>
+            </div>
+            <p className="mt-1.5 text-xs text-slate-400">
+              Your circuit drives the full pipeline (qasm → ASIC → routing → inverse → HEaC). Uncheck to run circuit-to-ASIC only.
+            </p>
           </div>
         )}
         {projects.length > 0 && (

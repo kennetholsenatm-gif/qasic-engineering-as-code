@@ -80,20 +80,21 @@ def run_pipeline_task(self, output_base: str = "pipeline_result", fast: bool = F
         cmd.append("--hardware")
 
     _publish_progress(task_id, "Running routing and inverse design…", step="routing", done=False)
+    _publish_progress(task_id, "Running inverse design…", step="inverse_design", done=False)
     code, out, err = _run_cmd(cmd, timeout=1800)
     routing_json = ENGINEERING_DIR / f"{output_base}_routing.json"
     inverse_json = ENGINEERING_DIR / f"{output_base}_inverse.json"
     gds_path = ENGINEERING_DIR / f"{output_base}.gds"
 
     if code != 0:
-        _publish_progress(task_id, f"Pipeline failed: {err or out}", step="pipeline", done=True)
+        _publish_progress(task_id, f"Pipeline failed: {err or out}", step="inverse_design", done=True)
         try:
             from storage.db import update_pipeline_run
             update_pipeline_run(task_id=task_id, status="failed", error_message=err or out)
         except Exception:
             pass
         return {"success": False, "exit_code": code, "stderr": err, "stdout": out}
-    _publish_progress(task_id, "Pipeline completed", step="pipeline", done=True)
+    _publish_progress(task_id, "Pipeline completed", step="manifest_to_gds", done=True)
     try:
         from storage.db import update_pipeline_run
         update_pipeline_run(
@@ -255,7 +256,8 @@ def run_pipeline_with_circuit_task(
     routing_json = ENGINEERING_DIR / f"{output_base}_routing.json"
     with open(routing_json, "w", encoding="utf-8") as f:
         json.dump(routing_result, f, indent=2)
-    _publish_progress(task_id, "Running inverse design and pipeline", step="pipeline", done=False)
+    _publish_progress(task_id, "Routing done; running inverse design and pipeline", step="inverse_design", done=False)
+    _publish_progress(task_id, "Running inverse design and pipeline", step="manifest_to_gds", done=False)
     cmd = [sys.executable, str(ENGINEERING_DIR / "run_pipeline.py"), "-o", output_base, "--skip-routing"]
     if fast:
         cmd.append("--fast")
@@ -267,7 +269,7 @@ def run_pipeline_with_circuit_task(
         cmd.append("--hardware")
     code, out, err = _run_cmd(cmd, timeout=1800)
     if code != 0:
-        _publish_progress(task_id, f"Pipeline failed: {err or out}", step="pipeline", done=True)
+        _publish_progress(task_id, f"Pipeline failed: {err or out}", step="manifest_to_gds", done=True)
         if run_id is not None:
             try:
                 from storage.db import update_dag_run
@@ -280,7 +282,7 @@ def run_pipeline_with_circuit_task(
         except Exception:
             pass
         return {"success": False, "exit_code": code, "stderr": err, "stdout": out, "circuit_to_asic": _circuit_to_asic_result_serializable(raw)}
-    _publish_progress(task_id, "Pipeline completed", step="pipeline", done=True)
+    _publish_progress(task_id, "Pipeline completed", step="manifest_to_gds", done=True)
     if run_id is not None:
         try:
             from storage.db import update_dag_run
