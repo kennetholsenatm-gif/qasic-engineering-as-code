@@ -80,15 +80,6 @@ make down-local
 
 Then open: frontend **http://localhost**, API **http://localhost:8000/docs**, MLflow **http://localhost:5000**, Grafana **http://localhost:3000**. To provision **AWS** (RDS, ElastiCache, EKS): `cd infra/tofu && tofu init && tofu apply -var="deployment_target=aws"`. See [infra/tofu/README.md](infra/tofu/README.md).
 
-### Cursor + Docker
-
-Use [Cursor](https://cursor.com) with Docker Desktop for one-click Compose and optional Dev Containers. **Prerequisites:** Docker Desktop installed and running (Windows: WSL2 backend recommended). Install the **Docker** and **Dev Containers** extensions in Cursor.
-
-- **Quick run:** Open this repo in Cursor, then **Terminal → Run Task…** and choose **Docker: Compose up (core)** or **Docker: Compose up (full stack)**.
-- **Stop:** Run task **Docker: Compose down**.
-- **Dev Container:** **Command Palette → Dev Containers: Reopen in Container** to open the project inside the API container.
-
-Compose files: [docker-compose.yml](docker-compose.yml) (core), [docker-compose.full.yml](docker-compose.full.yml) (full stack). **IaC DAG tool:** [tools/iac-orchestrator/](tools/iac-orchestrator/) — `docker compose -f tools/iac-orchestrator/docker-compose.yml up -d --build`, then http://localhost:8080.
 
 ### CLI dashboard
 
