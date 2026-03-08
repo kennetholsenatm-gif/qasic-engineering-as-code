@@ -66,5 +66,7 @@ def test_state_copy():
     c = b.copy()
     assert c.n_qubits == b.n_qubits
     np.testing.assert_allclose(c.vec, b.vec)
-    c._vec[0, 0] = 0
+    # Mutate copy (apply a gate) so c differs from b; original b unchanged
+    from src.core_compute.state.gates import Z
+    c = c.apply(Z, [0])
     assert b.fidelity(c) < 1.0  # b unchanged
