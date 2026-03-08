@@ -140,6 +140,8 @@ qasic-engineering-as-code/
 ├── config/                   # App and pipeline config (YAML loader, app_config, storage, thermal)
 ├── deploy/                   # Kubernetes/Helm chart (API, frontend, Celery, Redis, Postgres, KEDA)
 │   └── helm/qasic/           # Helm chart; see deploy/README.md
+├── tools/
+│   └── iac-orchestrator/     # IaC DAG deployment tool: pipeline UI → OpenTofu; see tools/iac-orchestrator/README.md
 ├── infra/                    # Infrastructure as Code (OpenTofu: local Compose or AWS RDS/ElastiCache)
 │   └── tofu/                 # OpenTofu modules; see infra/README.md
 ├── orchestration/             # Prefect 2 DAG (pipeline, calibration) for retries and optional server
@@ -259,6 +261,8 @@ Use [Cursor](https://cursor.com) with Docker Desktop for one-click Compose and o
 - **Dev Container:** Use **Command Palette → Dev Containers: Reopen in Container** to open the project inside the API container. The editor and terminal run in that environment; start other services (e.g. frontend, full stack) from the in-container terminal with `docker compose up` if needed.
 
 Compose files: [docker-compose.yml](docker-compose.yml) (core), [docker-compose.full.yml](docker-compose.full.yml) (full stack).
+
+**IaC DAG deployment tool:** A separate deployable under [tools/iac-orchestrator/](tools/iac-orchestrator/) provides a pipeline-style DAG UI that feeds OpenTofu: define stages (e.g. Tofu init → plan → approval → apply), save pipelines, and run them so that Tofu (or scripts) execute in order. Run it with `docker compose -f tools/iac-orchestrator/docker-compose.yml up -d --build` and open http://localhost:8080. See [tools/iac-orchestrator/README.md](tools/iac-orchestrator/README.md).
 
 ## CLI dashboard
 

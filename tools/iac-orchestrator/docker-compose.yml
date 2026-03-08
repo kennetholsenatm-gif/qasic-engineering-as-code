@@ -1,0 +1,33 @@
+# IaC Orchestrator: standalone stack (backend + frontend)
+# Run from repo root so Tofu stages can use infra/tofu:
+#   docker compose -f tools/iac-orchestrator/docker-compose.yml up -d --build
+# Then open http://localhost:8080
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    ports:
+      - "8001:8001"
+    environment:
+      - IAC_ORCHESTRATOR_REPO_ROOT=/repo
+    volumes:
+      # Mount repo root so Tofu stages can run against infra/tofu
+      - ../..:/repo:ro
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      backend:
+        condition: service_healthy

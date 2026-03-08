@@ -1,0 +1,16 @@
+# IaC Orchestrator backend: FastAPI + OpenTofu (for Tofu stages)
+FROM python:3.12-slim
+
+# Install OpenTofu (standalone)
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates unzip && rm -rf /var/lib/apt/lists/* \
+    && curl -sSfL https://github.com/opentofu/opentofu/releases/download/v1.8.0/tofu_1.8.0_linux_amd64.zip -o /tmp/tofu.zip \
+    && unzip -o /tmp/tofu.zip -d /usr/local/bin && rm /tmp/tofu.zip && chmod +x /usr/local/bin/tofu
+
+WORKDIR /app
+COPY backend/requirements.txt backend/
+RUN pip install --no-cache-dir -r backend/requirements.txt
+COPY backend/ backend/
+
+ENV PYTHONPATH=/app
+EXPOSE 8001
+CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8001"]
