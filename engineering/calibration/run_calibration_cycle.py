@@ -42,6 +42,14 @@ def run_calibration_cycle(
     else:
         telemetry_list = telemetry_input
 
+    # Optional: write telemetry to InfluxDB when configured (INFLUX_URL)
+    try:
+        from .telemetry_influx import write_telemetry
+        if write_telemetry(telemetry_list):
+            pass  # written to time-series DB
+    except Exception:
+        pass
+
     twin = None
     if prior_decoherence_file and os.path.isfile(prior_decoherence_file):
         with open(prior_decoherence_file, encoding="utf-8") as f:

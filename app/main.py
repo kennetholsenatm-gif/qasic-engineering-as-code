@@ -26,26 +26,37 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-ENGINEERING_DIR = REPO_ROOT / "engineering"
-DOCS_DIR = REPO_ROOT / "docs"
-PIPELINE_BASE = "pipeline_result"
+try:
+    from config.logger import get_logger
+    log = get_logger(__name__)
+except ImportError:
+    log = None  # optional structured logging
+
+# Load app config from config/app_config.yaml (env overrides: BACKEND_CORS_ORIGINS, QASIC_PIPELINE_BASE)
+def _get_app_cfg():
+    from config import get_app_config
+    return get_app_config()
+
+_app_cfg = _get_app_cfg()
+ENGINEERING_DIR = REPO_ROOT / _app_cfg.paths.engineering_dir
+DOCS_DIR = REPO_ROOT / _app_cfg.paths.docs_dir
+PIPELINE_BASE = _app_cfg.paths.pipeline_base
 ROUTING_JSON = ENGINEERING_DIR / f"{PIPELINE_BASE}_routing.json"
 INVERSE_JSON = ENGINEERING_DIR / f"{PIPELINE_BASE}_inverse.json"
 
-# CORS: use BACKEND_CORS_ORIGINS (comma-separated) in production; default "*" for dev
-_cors_origins = os.environ.get("BACKEND_CORS_ORIGINS", "*").strip()
+_cors_origins = (_app_cfg.cors.allow_origins or "*").strip()
 if _cors_origins == "*":
     _allow_origins = ["*"]
 else:
     _allow_origins = [o.strip() for o in _cors_origins.split(",") if o.strip()] or ["*"]
 
-app = FastAPI(title="QASIC Engineering-as-Code API", version="0.1.0")
+app = FastAPI(title=_app_cfg.title, version=_app_cfg.version)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_allow_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_credentials=_app_cfg.cors.allow_credentials,
+    allow_methods=_app_cfg.cors.allow_methods,
+    allow_headers=_app_cfg.cors.allow_headers,
 )
 
 
@@ -354,9 +365,79 @@ def run_routing(req: RunRoutingRequest):
                 pass
 
 
+def _celery_available() -> bool:
+    try:
+        broker = os.environ.get("CELERY_BROKER_URL", "").strip()
+        if not broker:
+            return False
+        from app.tasks import run_pipeline_task
+        return True
+    except Exception:
+        return False
+
+
+@app.post("/api/run/pipeline/async")
+def run_pipeline_async(req: RunPipelineRequest):
+    """Enqueue pipeline run as Celery task. Returns task_id; poll GET /api/tasks/{task_id} for status. Requires CELERY_BROKER_URL (e.g. redis)."""
+    if not _celery_available():
+        raise HTTPException(status_code=503, detail="Celery/Redis not configured (set CELERY_BROKER_URL)")
+    if log:
+        log.info("Enqueueing pipeline task", fast=req.fast, routing_method=req.routing_method or "qaoa", model=req.model or "mlp", heac=req.heac)
+    from app.tasks import run_pipeline_task
+    task = run_pipeline_task.delay(
+        output_base=PIPELINE_BASE,
+        fast=req.fast,
+        routing_method=req.routing_method or "qaoa",
+        model=req.model or "mlp",
+        heac=req.heac,
+        skip_routing=req.skip_routing,
+        skip_inverse=req.skip_inverse,
+        hardware=req.backend.lower() == "hardware",
+    )
+    try:
+        from storage.db import record_pipeline_run, is_enabled as db_enabled
+        if db_enabled():
+            record_pipeline_run(
+                PIPELINE_BASE,
+                config={"backend": req.backend, "fast": req.fast, "routing_method": req.routing_method, "model": req.model, "heac": req.heac},
+                task_id=task.id,
+            )
+    except Exception:
+        pass
+    return {"task_id": task.id, "status": "PENDING", "message": "Pipeline task enqueued"}
+
+
+@app.get("/api/tasks/{task_id}")
+def get_task_status(task_id: str):
+    """Get Celery task status and result (if ready)."""
+    if not _celery_available():
+        raise HTTPException(status_code=503, detail="Celery/Redis not configured")
+    from app.celery_app import get_celery_app
+    from celery.result import AsyncResult
+    celery_app = get_celery_app()
+    ar = AsyncResult(task_id, app=celery_app)
+    out = {"task_id": task_id, "status": ar.status }
+    if ar.ready():
+        if ar.successful():
+            out["result"] = ar.result
+        else:
+            out["error"] = str(ar.result) if ar.result else "Task failed"
+    return out
+
+
 @app.post("/api/run/pipeline")
 def run_pipeline(req: RunPipelineRequest):
     """Run full pipeline: routing then inverse design. Optional: routing_method, model, heac."""
+    run_id = None
+    try:
+        from storage.db import record_pipeline_run, update_pipeline_run, is_enabled as db_enabled
+        if db_enabled():
+            run_id = record_pipeline_run(
+                PIPELINE_BASE,
+                config={"backend": req.backend, "fast": req.fast, "routing_method": req.routing_method, "model": req.model, "heac": req.heac},
+            )
+    except Exception:
+        pass
     cmd = [sys.executable, str(ENGINEERING_DIR / "run_pipeline.py")]
     if req.backend.lower() == "hardware":
         cmd.append("--hardware")
@@ -374,7 +455,23 @@ def run_pipeline(req: RunPipelineRequest):
         cmd.append("--skip-inverse")
     code, err = _run(cmd)
     if code != 0:
+        if run_id is not None:
+            try:
+                from storage.db import update_pipeline_run
+                update_pipeline_run(run_id=run_id, status="failed", error_message=err or "Pipeline run failed")
+            except Exception:
+                pass
         raise HTTPException(status_code=503, detail=err or "Pipeline run failed")
+    try:
+        from storage.db import update_pipeline_run
+        update_pipeline_run(
+            run_id=run_id,
+            status="success",
+            routing_path=str(ROUTING_JSON) if ROUTING_JSON.exists() else None,
+            inverse_path=str(INVERSE_JSON) if INVERSE_JSON.exists() else None,
+        )
+    except Exception:
+        pass
     result = {"message": "Pipeline completed", "routing_json": str(ROUTING_JSON), "inverse_json": str(INVERSE_JSON)}
     if ROUTING_JSON.exists():
         try:
@@ -518,18 +615,26 @@ def run_quantum_radar_optimize(req: QuantumRadarOptimizeRequest):
 
 @app.get("/api/results/latest")
 def get_results_latest():
-    """Return paths and summary of last pipeline (routing + inverse) outputs."""
-    result = {"routing_path": str(ROUTING_JSON), "inverse_path": str(INVERSE_JSON), "routing": None, "inverse": None}
-    if ROUTING_JSON.exists():
+    """Return paths and summary of last pipeline (routing + inverse) outputs. Uses PostgreSQL run when DATABASE_URL set."""
+    routing_path = str(ROUTING_JSON)
+    inverse_path = str(INVERSE_JSON)
+    try:
+        from storage.db import get_latest_pipeline_run, is_enabled as db_enabled
+        if db_enabled():
+            row = get_latest_pipeline_run()
+            if row and row.get("routing_path"):
+                routing_path = row["routing_path"]
+            if row and row.get("inverse_path"):
+                inverse_path = row["inverse_path"]
+    except Exception:
+        pass
+    result = {"routing_path": routing_path, "inverse_path": inverse_path, "routing": None, "inverse": None}
+    for path_key, file_path in [("routing", routing_path), ("inverse", inverse_path)]:
+        if not file_path or not os.path.isfile(file_path):
+            continue
         try:
-            with open(ROUTING_JSON, encoding="utf-8") as f:
-                result["routing"] = json.load(f)
-        except (OSError, json.JSONDecodeError):
-            pass
-    if INVERSE_JSON.exists():
-        try:
-            with open(INVERSE_JSON, encoding="utf-8") as f:
-                result["inverse"] = json.load(f)
+            with open(file_path, encoding="utf-8") as f:
+                result[path_key] = json.load(f)
         except (OSError, json.JSONDecodeError):
             pass
     return result

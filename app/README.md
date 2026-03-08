@@ -29,8 +29,29 @@ Then open http://localhost:8000/docs for Swagger UI, or point the front end at h
 
 - `POST /api/run/protocol` — body: `{ "protocol": "teleport"|"bell"|"commitment"|"thief", "backend": "sim"|"hardware" }`
 - `POST /api/run/routing` — body: `{ "backend", "fast", "topology", "qubits", "hub", "routing_method": "qaoa"|"rl" }`
-- `POST /api/run/pipeline` — body: `{ "backend", "fast", "routing_method", "model": "mlp"|"gnn", "heac", "skip_routing", "skip_inverse" }`
+- `POST /api/run/pipeline` — body: `{ "backend", "fast", "routing_method", "model": "mlp"|"gnn", "heac", "skip_routing", "skip_inverse" }` (synchronous)
+- `POST /api/run/pipeline/async` — same body; enqueues pipeline as Celery task, returns `{ "task_id", "status": "PENDING" }` (requires Redis + Celery worker)
+- `GET /api/tasks/{task_id}` — Celery task status and result (when ready)
 - `POST /api/run/inverse` — body: `{ "phase_band": "pi"|null, "routing_result_path": null|"..." }`
 - `GET /api/results/latest` — last pipeline routing + inverse summary
 - `GET /api/docs/links` — list of doc links for the UI
 - `GET /health` — health check
+
+## Async tasks (Celery + Redis)
+
+For non-blocking pipeline (and future MEEP/inverse) runs, set a broker and run a worker:
+
+1. **Redis** (broker and result backend):  
+   - Install and start Redis (e.g. `redis-server` or Docker).  
+   - Set `CELERY_BROKER_URL=redis://localhost:6379/0` and optionally `CELERY_RESULT_BACKEND=redis://localhost:6379/0`.
+
+2. **Celery worker** (from repo root, with app deps installed):  
+   ```bash
+   celery -A app.celery_app worker -l info
+   ```
+   Use `get_celery_app()` from `app.celery_app` (broker/backend read from the env above).
+
+3. **Usage:**  
+   - `POST /api/run/pipeline/async` returns `task_id`.  
+   - Poll `GET /api/tasks/{task_id}` for `status` and `result` (or `error` on failure).  
+   If Redis/Celery are not configured, the async endpoint returns 503.

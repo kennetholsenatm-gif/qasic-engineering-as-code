@@ -1,0 +1,17 @@
+# Application and API configuration.
+# Override via environment: BACKEND_CORS_ORIGINS, QASIC_PIPELINE_BASE, QASIC_REPO_ROOT (optional).
+
+app:
+  title: "QASIC Engineering-as-Code API"
+  version: "0.1.0"
+
+paths:
+  pipeline_base: "pipeline_result"
+  engineering_dir: "engineering"
+  docs_dir: "docs"
+
+cors:
+  allow_origins: "*"  # comma-separated in env BACKEND_CORS_ORIGINS
+  allow_credentials: true
+  allow_methods: ["*"]
+  allow_headers: ["*"]

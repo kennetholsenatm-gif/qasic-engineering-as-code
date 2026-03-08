@@ -3,3 +3,13 @@ fastapi>=0.100.0
 uvicorn[standard]>=0.22.0
 python-multipart>=0.0.6
 httpx>=0.24.0
+# Async tasks (optional: set CELERY_BROKER_URL=redis://localhost:6379/0)
+celery[redis]>=5.3.0
+redis>=4.5.0
+# Structured logging
+loguru>=0.7.0
+# Optional persistence (PostgreSQL pipeline runs; MLflow/Influx when used from API)
+sqlalchemy>=2.0.0
+psycopg2-binary>=2.9.0
+mlflow>=2.9.0
+influxdb-client>=1.38.0

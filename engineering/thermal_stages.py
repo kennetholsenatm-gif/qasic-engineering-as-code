@@ -13,11 +13,20 @@ from typing import Any
 
 import numpy as np
 
-# Thermal budget (whitepaper): 18 nW/cell proxy; 10 mK stage must stay cold
-NW_PER_CELL_LIMIT = 18.0
-T_10MK_LIMIT_K = 0.015  # ~15 mK max
-T_4K_LIMIT_K = 5.0
-T_50K_LIMIT_K = 55.0
+# Thermal limits loaded from config/thermal_config.yaml (pydantic)
+def _thermal_cfg():
+    try:
+        from config import get_thermal_config
+        return get_thermal_config()
+    except Exception:
+        from config.loader import ThermalConfig
+        return ThermalConfig()
+
+_cfg = _thermal_cfg()
+NW_PER_CELL_LIMIT = _cfg.nw_per_cell_limit
+T_10MK_LIMIT_K = _cfg.t_10mk_limit_k
+T_4K_LIMIT_K = _cfg.t_4k_limit_k
+T_50K_LIMIT_K = _cfg.t_50k_limit_k
 
 
 def load_routing(path: str) -> dict[str, Any]:
@@ -32,8 +41,9 @@ def load_phases(path: str) -> np.ndarray:
 
 def power_proxy_from_phases(phases_rad: np.ndarray, nw_per_cell: float = NW_PER_CELL_LIMIT) -> np.ndarray:
     """Phase deviation from pi as proxy for power (higher deviation -> more dissipation)."""
+    cfg = _thermal_cfg()
     dev = np.abs(phases_rad - np.pi)
-    return np.minimum(dev * (nw_per_cell / 0.14), nw_per_cell * 2.0)  # cap
+    return np.minimum(dev * (nw_per_cell / cfg.phase_dev_scale), nw_per_cell * cfg.power_cap_factor)
 
 
 def thermal_report(
@@ -55,13 +65,10 @@ def thermal_report(
     P_total_nw = P_quantum_nw + float(classical_power_nw)
     P_mean_nw = float(np.mean(power_per_cell)) if n_cells else 0.0
 
-    # Lumped resistance proxy (K/nW): arbitrary scale for reporting
-    R_10mK = 1e-6
-    R_4K = 1e-7
-    R_50K = 1e-8
-    T_10mK = 0.01 + R_10mK * P_total_nw
-    T_4K = 4.0 + R_4K * P_total_nw
-    T_50K = 50.0 + R_50K * P_total_nw
+    cfg = _thermal_cfg()
+    T_10mK = cfg.t_base_10mk_k + cfg.r_10mk * P_total_nw
+    T_4K = cfg.t_base_4k_k + cfg.r_4k * P_total_nw
+    T_50K = cfg.t_base_50k_k + cfg.r_50k * P_total_nw
 
     passed_10mK = T_10mK <= T_10MK_LIMIT_K
     passed_4K = T_4K <= T_4K_LIMIT_K

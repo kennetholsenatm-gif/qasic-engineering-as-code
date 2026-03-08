@@ -198,6 +198,18 @@ docker-compose up --build
 
 Then open the frontend at `http://localhost` (or port 80). For Jupyter: `docker-compose --profile jupyter run --service-ports jupyter`.
 
+**Full stack (Redis, Postgres, InfluxDB, MLflow, Celery) and IaC:** To run the API + Celery worker with all local DBs in containers, use the full Compose file and optional **OpenTofu** (Terraform-compatible) to bring everything up or push to cloud:
+
+```bash
+# Option A: Docker Compose only
+docker compose -f docker-compose.full.yml up -d --build
+
+# Option B: OpenTofu drives Compose (generates .env.tofu and runs compose)
+cd infra/tofu && tofu init && tofu apply -var="deployment_target=local"
+```
+
+Then open: frontend **http://localhost**, API **http://localhost:8000/docs**, MLflow **http://localhost:5000**. To provision **AWS** (RDS + ElastiCache) instead and point your containers at managed DBs: `tofu apply -var="deployment_target=aws" -var="db_password=..."`. See [infra/tofu/README.md](infra/tofu/README.md).
+
 ## CLI dashboard
 
 A terminal menu lets you run protocols, routing, pipeline, and inverse design and view last results without the web app:

@@ -101,6 +101,21 @@ def generate_dataset(
         with open(base + "_meta.json", "w", encoding="utf-8") as f:
             json.dump(meta, f, indent=2)
     print(f"Wrote {num_samples} samples to {out_path} (config_size={config_size}, output_size={output_size})")
+    # Optional: log to MLflow when MLFLOW_TRACKING_URI is set
+    try:
+        from storage.artifacts_mlflow import log_artifact_run, is_enabled
+        if is_enabled():
+            artifacts = [out_path] if os.path.isfile(out_path) else [base + "_config.npy", base + "_S.npy", base + "_meta.json"]
+            artifacts = [p for p in artifacts if os.path.isfile(p)]
+            if artifacts:
+                log_artifact_run(
+                    "meep_s_param_dataset",
+                    params={"num_samples": num_samples, "config_size": config_size, "output_size": output_size, "use_meep": use_meep},
+                    tags={"source": "meep_s_param_dataset"},
+                    artifacts=artifacts,
+                )
+    except Exception:
+        pass
 
 
 def load_dataset(path: str) -> tuple[np.ndarray, np.ndarray]:

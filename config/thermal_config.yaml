@@ -1,0 +1,18 @@
+# Thermal stage model (engineering/thermal_stages.py).
+# Whitepaper: 18 nW/cell Cryo-CMOS proxy; 10 mK stage limits.
+
+thermal:
+  nw_per_cell_limit: 18.0
+  t_10mk_limit_k: 0.015
+  t_4k_limit_k: 5.0
+  t_50k_limit_k: 55.0
+  # Lumped resistance proxy (K/nW)
+  r_10mk: 1.0e-6
+  r_4k: 1.0e-7
+  r_50k: 1.0e-8
+  t_base_10mk_k: 0.01
+  t_base_4k_k: 4.0
+  t_base_50k_k: 50.0
+  # Phase-to-power proxy: cap at nw_per_cell * power_cap_factor
+  power_cap_factor: 2.0
+  phase_dev_scale: 0.14  # deviation from pi scaling

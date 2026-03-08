@@ -1,1 +1,9 @@
 numpy>=1.20.0
+PyYAML>=6.0
+pydantic>=2.0
+loguru>=0.7.0
+# Optional persistence (set MLFLOW_TRACKING_URI, INFLUX_*, DATABASE_URL to use)
+mlflow>=2.9.0
+influxdb-client>=1.38.0
+sqlalchemy>=2.0.0
+psycopg2-binary>=2.9.0

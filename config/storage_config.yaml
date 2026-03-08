@@ -1,0 +1,22 @@
+# Optional data persistence. All keys can be overridden by environment variables.
+# Leave empty or omit to keep file-only behavior.
+
+# --- Artifact store (MLflow). Set MLFLOW_TRACKING_URI to enable.
+artifact_store:
+  type: "mlflow"   # mlflow | (future: dvc)
+  # MLFLOW_TRACKING_URI env overrides; default below for local server.
+  tracking_uri: null  # e.g. http://localhost:5000 or file:///path/to/mlruns
+  experiment_name: "qasic-engineering"
+
+# --- Time-series DB (InfluxDB) for telemetry/calibration.
+# Set INFLUX_URL and optionally INFLUX_TOKEN, INFLUX_ORG, INFLUX_BUCKET to enable.
+influx:
+  url: null        # e.g. http://localhost:8086
+  token: null      # optional for local; required for InfluxDB Cloud
+  org: null        # e.g. my-org
+  bucket: "qasic-telemetry"
+
+# --- Relational DB (PostgreSQL) for pipeline runs and metadata.
+# Set DATABASE_URL to enable (e.g. postgresql://user:pass@localhost:5432/qasic).
+database:
+  url: null        # postgresql://user:pass@host:port/dbname

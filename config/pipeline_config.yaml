@@ -1,0 +1,9 @@
+# Pipeline defaults (engineering/run_pipeline.py).
+
+pipeline:
+  output_base: "pipeline_result"
+  device: "auto"
+  model: "mlp"
+  routing_method: "qaoa"
+  heac_library_path: null  # default: engineering/meta_atom_library.json
+  pdk_config_path: null   # default: engineering/heac/pdk_config.yaml when --pdk

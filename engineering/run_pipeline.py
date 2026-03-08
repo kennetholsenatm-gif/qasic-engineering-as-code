@@ -15,6 +15,28 @@ import os
 import subprocess
 import sys
 
+try:
+    from config.logger import get_logger
+    log = get_logger(__name__)
+except ImportError:
+    import logging
+    logging.basicConfig(level=logging.INFO)
+    _stdlog = logging.getLogger(__name__)
+    class _LogAdapter:
+        @staticmethod
+        def info(msg, *args):
+            if args:
+                _stdlog.info(msg.replace("{}", "%s"), *args)
+            else:
+                _stdlog.info(msg)
+        @staticmethod
+        def error(msg, *args):
+            if args:
+                _stdlog.error(msg.replace("{}", "%s"), *args)
+            else:
+                _stdlog.error(msg)
+    log = _LogAdapter()
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(
@@ -150,7 +172,7 @@ def main() -> int:
                 "-o", routing_json,
                 "--qubits", "3",
             ]
-            print("Running routing (RL local search)...")
+            log.info("Running routing (RL local search)...")
         else:
             routing_cmd = [
                 sys.executable,
@@ -161,17 +183,17 @@ def main() -> int:
                 routing_cmd.append("--hardware")
             if args.fast:
                 routing_cmd.append("--fast")
-            print("Running routing (QUBO/QAOA)...")
+            log.info("Running routing (QUBO/QAOA)...")
         rc = subprocess.run(routing_cmd, cwd=repo_root)
         if rc.returncode != 0:
-            print("Routing failed.", file=sys.stderr)
+            log.error("Routing failed.")
             return rc.returncode
         if not os.path.isfile(routing_json):
-            print("Routing did not produce expected output file.", file=sys.stderr)
+            log.error("Routing did not produce expected output file.")
             return 1
     else:
         if not os.path.isfile(routing_json):
-            print(f"Skip-routing requested but {routing_json} not found.", file=sys.stderr)
+            log.error("Skip-routing requested but {} not found.", routing_json)
             return 1
 
     # Optional: SuperScreen inductance from routing topology
@@ -186,9 +208,9 @@ def main() -> int:
             except ImportError:
                 ran = False
         if ran:
-            print(f"SuperScreen inductance: {inductance_json}")
+            log.info("SuperScreen inductance: {}", inductance_json)
         else:
-            print("SuperScreen step skipped (not installed or failed).")
+            log.info("SuperScreen step skipped (not installed or failed).")
 
     # Step 2: Inverse design
     if not args.skip_inverse:
@@ -200,13 +222,13 @@ def main() -> int:
             "--model", args.model,
             "-o", inverse_json,
         ]
-        print("Running inverse design (topology -> phase profile)...")
+        log.info("Running inverse design (topology -> phase profile)...")
         rc = subprocess.run(inverse_cmd, cwd=repo_root)
         if rc.returncode != 0:
-            print("Inverse design failed.", file=sys.stderr)
+            log.error("Inverse design failed.")
             return rc.returncode
     else:
-        print("Skipping inverse design (--skip-inverse).")
+        log.info("Skipping inverse design (--skip-inverse).")
 
     # Optional: HEaC phase-to-geometry (phases.npy -> geometry manifest)
     npy = os.path.join(script_dir, args.output + "_inverse_phases.npy")
@@ -218,7 +240,7 @@ def main() -> int:
     if args.heac and os.path.isfile(npy):
         heac_library = args.heac_library or os.path.join(script_dir, "meta_atom_library.json")
         if not os.path.isfile(heac_library):
-            print("HEaC: no meta-atom library found; generating synthetic library...")
+            log.info("HEaC: no meta-atom library found; generating synthetic library...")
             heac_sweep = [
                 sys.executable,
                 os.path.join(script_dir, "heac", "meep_unit_cell_sweep.py"),
@@ -226,7 +248,7 @@ def main() -> int:
             ]
             rc_heac = subprocess.run(heac_sweep, cwd=repo_root)
             if rc_heac.returncode != 0:
-                print("HEaC: synthetic library generation failed.", file=sys.stderr)
+                log.error("HEaC: synthetic library generation failed.")
         if os.path.isfile(heac_library):
             manifest_path = os.path.join(
                 script_dir,
@@ -238,12 +260,12 @@ def main() -> int:
                 npy, "--library", heac_library, "-o", manifest_path,
                 "--routing", routing_json,
             ]
-            print("Running HEaC phases -> geometry manifest...")
+            log.info("Running HEaC phases -> geometry manifest...")
             rc_heac = subprocess.run(heac_cmd, cwd=repo_root)
             if rc_heac.returncode != 0:
-                print("HEaC step failed.", file=sys.stderr)
+                log.error("HEaC step failed.")
             else:
-                print(f"  Geometry manifest: {manifest_path}")
+                log.info("  Geometry manifest: {}", manifest_path)
 
     # Optional: GDS export and DRC/LVS (require manifest from --heac)
     do_gds = args.gds or args.drc or args.lvs
@@ -260,15 +282,15 @@ def main() -> int:
         ]
         if pdk_cfg and os.path.isfile(pdk_cfg):
             gds_cmd += ["--pdk-config", pdk_cfg]
-        print("Running manifest -> GDS...")
+        log.info("Running manifest -> GDS...")
         rc_gds = subprocess.run(gds_cmd, cwd=repo_root)
         if rc_gds.returncode != 0:
-            print("GDS export failed.", file=sys.stderr)
+            log.error("GDS export failed.")
             return rc_gds.returncode
         if not os.path.isfile(gds_path):
-            print("GDS file not produced.", file=sys.stderr)
+            log.error("GDS file not produced.")
             return 1
-        print(f"  GDS: {gds_path}")
+        log.info("  GDS: {}", gds_path)
         # DRC
         if args.drc:
             drc_report = os.path.join(script_dir, args.output + "_drc_report.json")
@@ -277,7 +299,7 @@ def main() -> int:
                 cwd=repo_root,
             )
             if rc_drc.returncode != 0:
-                print("DRC failed.", file=sys.stderr)
+                log.error("DRC failed.")
                 return rc_drc.returncode
         # LVS
         if args.lvs:
@@ -291,7 +313,7 @@ def main() -> int:
             lvs_cmd += ["-o", lvs_report]
             rc_lvs = subprocess.run(lvs_cmd, cwd=repo_root)
             if rc_lvs.returncode != 0:
-                print("LVS failed.", file=sys.stderr)
+                log.error("LVS failed.")
                 return rc_lvs.returncode
         # DFT: merge padframes, alignment marks, witnesses into GDS
         if args.dft:
@@ -306,14 +328,14 @@ def main() -> int:
             ]
             if pdk_cfg and os.path.isfile(pdk_cfg):
                 dft_cmd += ["--pdk-config", pdk_cfg]
-            print("Running DFT (padframes, alignment, witnesses)...")
+            log.info("Running DFT (padframes, alignment, witnesses)...")
             rc_dft = subprocess.run(dft_cmd, cwd=repo_root)
             if rc_dft.returncode != 0:
-                print("DFT merge failed.", file=sys.stderr)
+                log.error("DFT merge failed.")
                 return rc_dft.returncode
-            print(f"  DFT merged into {gds_path}")
+            log.info("  DFT merged into {}", gds_path)
     elif do_gds and not os.path.isfile(manifest_path):
-        print("--gds/--drc/--lvs require HEaC manifest; run with --heac first.", file=sys.stderr)
+        log.error("--gds/--drc/--lvs require HEaC manifest; run with --heac first.")
         return 1
 
     # Optional: thermal stage report (routing + phases)
@@ -331,12 +353,12 @@ def main() -> int:
                 os.path.join(script_dir, "thermal_stages.py"),
                 routing_json, npy_thermal, "-o", thermal_report_path,
             ]
-            print("Running thermal stage report...")
+            log.info("Running thermal stage report...")
             rc_thermal = subprocess.run(thermal_cmd, cwd=repo_root)
             if rc_thermal.returncode != 0:
-                print("Thermal report failed (check phase/routing inputs).", file=sys.stderr)
+                log.error("Thermal report failed (check phase/routing inputs).")
             else:
-                print(f"  Thermal report: {thermal_report_path}")
+                log.info("  Thermal report: {}", thermal_report_path)
 
     # Optional: MEEP verification (S-param summary; continues on failure if Meep not installed)
     if args.meep_verify:
@@ -352,12 +374,12 @@ def main() -> int:
             meep_cmd += ["--manifest", manifest_for_meep]
         if os.path.isfile(heac_lib):
             meep_cmd += ["--library", heac_lib]
-        print("Running MEEP verification...")
+        log.info("Running MEEP verification...")
         rc_meep = subprocess.run(meep_cmd, cwd=repo_root, capture_output=True, text=True, timeout=120)
         if rc_meep.returncode == 0:
-            print(f"  MEEP summary: {meep_summary_path}")
+            log.info("  MEEP summary: {}", meep_summary_path)
         else:
-            print("  MEEP verification skipped or failed (Meep optional).")
+            log.info("  MEEP verification skipped or failed (Meep optional).")
 
     # Optional: 2D→3D packaging (STEP)
     if args.packaging:
@@ -369,12 +391,12 @@ def main() -> int:
                 os.path.join(script_dir, "packaging", "cad_3d.py"),
                 manifest_for_pkg, "-o", step_path,
             ]
-            print("Running packaging (2D→3D STEP)...")
+            log.info("Running packaging (2D→3D STEP)...")
             rc_pkg = subprocess.run(pkg_cmd, cwd=repo_root, capture_output=True, text=True, timeout=60)
             if rc_pkg.returncode == 0:
-                print(f"  STEP: {step_path}")
+                log.info("  STEP: {}", step_path)
             else:
-                print("  Packaging skipped (CadQuery/build123d optional).")
+                log.info("  Packaging skipped (CadQuery/build123d optional).")
 
     # Optional: parasitic extraction (manifest -> decoherence file)
     manifest_for_parasitic = os.path.join(script_dir, args.output + "_geometry_manifest.json")
@@ -388,22 +410,22 @@ def main() -> int:
         if os.path.isfile(routing_json):
             parasitic_cmd += ["--routing", routing_json]
         parasitic_cmd += ["-o", decoherence_out]
-        print("Running parasitic extraction...")
+        log.info("Running parasitic extraction...")
         rc_parasitic = subprocess.run(parasitic_cmd, cwd=repo_root)
         if rc_parasitic.returncode != 0:
-            print("Parasitic extraction failed.", file=sys.stderr)
+            log.error("Parasitic extraction failed.")
         else:
-            print(f"  Decoherence from layout: {decoherence_out}")
+            log.info("  Decoherence from layout: {}", decoherence_out)
 
-    print("Pipeline done. Outputs:")
+    log.info("Pipeline done. Outputs:")
     if os.path.isfile(routing_json):
-        print(f"  Routing: {routing_json}")
+        log.info("  Routing: {}", routing_json)
     if os.path.isfile(inductance_json):
-        print(f"  Inductance: {inductance_json}")
+        log.info("  Inductance: {}", inductance_json)
     if os.path.isfile(inverse_json):
-        print(f"  Inverse: {inverse_json}")
+        log.info("  Inverse: {}", inverse_json)
         if os.path.isfile(npy):
-            print(f"  Phases:  {npy}")
+            log.info("  Phases:  {}", npy)
     return 0
 
 

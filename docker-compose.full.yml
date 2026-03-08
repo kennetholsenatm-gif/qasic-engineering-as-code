@@ -1,0 +1,126 @@
+# QASIC Engineering-as-Code: full stack with local DBs (Redis, PostgreSQL, InfluxDB, MLflow)
+# Use with: docker compose -f docker-compose.full.yml up -d
+# Or let OpenTofu apply run it: cd infra/tofu && tofu apply -var="deployment_target=local"
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    ports:
+      - "8000:8000"
+    environment:
+      - IBM_QUANTUM_TOKEN=${IBM_QUANTUM_TOKEN:-}
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - DATABASE_URL=postgresql://qasic:qasic@postgres:5432/qasic
+      - INFLUX_URL=http://influxdb:8086
+      - INFLUX_TOKEN=${INFLUX_TOKEN:-qasic-telemetry-token}
+      - INFLUX_ORG=qasic-org
+      - INFLUX_BUCKET=qasic-telemetry
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+    env_file:
+      - .env
+    depends_on:
+      redis:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+
+  celery-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    command: celery -A app.celery_app worker -l info
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - DATABASE_URL=postgresql://qasic:qasic@postgres:5432/qasic
+      - INFLUX_URL=http://influxdb:8086
+      - INFLUX_TOKEN=${INFLUX_TOKEN:-qasic-telemetry-token}
+      - INFLUX_ORG=qasic-org
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+    env_file:
+      - .env
+    depends_on:
+      - api
+      - redis
+      - postgres
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - api
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: qasic
+      POSTGRES_PASSWORD: qasic
+      POSTGRES_DB: qasic
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U qasic -d qasic"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  influxdb:
+    image: influxdb:2.7-alpine
+    environment:
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME: qasic
+      DOCKER_INFLUXDB_INIT_PASSWORD: qasic
+      DOCKER_INFLUXDB_INIT_ORG: qasic-org
+      DOCKER_INFLUXDB_INIT_BUCKET: qasic-telemetry
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: ${INFLUX_TOKEN:-qasic-telemetry-token}
+    ports:
+      - "8086:8086"
+    volumes:
+      - influxdb_data:/var/lib/influxdb2
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8086/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  mlflow:
+    image: python:3.11-slim
+    working_dir: /mlflow
+    command: >
+      sh -c "pip install --no-cache-dir 'mlflow>=2.9' 'psycopg2-binary>=2.9'
+      && mlflow server --host 0.0.0.0 --port 5000
+      --backend-store-uri postgresql://qasic:qasic@postgres:5432/qasic
+      --default-artifact-root /mlflow/artifacts"
+    volumes:
+      - mlflow_artifacts:/mlflow/artifacts
+    ports:
+      - "5000:5000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  redis_data:
+  postgres_data:
+  influxdb_data:
+  mlflow_artifacts:
