@@ -1,6 +1,6 @@
 # IaC Orchestrator
 
-**Pipeline-style DAG UI for Infrastructure as Code:** define deployment pipelines (e.g. Tofu init → plan → approval → apply) in a visual graph and run them so that OpenTofu (or scripts) execute in order.
+**Infra pipelines only.** Pipeline-style DAG UI for **Infrastructure as Code:** define deployment pipelines (e.g. Tofu init → plan → approval → apply) in a visual graph and run them so that OpenTofu (or scripts) execute in order. This tool does *not* run the Engineering pipeline (routing → inverse → HEaC); for that use `engineering/run_pipeline.py` or the main app’s Run Pipeline / Workflows. To chain infra with the EaC pipeline, add a **Script** stage that runs `engineering/run_pipeline.py --use-orchestrator` (e.g. from repo root).
 
 ## Features
 
@@ -52,7 +52,7 @@ Open http://localhost:5174 (Vite proxies `/api` to the backend).
 ## Stage config
 
 - **Tofu stages:** Set **Tofu root** (e.g. `infra/tofu`), optional **workspace**, **var file**, or **vars** (key-value).
-- **Script:** Set **script_path** and optional **script_args** (command to run; runs from repo root when using Docker).
+- **Script:** Set **script_path** and optional **script_args** (command to run; runs from repo root when using Docker). To run the EaC pipeline after infra apply, use e.g. `script_path` = `engineering/run_pipeline.py` and `script_args` = `--use-orchestrator` (or a shell script that invokes it).
 - **Approval:** No config; the run pauses until you call `POST /api/runs/{run_id}/approve/{node_id}` with `{"approved": true}` or `false`.
 
 ## API

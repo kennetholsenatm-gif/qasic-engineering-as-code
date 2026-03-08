@@ -167,6 +167,15 @@ qasic-engineering-as-code/
 │   └── demo_e91.py           # E91 QKD (Bell + CHSH)
 ```
 
+### Orchestration and deployment
+
+Four concepts keep **where the app runs** separate from **what it runs**:
+
+1. **Engineering pipeline (EaC)** — The metasurface DAG: routing → inverse design → HEaC → GDS → DRC/LVS (and optional thermal, parasitic, calibration). Run via `python engineering/run_pipeline.py` (sequential) or `--use-orchestrator` for [Prefect](orchestration/) (retries, optional server). See [docs/ORCHESTRATION.md](docs/ORCHESTRATION.md).
+2. **Workflows** — User-defined DAGs in the web app: task types (protocols, routing, inverse design, etc.) with per-node backend (Local, IBM QPU, EKS). Execution is via the app’s [orchestration executor](orchestration/executor.py).
+3. **Deploy** — Where the QASIC stack runs: Local (Docker Compose), VM, or cloud-native (AWS, GCP, Azure, OpenNebula). Use the **Deploy** page in the web app for a target-centric UI (or “Generate commands” to run Tofu/Helm yourself). See [deploy/README.md](deploy/README.md).
+4. **IaC Orchestrator** — Advanced infra DAG in [tools/iac-orchestrator](tools/iac-orchestrator): visual pipeline (Tofu init → plan → approval → apply, custom scripts). For power users who want full control; linked from the Deploy page.
+
 ### Channel noise and decoherence
 
 To simulate **environmental degradation** (atmospheric attenuation, thermal fluctuations, detector inefficiency), use the noise simulator:

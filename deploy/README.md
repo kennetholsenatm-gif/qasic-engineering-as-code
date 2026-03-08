@@ -1,5 +1,12 @@
 # QASIC Deployment
 
+## Deploy UI (web app)
+
+The main QASIC web app has a **Deploy** page that lets you choose a target (Local, VM, AWS, GCP, Azure, OpenNebula) and **generate commands** to copy-paste—no IaC knowledge required. For Local you get Docker Compose/Makefile commands; for AWS you get OpenTofu + Helm steps. For full control over infra DAGs (Tofu init → plan → approval → apply, custom scripts), use the **IaC Orchestrator** (see [tools/iac-orchestrator/README.md](../tools/iac-orchestrator/README.md)); the Deploy page links to it.
+
+- **VM:** Deploy to a single VM by running Docker Compose on the VM (see “Docker Compose” below); or use the IaC Orchestrator to add a script stage. A dedicated VM Tofu module or install script may be added later.
+- **OpenNebula (OneKE):** Use the same Helm chart on an existing OneKE cluster; `deployment_target=opennebula` is accepted in [infra/tofu](../infra/tofu) for future provisioning. See [infra/tofu/README.md](../infra/tofu/README.md).
+
 ## Kubernetes (cloud-agnostic)
 
 The recommended production path is **Kubernetes** with the provided **Helm** chart. The same chart runs on:

@@ -18,6 +18,7 @@ import {
   FolderOpen,
   Settings,
   GitBranch,
+  Server,
 } from 'lucide-react'
 
 const navGroups = [
@@ -57,6 +58,7 @@ const navGroups = [
     items: [
       { to: '/docs', label: 'Docs', icon: BookOpen },
       { to: '/applications', label: 'Applications', icon: FlaskConical },
+      { to: '/deploy', label: 'Deploy', icon: Server },
     ],
   },
 ]

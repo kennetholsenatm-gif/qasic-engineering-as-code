@@ -1159,6 +1159,71 @@ def get_inverse_phases():
         raise HTTPException(status_code=500, detail=_sanitize_detail(e, "An internal error occurred."))
 
 
+# --- Deploy: generate commands for Local / VM / AWS / GCP / Azure / OpenNebula ---
+DeployTargetKind = Literal["local", "vm", "aws", "gcp", "azure", "opennebula"]
+
+
+class DeployGenerateRequest(BaseModel):
+    target: DeployTargetKind = "local"
+    aws_region: str | None = "us-east-1"
+
+
+@app.post("/api/deploy/generate")
+def deploy_generate(body: DeployGenerateRequest):
+    """Generate deployment commands for the chosen target. Returns copy-paste commands; no execution."""
+    target = body.target
+    region = body.aws_region or "us-east-1"
+    if target == "local":
+        commands = [
+            "# Core stack (API, frontend, Celery, Redis, Postgres)",
+            "docker compose up -d --build",
+            "# Or: make run-local-core",
+            "",
+            "# Full stack (+ InfluxDB, MLflow, Grafana)",
+            "docker compose -f docker-compose.full.yml up -d --build",
+            "# Or: make run-local",
+        ]
+        return {"commands": commands, "hint": "Run from the repository root."}
+    if target == "aws":
+        commands = [
+            "# 1. Provision infra (RDS, ElastiCache, EKS)",
+            "cd infra/tofu",
+            "tofu init",
+            f'tofu apply -var="deployment_target=aws" -var="aws_region={region}"',
+            "",
+            "# 2. Configure kubeconfig and deploy app",
+            f"aws eks update-kubeconfig --region {region} --name $(tofu output -raw eks_cluster_name)",
+            "cd ../..",
+            "helm upgrade --install qasic deploy/helm/qasic -n qasic --create-namespace \\",
+            "  --set image.registry=<your-registry>/ \\",
+            "  --set image.api.repository=qasic-api --set image.frontend.repository=qasic-frontend",
+        ]
+        return {"commands": commands, "hint": "Ensure AWS CLI and OpenTofu are installed; run from repo root. Create ECR repos if using ECR."}
+    if target == "vm":
+        return {
+            "commands": [
+                "# VM deploy: use an existing VM with Docker installed.",
+                "# From your machine, copy the repo (or clone) to the VM, then on the VM:",
+                "cd qasic-engineering-as-code",
+                "docker compose up -d --build",
+                "",
+                "# Or use the IaC Orchestrator to add a Tofu/script stage that provisions a VM and runs the above.",
+            ],
+            "hint": "See deploy/README.md for Kubernetes on a single node; for raw VM, Docker Compose on the VM is the simplest.",
+        }
+    # gcp, azure, opennebula: placeholder until infra modules exist
+    placeholders = {
+        "gcp": ("GCP (GKE)", "deployment_target=gcp and GKE module will be added; use Helm chart on an existing GKE cluster."),
+        "azure": ("Azure (AKS)", "deployment_target=azure and AKS module will be added; use Helm chart on an existing AKS cluster."),
+        "opennebula": ("OpenNebula (OneKE)", "deployment_target=opennebula and OneKE module will be added; use Helm chart on an existing OneKE cluster."),
+    }
+    label, hint = placeholders[target]
+    return {
+        "commands": [f"# {label}: coming soon.", f"# {hint}", "# Same Helm chart works: deploy/helm/qasic"],
+        "hint": hint,
+    }
+
+
 @app.get("/api/docs/links")
 def get_docs_links():
     """Return list of doc links for the front end."""
@@ -1178,6 +1243,7 @@ def get_docs_links():
         {"name": "Quantum terrestrial backhaul (MD)", "path": "docs/quantum-terrestrial-backhaul.md", "url": None},
         {"name": "Unified quantum metasurfaces SATCOM (MD)", "path": "docs/Whitepaper_Unified_Quantum_Metasurfaces_SATCOM.md", "url": None},
         {"name": "Applications (BQTC, QRNC)", "path": "docs/APPLICATIONS.md", "url": None},
+        {"name": "Theoretical applications", "path": "docs/THEORETICAL_APPLICATIONS.md", "url": None},
         {"name": "Data and control plane extensions", "path": "docs/DATA_AND_CONTROL_PLANE_QUANTUM_ASIC.md", "url": None},
     ]
     for L in links:
@@ -1204,6 +1270,7 @@ _ALLOWED_DOC_PATHS = frozenset({
     "docs/Cryogenic_Metamaterial_Architectures_Quantum_SATCOM.md",
     "engineering/README.md",
     "docs/APPLICATIONS.md",
+    "docs/THEORETICAL_APPLICATIONS.md",
     "docs/DATA_AND_CONTROL_PLANE_QUANTUM_ASIC.md",
 })
 

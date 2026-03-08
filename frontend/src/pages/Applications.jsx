@@ -64,6 +64,16 @@ export default function Applications({ apiBase }) {
           </pre>
         )}
       </section>
+
+      <section>
+        <h2>Theoretical applications</h2>
+        <p>Conceptual uses of the Quantum ASIC (minimal 3-qubit topology) in data plane and control plane: tamper-evident tunneling, BGP commitment, SD-WAN QAOA, quantum illumination. These are research directions; the repo provides protocols and building blocks.</p>
+        <ul style={{ marginTop: '0.5rem' }}>
+          <li><a href={`${apiBase}/docs/docs/THEORETICAL_APPLICATIONS.md`} target="_blank" rel="noopener noreferrer">THEORETICAL_APPLICATIONS.md</a> — Summary and mapping to code</li>
+          <li><a href={`${apiBase}/docs/docs/DATA_AND_CONTROL_PLANE_QUANTUM_ASIC.md`} target="_blank" rel="noopener noreferrer">DATA_AND_CONTROL_PLANE_QUANTUM_ASIC.md</a> — Data/control plane extensions</li>
+          <li><a href={`${apiBase}/docs/docs/QUANTUM_ASIC.md`} target="_blank" rel="noopener noreferrer">QUANTUM_ASIC.md</a> — ASIC spec and protocol mapping</li>
+        </ul>
+      </section>
     </>
   )
 }

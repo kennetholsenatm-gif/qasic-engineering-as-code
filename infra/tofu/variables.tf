@@ -1,12 +1,13 @@
-# Deployment target: "aws" = provision RDS, ElastiCache, EKS; local stack uses Makefile/Compose (no Tofu).
+# Deployment target: aws = provision RDS, ElastiCache, EKS; gcp/azure/opennebula accepted (stubs; use Helm on existing cluster).
+# Local stack uses Makefile/Compose (no Tofu).
 
 variable "deployment_target" {
   type        = string
   default     = "aws"
-  description = "Cloud target: aws (RDS, ElastiCache, EKS). For local dev use make run-local or docker compose."
+  description = "Cloud target: aws (RDS, ElastiCache, EKS). gcp, azure, opennebula are accepted but not yet implemented; use Helm on existing GKE/AKS/OneKE cluster. For local dev use make run-local or docker compose."
   validation {
-    condition     = contains(["aws"], var.deployment_target)
-    error_message = "deployment_target must be 'aws'."
+    condition     = contains(["aws", "gcp", "azure", "opennebula"], var.deployment_target)
+    error_message = "deployment_target must be one of: aws, gcp, azure, opennebula."
   }
 }
 

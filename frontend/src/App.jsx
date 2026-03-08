@@ -14,6 +14,7 @@ import Applications from './pages/Applications'
 import Projects from './pages/Projects'
 import ConfigForm from './pages/ConfigForm'
 import Workflows from './pages/Workflows'
+import Deploy from './pages/Deploy'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
 
@@ -41,6 +42,7 @@ export default function App() {
           <Route path="config" element={<ConfigForm apiBase={API_BASE} />} />
           <Route path="workflows" element={<Workflows apiBase={API_BASE} />} />
           <Route path="applications" element={<Applications apiBase={API_BASE} />} />
+          <Route path="deploy" element={<Deploy apiBase={API_BASE} />} />
           <Route path="docs" element={<Docs apiBase={API_BASE} />} />
         </Route>
       </Routes>

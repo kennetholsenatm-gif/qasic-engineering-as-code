@@ -27,7 +27,7 @@ See the main [README.md](../README.md) for URLs (frontend, API, MLflow, Grafana)
 
 ## Push to cloud (AWS)
 
-Provision **RDS (PostgreSQL)**, **ElastiCache (Redis)**, and optionally **EKS** so you can run the Helm chart against managed DBs and cluster.
+Provision **RDS (PostgreSQL)**, **ElastiCache (Redis)**, and optionally **EKS** so you can run the Helm chart against managed DBs and cluster. The variable `deployment_target` also accepts `gcp`, `azure`, and `opennebula` for future use; today only `aws` provisions resources. For GKE, AKS, or OpenNebula OneKE, use an existing cluster and deploy with the same Helm chart (see [deploy/README.md](../deploy/README.md)).
 
 1. Apply (password is optional; Tofu can generate and store in Secrets Manager):
 
