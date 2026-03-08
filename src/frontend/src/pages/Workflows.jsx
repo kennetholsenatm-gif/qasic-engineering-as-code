@@ -6,6 +6,7 @@ import {
   addEdge,
   useNodesState,
   useEdgesState,
+  useReactFlow,
   Background,
   Controls,
   MiniMap,
@@ -55,13 +56,17 @@ function flowEdgesToApi(edges) {
   }))
 }
 
-function apiNodesToFlow(nodes) {
-  return (nodes || []).map((n) => ({
-    id: n.id,
-    type: n.type || 'taskNode',
-    data: n.data || {},
-    position: n.position || { x: 0, y: 0 },
-  }))
+function apiNodesToFlow(nodes, taskTypes = []) {
+  return (nodes || []).map((n) => {
+    const data = n.data || {}
+    const tt = taskTypes.find((t) => t.id === data.task_type)
+    return {
+      id: n.id,
+      type: n.type || 'taskNode',
+      data: { ...data, compute_resource: data.compute_resource ?? tt?.compute_resource },
+      position: n.position || { x: 0, y: 0 },
+    }
+  })
 }
 
 function apiEdgesToFlow(edges) {
@@ -76,6 +81,8 @@ function apiEdgesToFlow(edges) {
   }))
 }
 
+const DRAG_TYPE = 'application/x-qasic-task-type'
+
 function WorkflowsInner({ apiBase }) {
   const [dagId, setDagId] = useState(null)
   const [dagName, setDagName] = useState('New workflow')
@@ -84,6 +91,7 @@ function WorkflowsInner({ apiBase }) {
   const [runResult, setRunResult] = useState(null)
   const [selectedNodeId, setSelectedNodeId] = useState(null)
   const queryClient = useQueryClient()
+  const { screenToFlowPosition } = useReactFlow()
 
   const { data: taskTypesData } = useQuery({
     queryKey: ['dag-task-types', apiBase],
@@ -106,8 +114,8 @@ function WorkflowsInner({ apiBase }) {
   const [nodes, setNodes, onNodesChange] = useNodesState([])
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
 
-  const addNode = useCallback(
-    (taskType) => {
+  const addNodeAtPosition = useCallback(
+    (taskType, position) => {
       const tt = taskTypes.find((t) => t.id === taskType.id)
       if (!tt) return
       const id = `node_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
@@ -120,13 +128,40 @@ function WorkflowsInner({ apiBase }) {
             label: tt.label,
             task_type: tt.id,
             config: { ...(tt.default_config || {}), backend: tt.default_config?.backend || 'local' },
+            compute_resource: tt.compute_resource,
           },
-          position: { x: 250 + (nds.length % 3) * 180, y: 100 + Math.floor(nds.length / 3) * 100 },
+          position: position || { x: 250 + (nds.length % 3) * 180, y: 100 + Math.floor(nds.length / 3) * 100 },
         },
       ])
     },
     [taskTypes, setNodes]
   )
+
+  const addNode = useCallback(
+    (taskType) => addNodeAtPosition(taskType, null),
+    [addNodeAtPosition]
+  )
+
+  const onDrop = useCallback(
+    (event) => {
+      event.preventDefault()
+      const raw = event.dataTransfer.getData(DRAG_TYPE)
+      if (!raw) return
+      try {
+        const taskType = JSON.parse(raw)
+        const position = screenToFlowPosition({ x: event.clientX, y: event.clientY })
+        addNodeAtPosition(taskType, position)
+      } catch (_) {
+        // ignore invalid drop
+      }
+    },
+    [screenToFlowPosition, addNodeAtPosition]
+  )
+
+  const onDragOver = useCallback((event) => {
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'move'
+  }, [])
 
   const onConnect = useCallback(
     (params) => setEdges((eds) => addEdge({ ...params, type: 'smoothstep', markerEnd: { type: MarkerType.ArrowClosed } }, eds)),
@@ -219,24 +254,32 @@ function WorkflowsInner({ apiBase }) {
   useEffect(() => {
     if (!selectedDag || selectedDag.id !== dagId) return
     if (selectedDag.nodes?.length || selectedDag.edges?.length) {
-      setNodes(apiNodesToFlow(selectedDag.nodes))
+      setNodes(apiNodesToFlow(selectedDag.nodes, taskTypes))
       setEdges(apiEdgesToFlow(selectedDag.edges))
     }
     if (selectedDag.name) setDagName(selectedDag.name)
-  }, [dagId, selectedDag])
+  }, [dagId, selectedDag, taskTypes])
 
   return (
     <div className="flex h-[calc(100vh-8rem)] gap-4">
       <aside className="w-56 shrink-0 rounded-xl border border-slate-700 bg-slate-800/80 p-3 overflow-y-auto">
-        <h2 className="text-sm font-semibold text-slate-300 mb-2">Task types</h2>
-        <p className="text-xs text-slate-500 mb-3">Click to add node</p>
+        <h2 className="text-sm font-semibold text-slate-300 mb-1">Task types</h2>
+        <p className="text-xs text-slate-500 mb-3">Drag onto canvas or click to add</p>
+        {taskTypes.length === 0 && (
+          <p className="text-xs text-slate-500 italic">Loading task types…</p>
+        )}
         <ul className="space-y-1">
           {taskTypes.map((tt) => (
             <li key={tt.id}>
               <button
                 type="button"
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.setData(DRAG_TYPE, JSON.stringify(tt))
+                  e.dataTransfer.effectAllowed = 'move'
+                }}
                 onClick={() => addNode(tt)}
-                className="w-full text-left rounded-lg border border-slate-600 bg-slate-700/50 px-2 py-1.5 text-sm text-slate-200 hover:bg-slate-600"
+                className="w-full text-left rounded-lg border border-slate-600 bg-slate-700/50 px-2 py-1.5 text-sm text-slate-200 hover:bg-slate-600 hover:border-slate-500 cursor-grab active:cursor-grabbing"
               >
                 {tt.label}
               </button>
@@ -297,10 +340,11 @@ function WorkflowsInner({ apiBase }) {
             type="button"
             onClick={() => runMutation.mutate()}
             disabled={runMutation.isPending || !dagId}
+            title={!dagId ? 'Save the workflow first, then Run' : 'Deploy and run this DAG'}
             className="inline-flex items-center gap-1.5 rounded-lg bg-green-600 px-3 py-1.5 text-sm text-white hover:bg-green-500 disabled:opacity-60"
           >
             {runMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-            Run
+            Deploy / Run
           </button>
         </div>
 
@@ -349,7 +393,12 @@ function WorkflowsInner({ apiBase }) {
           </div>
         )}
 
-        <div className="flex-1 rounded-xl border border-slate-700 bg-slate-900 min-h-[400px]">
+        <div className="flex-1 rounded-xl border border-slate-700 bg-slate-900 min-h-[400px] relative">
+          {nodes.length === 0 && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <p className="text-sm text-slate-500">Drag task types here or click a type in the palette to add a node.</p>
+            </div>
+          )}
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -358,6 +407,8 @@ function WorkflowsInner({ apiBase }) {
             onConnect={onConnect}
             onNodeClick={onNodeClick}
             onPaneClick={onPaneClick}
+            onDrop={onDrop}
+            onDragOver={onDragOver}
             nodeTypes={nodeTypes}
             fitView
             fitViewOptions={{ padding: 0.2 }}
@@ -369,9 +420,9 @@ function WorkflowsInner({ apiBase }) {
             connectOnClick={false}
             proOptions={{ hideAttribution: true }}
           >
-            <Background />
-            <Controls />
-            <MiniMap nodeColor="#0f172a" maskColor="rgba(15,23,42,0.8)" />
+            <Background variant="dots" gap={12} size={0.5} className="bg-slate-900" />
+            <Controls className="!bg-slate-800 !border-slate-600 !rounded-lg" />
+            <MiniMap nodeColor="#0f172a" maskColor="rgba(15,23,42,0.8)" className="!bg-slate-800 !rounded-lg" />
           </ReactFlow>
         </div>
       </main>
@@ -384,10 +435,10 @@ export default function Workflows({ apiBase }) {
     <>
       <h1 className="flex items-center gap-2 text-2xl font-semibold text-slate-100 mb-2">
         <GitBranch className="h-7 w-7 text-sky-400" />
-        Workflows (DAG)
+        Flow-based workflow (DAG)
       </h1>
       <p className="text-sm text-slate-500 mb-4">
-        Build a workflow: add nodes from the palette, connect outputs to inputs, then Save, Validate, and Run.
+        Drag task types onto the canvas or click to add. Connect outputs to inputs to form a DAG, then Save, Validate, and Deploy / Run.
       </p>
       <ReactFlowProvider>
         <WorkflowsInner apiBase={apiBase} />

@@ -102,7 +102,7 @@ export default function PipelineDag({ apiBase, activeStep = null, className = ''
   if (!initialNodes.length) return null
 
   return (
-    <div className={`h-[360px] rounded-lg border border-slate-700 bg-slate-900 ${className}`}>
+    <div className={`h-[360px] rounded-lg border border-slate-700 bg-slate-900 overflow-hidden ${className}`}>
       <ReactFlowProvider>
       <ReactFlow
         nodes={nodes.length ? nodes : initialNodes}
@@ -113,14 +113,14 @@ export default function PipelineDag({ apiBase, activeStep = null, className = ''
         fitViewOptions={{ padding: 0.2 }}
         minZoom={0.2}
         maxZoom={1.5}
-        nodesDraggable
+        nodesDraggable={false}
         nodesConnectable={false}
         elementsSelectable={false}
         proOptions={{ hideAttribution: true }}
       >
-        <Background />
-        <Controls />
-        <MiniMap nodeColor="#0f172a" maskColor="rgba(15,23,42,0.8)" />
+        <Background variant="dots" gap={12} size={0.5} className="bg-slate-900" />
+        <Controls className="!bg-slate-800 !border-slate-600 !rounded-lg" />
+        <MiniMap nodeColor="#0f172a" maskColor="rgba(15,23,42,0.8)" className="!bg-slate-800 !rounded-lg" />
       </ReactFlow>
       </ReactFlowProvider>
     </div>
