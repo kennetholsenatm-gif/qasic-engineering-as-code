@@ -1,0 +1,13 @@
+{
+  "device": "cpu",
+  "target_topology_features": 10,
+  "num_meta_atoms": 1000,
+  "phase_min": 2.6808156967163086,
+  "phase_max": 3.5117337703704834,
+  "phase_mean": 3.1410882472991943,
+  "phase_array_path": "gnn_inverse_phases.npy",
+  "routing_result": {
+    "file": "engineering/pipeline_result_routing.json"
+  },
+  "timestamp": "2026-03-07T23:41:58.152382Z"
+}

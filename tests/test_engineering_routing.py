@@ -5,11 +5,11 @@ import numpy as np
 import pytest
 
 # interpret_routing only needs numpy; build_routing_qubo needs qiskit_optimization
-from engineering.routing_qubo_qaoa import interpret_routing
+from src.core_compute.engineering.routing_qubo_qaoa import interpret_routing
 
 try:
     from qiskit_optimization import QuadraticProgram
-    from engineering.routing_qubo_qaoa import build_routing_qubo, solve_routing
+    from src.core_compute.engineering.routing_qubo_qaoa import build_routing_qubo, solve_routing
     HAS_QISKIT_OPT = True
 except ImportError:
     HAS_QISKIT_OPT = False

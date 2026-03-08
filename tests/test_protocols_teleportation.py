@@ -4,8 +4,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from state import State, product_state, ket0, ket1
-from protocols.teleportation import teleport_circuit, teleport
+from src.core_compute.state import State, product_state, ket0, ket1
+from src.core_compute.protocols.teleportation import teleport_circuit, teleport
 
 
 def test_teleport_returns_same_state():

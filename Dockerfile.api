@@ -3,18 +3,14 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Repo root contents (API runs from repo root so asic, protocols, state, engineering are importable)
+# Repo root contents (API runs from repo root; src.backend and src.core_compute are under src/)
 COPY requirements.txt .
-COPY app/requirements.txt app/
-RUN pip install --no-cache-dir -r requirements.txt && pip install --no-cache-dir -r app/requirements.txt
+COPY src/backend/requirements.txt src/backend/
+RUN pip install --no-cache-dir -r requirements.txt && pip install --no-cache-dir -r src/backend/requirements.txt
 
-COPY app/ app/
+COPY src/ src/
 COPY config/ config/
 COPY storage/ storage/
-COPY state/ state/
-COPY asic/ asic/
-COPY protocols/ protocols/
-COPY engineering/ engineering/
 
 # Run as unprivileged user (DevSecOps: no root in container)
 RUN adduser --disabled-password --gecos "" appuser && chown -R appuser:appuser /app
@@ -23,4 +19,4 @@ USER appuser
 ENV PYTHONPATH=/app
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "src.backend.main:app", "--host", "0.0.0.0", "--port", "8000"]

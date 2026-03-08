@@ -1,0 +1,11 @@
+{
+  "device": "cpu",
+  "target_topology_features": 10,
+  "num_meta_atoms": 1000,
+  "phase_min": 3.032975673675537,
+  "phase_max": 3.2839672565460205,
+  "phase_mean": 3.1421475410461426,
+  "phase_array_path": "result_phases.npy",
+  "routing_result": null,
+  "timestamp": "2026-03-06T20:43:56.887464Z"
+}

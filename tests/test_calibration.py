@@ -12,7 +12,7 @@ sys.path.insert(0, str(REPO_ROOT))
 
 
 def test_telemetry_schema_validate():
-    from engineering.calibration.telemetry_schema import validate_telemetry
+    from src.core_compute.engineering.calibration.telemetry_schema import validate_telemetry
     valid, errs = validate_telemetry({})
     assert valid is True
     valid, errs = validate_telemetry({"qubits": [{"T1_us": 50, "T2_us": 30}]})
@@ -22,7 +22,7 @@ def test_telemetry_schema_validate():
 
 
 def test_digital_twin_to_json():
-    from engineering.calibration.digital_twin import DigitalTwin
+    from src.core_compute.engineering.calibration.digital_twin import DigitalTwin
     import numpy as np
     twin = DigitalTwin(n_nodes=3, decoherence_rates=np.array([0.1, 0.2, 0.15]))
     out = twin.to_decoherence_json()
@@ -33,8 +33,8 @@ def test_digital_twin_to_json():
 
 
 def test_bayesian_update_synthetic():
-    from engineering.calibration.bayesian_update import update_decoherence_from_telemetry
-    from engineering.calibration.digital_twin import DigitalTwin
+    from src.core_compute.engineering.calibration.bayesian_update import update_decoherence_from_telemetry
+    from src.core_compute.engineering.calibration.digital_twin import DigitalTwin
     telemetry_list = [
         {"qubits": [{"index": 0, "T1_us": 100, "T2_us": 50}, {"index": 1, "T2_us": 40}, {"index": 2, "T2_us": 60}]},
         {"qubits": [{"index": 0, "T2_us": 55}, {"index": 1, "T2_us": 38}, {"index": 2, "T2_us": 58}]},
@@ -47,7 +47,7 @@ def test_bayesian_update_synthetic():
 
 
 def test_run_calibration_cycle(tmp_path):
-    from engineering.calibration.run_calibration_cycle import run_calibration_cycle
+    from src.core_compute.engineering.calibration.run_calibration_cycle import run_calibration_cycle
     telemetry_file = tmp_path / "telemetry.json"
     telemetry_file.write_text(json.dumps({
         "qubits": [

@@ -1,0 +1,162 @@
+{
+  "pitch_um": 1.0,
+  "units": "um",
+  "library_source": "engineering/meta_atom_library.json",
+  "shape": [
+    5,
+    5
+  ],
+  "num_cells": 25,
+  "cells": [
+    {
+      "i": 0,
+      "j": 0,
+      "phase_rad": 3.14,
+      "dimension": 1.099544
+    },
+    {
+      "i": 0,
+      "j": 1,
+      "phase_rad": 3.14,
+      "dimension": 1.099544
+    },
+    {
+      "i": 0,
+      "j": 2,
+      "phase_rad": 3.14,
+      "dimension": 1.099544
+    },
+    {
+      "i": 0,
+      "j": 3,
+      "phase_rad": 3.14,
+      "dimension": 1.099544
+    },
+    {
+      "i": 0,
+      "j": 4,
+      "phase_rad": 3.14,
+      "dimension": 1.099544
+    },
+    {
+      "i": 1,
+      "j": 0,
+      "phase_rad": 3.14,
+      "dimension": 1.099544
+    },
+    {
+      "i": 1,
+      "j": 1,
+      "phase_rad": 3.14,
+      "dimension": 1.099544
+    },
+    {
+      "i": 1,
+      "j": 2,
+      "phase_rad": 3.14,
+      "dimension": 1.099544
+    },
+    {
+      "i": 1,
+      "j": 3,
+      "phase_rad": 3.14,
+      "dimension": 1.099544
+    },
+    {
+      "i": 1,
+      "j": 4,
+      "phase_rad": 3.14,
+      "dimension": 1.099544
+    },
+    {
+      "i": 2,
+      "j": 0,
+      "phase_rad": 3.14,
+      "dimension": 1.099544
+    },
+    {
+      "i": 2,
+      "j": 1,
+      "phase_rad": 3.14,
+      "dimension": 1.099544
+    },
+    {
+      "i": 2,
+      "j": 2,
+      "phase_rad": 3.14,
+      "dimension": 1.099544
+    },
+    {
+      "i": 2,
+      "j": 3,
+      "phase_rad": 3.14,
+      "dimension": 1.099544
+    },
+    {
+      "i": 2,
+      "j": 4,
+      "phase_rad": 3.14,
+      "dimension": 1.099544
+    },
+    {
+      "i": 3,
+      "j": 0,
+      "phase_rad": 3.14,
+      "dimension": 1.099544
+    },
+    {
+      "i": 3,
+      "j": 1,
+      "phase_rad": 3.14,
+      "dimension": 1.099544
+    },
+    {
+      "i": 3,
+      "j": 2,
+      "phase_rad": 3.14,
+      "dimension": 1.099544
+    },
+    {
+      "i": 3,
+      "j": 3,
+      "phase_rad": 3.14,
+      "dimension": 1.099544
+    },
+    {
+      "i": 3,
+      "j": 4,
+      "phase_rad": 3.14,
+      "dimension": 1.099544
+    },
+    {
+      "i": 4,
+      "j": 0,
+      "phase_rad": 3.14,
+      "dimension": 1.099544
+    },
+    {
+      "i": 4,
+      "j": 1,
+      "phase_rad": 3.14,
+      "dimension": 1.099544
+    },
+    {
+      "i": 4,
+      "j": 2,
+      "phase_rad": 3.14,
+      "dimension": 1.099544
+    },
+    {
+      "i": 4,
+      "j": 3,
+      "phase_rad": 3.14,
+      "dimension": 1.099544
+    },
+    {
+      "i": 4,
+      "j": 4,
+      "phase_rad": 3.14,
+      "dimension": 1.099544
+    }
+  ]
+}

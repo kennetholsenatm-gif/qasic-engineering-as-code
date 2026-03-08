@@ -42,10 +42,10 @@ def run_pipeline(
     if config and not cfg_path.is_file():
         typer.echo(f"Config not found: {cfg_path}", err=True)
         raise typer.Exit(1)
-    engineering_dir = REPO_ROOT / "engineering"
+    engineering_dir = REPO_ROOT / "src" / "core_compute" / "engineering"
     run_script = engineering_dir / "run_pipeline.py"
     if not run_script.is_file():
-        typer.echo("engineering/run_pipeline.py not found.", err=True)
+        typer.echo("src/core_compute/engineering/run_pipeline.py not found.", err=True)
         raise typer.Exit(1)
     cmd = [sys.executable, str(run_script), "-o", output_base]
     if fast:
@@ -125,7 +125,7 @@ def serve(
         typer.echo("Install uvicorn: pip install 'uvicorn[standard]'", err=True)
         raise typer.Exit(1)
     typer.echo(f"Starting API at http://{host}:{port}")
-    uvicorn.run("app.main:app", host=host, port=port, reload=reload)
+    uvicorn.run("src.backend.main:app", host=host, port=port, reload=reload)
 
 
 project_app = typer.Typer(help="Project-based workspace")

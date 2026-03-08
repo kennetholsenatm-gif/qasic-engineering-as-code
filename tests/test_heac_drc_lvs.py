@@ -38,7 +38,7 @@ def _minimal_manifest_path(tmp_path: Path) -> Path:
 
 def test_load_pdk_config():
     """PDK config loading (manifest_to_gds helper)."""
-    from engineering.heac.manifest_to_gds import load_pdk_config, get_layer, clamp_dimension
+    from src.core_compute.engineering.heac.manifest_to_gds import load_pdk_config, get_layer, clamp_dimension
     pdk_path = HEAC / "pdk_config.yaml"
     if not pdk_path.exists():
         pytest.skip("pdk_config.yaml not found")
@@ -51,7 +51,7 @@ def test_load_pdk_config():
 
 def test_drc_mock(tmp_path):
     """DRC mock: run without KLayout; should pass with non-empty GDS or report only."""
-    from engineering.heac.run_drc_klayout import run_drc_klayout
+    from src.core_compute.engineering.heac.run_drc_klayout import run_drc_klayout
     # No GDS: should fail
     passed, msg = run_drc_klayout(str(tmp_path / "missing.gds"), None, None)
     assert passed is False
@@ -74,7 +74,7 @@ def test_drc_mock(tmp_path):
 
 def test_lvs_mock(tmp_path):
     """LVS mock: schematic from manifest vs missing/empty GDS."""
-    from engineering.heac.run_lvs_klayout import run_lvs, schematic_netlist_from_manifest
+    from src.core_compute.engineering.heac.run_lvs_klayout import run_lvs, schematic_netlist_from_manifest
     manifest_path = _minimal_manifest_path(tmp_path)
     schem = schematic_netlist_from_manifest(str(manifest_path), None)
     assert schem["num_cells"] == 4
@@ -120,7 +120,7 @@ def test_manifest_to_gds_with_pdk(tmp_path):
 
 def test_dft_structures_build(tmp_path):
     """DFT structures: build_dft_manifest produces pads, alignment, witnesses."""
-    from engineering.heac.dft_structures import build_dft_manifest
+    from src.core_compute.engineering.heac.dft_structures import build_dft_manifest
     manifest_path = _minimal_manifest_path(tmp_path)
     dft = build_dft_manifest(str(manifest_path), str(HEAC / "pdk_config.yaml") if (HEAC / "pdk_config.yaml").exists() else None)
     assert dft["source"] == "dft_structures"
@@ -182,7 +182,7 @@ def test_dft_structures_cli_and_merge(tmp_path):
 
 def test_superconducting_extraction(tmp_path):
     """Superconducting extraction: kinetic L and optional JJ L from manifest."""
-    from engineering.superconducting_extraction import extract_kinetic_inductance
+    from src.core_compute.engineering.superconducting_extraction import extract_kinetic_inductance
     manifest_path = _minimal_manifest_path(tmp_path)
     data = extract_kinetic_inductance(str(manifest_path), routing_path=None)
     assert data["source"] == "superconducting_extraction"
@@ -194,7 +194,7 @@ def test_superconducting_extraction(tmp_path):
 
 def test_process_variation_sweep(tmp_path):
     """Process variation sweep: perturb manifest, run extraction, get stats."""
-    from engineering.process_variation_sweep import run_sweep, perturb_manifest
+    from src.core_compute.engineering.process_variation_sweep import run_sweep, perturb_manifest
     import numpy as np
     manifest_path = _minimal_manifest_path(tmp_path)
     # Quick sweep with 2 samples

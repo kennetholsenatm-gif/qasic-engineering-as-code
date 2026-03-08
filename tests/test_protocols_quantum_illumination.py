@@ -4,9 +4,9 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from state.density import DensityState, fidelity_pure_vs_density
-from state.channels import kraus_thermal_loss, thermal_loss
-from protocols.quantum_illumination import (
+from src.core_compute.state.density import DensityState, fidelity_pure_vs_density
+from src.core_compute.state.channels import kraus_thermal_loss, thermal_loss
+from src.core_compute.protocols.quantum_illumination import (
     rho_H0,
     rho_H1,
     bell_outcome_probabilities,
@@ -41,7 +41,7 @@ def test_rho_H1_eta_one_is_bell():
     """H1 with eta=1: signal unchanged, state is |Φ+⟩⟨Φ+|."""
     r1 = rho_H1(1.0)
     # |Φ+⟩ = (|00⟩+|11⟩)/√2 in LSB order
-    from state import State
+    from src.core_compute.state import State
     v = np.array([1, 0, 0, 1], dtype=complex) / np.sqrt(2)
     phi_plus = State(v.reshape(-1, 1), 2)
     assert fidelity_pure_vs_density(phi_plus, r1.rho) == pytest.approx(1.0, abs=1e-8)

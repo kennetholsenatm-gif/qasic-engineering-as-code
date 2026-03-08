@@ -10,7 +10,7 @@ import pytest
 
 import torch
 
-from engineering.metasurface_inverse_net import (
+from src.core_compute.engineering.metasurface_inverse_net import (
     create_model,
     example_forward_pass,
     parse_phase_band,

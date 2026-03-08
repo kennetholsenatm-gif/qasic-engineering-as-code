@@ -1,5 +1,5 @@
 """
-Pytest configuration: add repo root to sys.path so tests can import state, protocols, asic, engineering.
+Pytest configuration: add repo root to sys.path so tests can import src.backend, src.core_compute.*.
 Run from repo root: pytest tests/
 """
 from __future__ import annotations

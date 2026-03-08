@@ -1,0 +1,13 @@
+{
+  "device": "cpu",
+  "target_topology_features": 10,
+  "num_meta_atoms": 1000,
+  "phase_min": 3.0228281021118164,
+  "phase_max": 3.2576143741607666,
+  "phase_mean": 3.1416304111480713,
+  "phase_array_path": "dashboard_inverse_phases.npy",
+  "routing_result": {
+    "file": "C:\\Users\\kenne\\OneDrive\\Documents\\GitHub\\toy-quantum-protocols\\engineering\\pipeline_result_routing.json"
+  },
+  "timestamp": "2026-03-07T16:11:09.485277Z"
+}

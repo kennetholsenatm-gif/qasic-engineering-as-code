@@ -4,8 +4,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from state import State, product_state
-from asic.circuit import (
+from src.core_compute.state import State, product_state
+from src.core_compute.asic.circuit import (
     validate_circuit,
     Op,
     protocol_teleport_ops,
@@ -13,7 +13,7 @@ from asic.circuit import (
     protocol_thief_ops,
     ASICCircuit,
 )
-from asic.executor import run_asic_circuit, apply_op
+from src.core_compute.asic.executor import run_asic_circuit, apply_op
 
 
 def test_validate_circuit_teleport_ops_valid():
@@ -49,7 +49,7 @@ def test_validate_circuit_rejects_cnot_on_non_edge():
 
 def test_qasm_loader_string():
     """OpenQASM loader: parse string to Op list (H, X, Z, CNOT, Rx)."""
-    from asic.qasm_loader import load_qasm_string
+    from src.core_compute.asic.qasm_loader import load_qasm_string
     qasm = "h q[0];\nx q[1];\ncx q[0], q[1];\nz q[0];"
     ops = load_qasm_string(qasm)
     assert len(ops) == 4
@@ -68,7 +68,7 @@ def test_run_asic_circuit_teleport():
 
 
 def test_apply_op_rx_requires_param():
-    from asic.circuit import Op
+    from src.core_compute.asic.circuit import Op
     state = product_state("0", "0")
     with pytest.raises(ValueError, match="Rx requires param"):
         apply_op(state, Op("Rx", [0]))  # param=None

@@ -4,8 +4,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from state import State, ket0
-from protocols.tamper_evident import run_legitimate_teleport, run_thief_teleport
+from src.core_compute.state import State, ket0
+from src.core_compute.protocols.tamper_evident import run_legitimate_teleport, run_thief_teleport
 
 
 def test_legitimate_teleport_fidelity_one():

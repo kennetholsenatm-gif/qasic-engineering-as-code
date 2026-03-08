@@ -4,7 +4,7 @@ Tests for pedagogical QKD: BB84 and E91 (protocols/qkd.py).
 from __future__ import annotations
 
 import pytest
-from protocols.qkd import run_bb84, run_e91
+from src.core_compute.protocols.qkd import run_bb84, run_e91
 
 
 def test_run_bb84_seeded_key_agreement():

@@ -7,7 +7,7 @@ app:
 
 paths:
   pipeline_base: "pipeline_result"
-  engineering_dir: "engineering"
+  engineering_dir: "src/core_compute/engineering"
   docs_dir: "docs"
 
 cors:

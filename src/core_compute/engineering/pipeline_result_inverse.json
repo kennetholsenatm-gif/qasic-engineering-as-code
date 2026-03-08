@@ -1,0 +1,13 @@
+{
+  "device": "cpu",
+  "target_topology_features": 10,
+  "num_meta_atoms": 1000,
+  "phase_min": 2.9901959896087646,
+  "phase_max": 3.287616491317749,
+  "phase_mean": 3.1431055068969727,
+  "phase_array_path": "pipeline_result_inverse_phases.npy",
+  "routing_result": {
+    "file": "C:\\Users\\kenne\\OneDrive\\Documents\\GitHub\\qasic-engineering-as-code\\engineering\\pipeline_result_routing.json"
+  },
+  "timestamp": "2026-03-08T02:09:09.695673Z"
+}

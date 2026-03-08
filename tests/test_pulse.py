@@ -14,8 +14,8 @@ if str(REPO_ROOT) not in sys.path:
 
 def test_pseudo_schedule_teleport():
     """Compile teleport ops to pseudo-schedule; no Qiskit required."""
-    from asic.circuit import protocol_teleport_ops
-    from pulse.compiler import compile_circuit_to_schedule
+    from src.core_compute.asic.circuit import protocol_teleport_ops
+    from src.core_compute.pulse.compiler import compile_circuit_to_schedule
     ops = protocol_teleport_ops()
     config = {"n_qubits": 3, "dt": 1e-9}
     # Without qiskit.pulse, compiler uses pseudo_schedule
@@ -30,7 +30,7 @@ def test_pseudo_schedule_teleport():
 
 def test_pseudo_schedule_instruction_structure():
     """Pseudo instructions have channel, t0, duration, gate."""
-    from pulse.pseudo_schedule import build_pseudo_schedule
+    from src.core_compute.pulse.pseudo_schedule import build_pseudo_schedule
     ops = [
         type("Op", (), {"gate": "H", "targets": [0], "param": None})(),
         type("Op", (), {"gate": "CNOT", "targets": [0, 1], "param": None})(),
@@ -44,7 +44,7 @@ def test_pseudo_schedule_instruction_structure():
 
 def test_compile_cli_pseudo(tmp_path):
     """CLI produces JSON output (pseudo when no qiskit pulse)."""
-    from pulse.compile_cli import main
+    from src.core_compute.pulse.compile_cli import main
     out_file = tmp_path / "schedule.json"
     # Run in repo root so asic is importable
     import os
@@ -53,10 +53,10 @@ def test_compile_cli_pseudo(tmp_path):
         os.chdir(REPO_ROOT)
         # Simulate: sys.argv for compile_cli
         import argparse
-        from pulse.compile_cli import load_circuit_ops, load_config
+        from src.core_compute.pulse.compile_cli import load_circuit_ops, load_config
         ops = load_circuit_ops("teleport")
         config = load_config(None)
-        from pulse.compiler import compile_circuit_to_schedule
+        from src.core_compute.pulse.compiler import compile_circuit_to_schedule
         sched = compile_circuit_to_schedule(ops, config)
         with open(out_file, "w") as f:
             json.dump(sched, f, indent=2)
@@ -73,8 +73,8 @@ def test_openpulse_schedule():
         from qiskit import pulse as _  # noqa: F401
     except ImportError:
         pytest.skip("qiskit.pulse not available")
-    from asic.circuit import protocol_teleport_ops
-    from pulse.openpulse_backend import build_schedule_openpulse
+    from src.core_compute.asic.circuit import protocol_teleport_ops
+    from src.core_compute.pulse.openpulse_backend import build_schedule_openpulse
     ops = protocol_teleport_ops()
     config = {"n_qubits": 3}
     sched = build_schedule_openpulse(ops, config, None)

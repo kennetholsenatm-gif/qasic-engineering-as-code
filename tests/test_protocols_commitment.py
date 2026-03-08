@@ -3,13 +3,13 @@ from __future__ import annotations
 
 import pytest
 
-from protocols.commitment import (
+from src.core_compute.protocols.commitment import (
     run_commitment_protocol,
     verify_commitment,
     commit,
     open_commitment,
 )
-from state import bell_pair
+from src.core_compute.state import bell_pair
 
 
 def test_verify_commitment_consistent():

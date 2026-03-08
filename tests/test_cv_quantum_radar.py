@@ -4,9 +4,9 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from state.cv_state import GaussianState, vacuum_covariance, thermal_covariance, symplectic_form
-from state.cv_gates import two_mode_squeezing, beam_splitter, tmsv_covariance
-from protocols.quantum_radar import (
+from src.core_compute.state.cv_state import GaussianState, vacuum_covariance, thermal_covariance, symplectic_form
+from src.core_compute.state.cv_gates import two_mode_squeezing, beam_splitter, tmsv_covariance
+from src.core_compute.protocols.quantum_radar import (
     tmsv_through_loss,
     state_H0_target_absent,
     mutual_information,

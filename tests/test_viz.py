@@ -9,7 +9,7 @@ import pytest
 
 import sys
 
-from engineering.viz_routing_phase import load_json, main
+from src.core_compute.engineering.viz_routing_phase import load_json, main
 
 
 def test_load_json_valid():

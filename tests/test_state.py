@@ -4,7 +4,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from state import State, product_state, bell_pair, ket0, ket1
+from src.core_compute.state import State, product_state, bell_pair, ket0, ket1
 
 
 def test_ket0_ket1():

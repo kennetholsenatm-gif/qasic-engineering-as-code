@@ -84,36 +84,28 @@ cli = [
 
 [project.scripts]
 qasic-dashboard = "dashboard.cli_dashboard:main"
-qasic-pulse = "pulse.compile_cli:main"
+qasic-pulse = "src.core_compute.pulse.compile_cli:main"
 qasic = "cli:cli"
 
 [tool.setuptools.packages.find]
 where = ["."]
 include = [
-  "state*",
-  "asic*",
-  "protocols*",
-  "pulse*",
+  "src*",
   "dashboard*",
-  "app*",
   "config*",
   "storage*",
-  "engineering*",
-  "orchestration*",
   "apps*",
 ]
 exclude = [
   "tests*",
   "demos*",
   "docs*",
-  "deploy*",
-  "infra*",
-  "frontend*",
+  "platform*",
 ]
 
 [tool.setuptools.package-data]
 "*" = ["*.yaml", "*.yml", "*.json"]
-pulse = ["schedule_config_schema.json"]
+"src.core_compute.pulse" = ["schedule_config_schema.json"]
 
 [tool.setuptools.exclude-package-data]
 "*" = ["*.pyc", "__pycache__"]

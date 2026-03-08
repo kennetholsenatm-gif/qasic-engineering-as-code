@@ -14,10 +14,10 @@ _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
-from asic.circuit import Op, protocol_teleport_ops, protocol_commitment_ops
+from src.core_compute.asic.circuit import Op, protocol_teleport_ops, protocol_commitment_ops
 
 try:
-    from engineering.run_protocol_on_ibm import (
+    from src.core_compute.engineering.run_protocol_on_ibm import (
         asic_ops_to_qiskit_circuit,
         get_protocol_ops,
         _extract_counts,
