@@ -31,6 +31,11 @@ export default function RunPipeline({ apiBase }) {
   const [logLines, setLogLines] = useState([])
   const logEndRef = useRef(null)
   const eventSourceRef = useRef(null)
+  // Circuit ingestion (Phase 1 & 2)
+  const [qasmString, setQasmString] = useState('')
+  const [circuitName, setCircuitName] = useState('')
+  const [fullPipelineWithCircuit, setFullPipelineWithCircuit] = useState(false)
+  const fileInputRef = useRef(null)
 
   const { data: projectsData } = useQuery({
     queryKey: ['projects', apiBase],
@@ -83,7 +88,12 @@ export default function RunPipeline({ apiBase }) {
   useEffect(() => {
     if (!taskId || !taskData) return
     if (taskData.status === 'SUCCESS' && taskData.result) {
-      setResult(taskData.result)
+      if (taskData.result.success === false) {
+        setError(taskData.result.error || 'Pipeline failed')
+        setResult(null)
+      } else {
+        setResult(taskData.result)
+      }
       setTaskId(null)
     }
     if (taskData.status === 'FAILURE') {
@@ -131,11 +141,32 @@ export default function RunPipeline({ apiBase }) {
     setResult(null)
     setError(null)
     setTaskId(null)
-    submitMutation.mutate({
-      backend,
-      fast,
-      project_id: projectId || undefined,
-    })
+    const body = qasmString.trim()
+      ? {
+          qasm_string: qasmString.trim(),
+          circuit_name: circuitName.trim() || undefined,
+          full_pipeline_with_circuit: fullPipelineWithCircuit,
+          backend,
+          fast,
+          project_id: projectId || undefined,
+        }
+      : {
+          backend,
+          fast,
+          project_id: projectId || undefined,
+        }
+    submitMutation.mutate(body)
+  }
+
+  function handleQasmFileChange(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      if (typeof reader.result === 'string') setQasmString(reader.result)
+    }
+    reader.readAsText(file)
+    if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
   const activeStep = taskData?.status === 'STARTED' ? 'routing' : null
@@ -152,7 +183,65 @@ export default function RunPipeline({ apiBase }) {
         <PipelineDag apiBase={apiBase} activeStep={activeStep} />
       </section>
 
+      <section className="mt-6">
+        <h2 className="mb-2 text-sm font-medium text-slate-400">Quantum circuit (optional)</h2>
+        <p className="mb-2 text-xs text-slate-500">
+          Paste OpenQASM 2 or upload a .qasm file to run the Algorithm-to-ASIC pipeline. Leave empty to run the default pipeline only.
+        </p>
+        <div className="space-y-2">
+          <textarea
+            id="qasm"
+            value={qasmString}
+            onChange={(e) => setQasmString(e.target.value)}
+            placeholder={'OPENQASM 2.0;\ninclude "qelib1.inc";\nqreg q[3];\nh q[0];\ncx q[0],q[1];\n...'}
+            rows={8}
+            className="w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 font-mono text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+          />
+          <div className="flex flex-wrap items-center gap-3">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".qasm,.qasm2"
+              onChange={handleQasmFileChange}
+              className="hidden"
+              id="qasm-file"
+            />
+            <label
+              htmlFor="qasm-file"
+              className="cursor-pointer rounded-lg border border-slate-600 bg-slate-700 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-600"
+            >
+              Upload .qasm file
+            </label>
+            <label htmlFor="circuit-name" className="text-sm text-slate-400">
+              Circuit name
+            </label>
+            <input
+              id="circuit-name"
+              type="text"
+              value={circuitName}
+              onChange={(e) => setCircuitName(e.target.value)}
+              placeholder="circuit"
+              className="w-40 rounded-lg border border-slate-600 bg-slate-800 px-3 py-1.5 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+            />
+          </div>
+        </div>
+      </section>
+
       <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+        {qasmString.trim() && (
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="full-pipeline-circuit"
+              checked={fullPipelineWithCircuit}
+              onChange={(e) => setFullPipelineWithCircuit(e.target.checked)}
+              className="h-4 w-4 rounded border-slate-600 bg-slate-800 text-sky-500 focus:ring-sky-500"
+            />
+            <label htmlFor="full-pipeline-circuit" className="text-sm text-slate-300">
+              Run full pipeline (routing + inverse) using this circuit&apos;s topology
+            </label>
+          </div>
+        )}
         {projects.length > 0 && (
           <div>
             <label htmlFor="project" className="mb-1.5 block text-sm font-medium text-slate-300">

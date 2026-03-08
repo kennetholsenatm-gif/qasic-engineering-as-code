@@ -121,6 +121,168 @@ def run_pipeline_task(self, output_base: str = "pipeline_result", fast: bool = F
     return result
 
 
+def _circuit_to_asic_result_serializable(raw: dict) -> dict:
+    """Build a JSON-serializable result from run_qasm_to_asic output (drop _topology, _interaction_graph; add nodes/edges)."""
+    out = {k: v for k, v in raw.items() if not k.startswith("_")}
+    out["geometry_manifest_path"] = raw.get("_geometry_manifest_path")
+    out["custom_asic_manifest_path"] = raw.get("_custom_asic_manifest_path")
+    graph = raw.get("_interaction_graph")
+    if graph is not None:
+        try:
+            import networkx as nx
+            out["nodes"] = list(nx.nodes(graph))
+            out["edges"] = [list(e) for e in nx.edges(graph)]
+        except Exception:
+            pass
+    return out
+
+
+@app.task(bind=True, name="qasic.circuit_to_asic")
+def circuit_to_asic_task(self, qasm_string: str, circuit_name: str | None = None, output_subdir: str | None = None):
+    """Run qasm_to_asic (Algorithm-to-ASIC) on QASM string. Returns serializable result for API."""
+    task_id = self.request.id if getattr(self.request, "id", None) else None
+    _publish_progress(task_id, "Starting circuit-to-ASIC", step="circuit_to_asic", done=False)
+    try:
+        from src.core_compute.engineering.qasm_to_asic_pipeline import run_qasm_to_asic
+    except ImportError:
+        _publish_progress(task_id, "Import error: qasm_to_asic not available", step="circuit_to_asic", done=True)
+        return {"success": False, "error": "qasm_to_asic pipeline not available"}
+    output_dir = output_subdir or str(ENGINEERING_DIR / "circuit_runs" / (task_id or "sync"))
+    os.makedirs(output_dir, exist_ok=True)
+    try:
+        raw = run_qasm_to_asic(
+            qasm_string=qasm_string,
+            output_dir=output_dir,
+            circuit_name=circuit_name or "circuit",
+        )
+        _publish_progress(task_id, "Circuit-to-ASIC completed", step="circuit_to_asic", done=True)
+        return {"success": True, "circuit_to_asic": _circuit_to_asic_result_serializable(raw)}
+    except Exception as e:
+        _publish_progress(task_id, str(e), step="circuit_to_asic", done=True)
+        return {"success": False, "error": str(e)}
+
+
+def _routing_from_circuit_graph(graph, fast: bool = False, hardware: bool = False) -> dict:
+    """Run routing QUBO in-process using circuit-derived interaction graph. Returns routing result dict (mapping, solver, etc.)."""
+    import numpy as np
+    from src.core_compute.asic.topology_builder import edges_to_interaction_matrix
+    from src.core_compute.engineering.routing_qubo_qaoa import (
+        build_routing_qubo,
+        solve_routing,
+        interpret_routing,
+    )
+    from datetime import datetime, timezone
+    nodes = sorted(graph.nodes())
+    n = len(nodes)
+    if n == 0:
+        return {"num_logical_qubits": 0, "num_physical_nodes": 0, "topology": "custom", "mapping": []}
+    node_to_idx = {q: i for i, q in enumerate(nodes)}
+    edges = [(node_to_idx[u], node_to_idx[v]) for u, v in graph.edges()]
+    interaction_matrix = edges_to_interaction_matrix(edges, n)
+    qp = build_routing_qubo(num_logical_qubits=n, num_physical_nodes=n, interaction_matrix=interaction_matrix)
+    maxiter = 20 if fast else 100
+    reps = 1 if fast else 2
+    result = solve_routing(qp, use_qaoa=True, qaoa_reps=reps, optimizer_maxiter=maxiter)
+    x_vals = result.get("x")
+    mapping = []
+    if x_vals is not None:
+        x_vals = np.asarray(x_vals).ravel()
+        mapping = interpret_routing(x_vals, n, n)
+    return {
+        "num_logical_qubits": n,
+        "num_physical_nodes": n,
+        "topology": "custom",
+        "solver": result.get("solver", "unknown"),
+        "objective_value": float(result["fval"]) if result.get("fval") is not None else None,
+        "backend": None,
+        "mapping": [{"logical": a, "physical": b} for a, b in mapping],
+        "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+    }
+
+
+@app.task(bind=True, name="qasic.run_pipeline_with_circuit")
+def run_pipeline_with_circuit_task(
+    self,
+    qasm_string: str,
+    circuit_name: str = "circuit",
+    output_base: str = "pipeline_result",
+    fast: bool = False,
+    routing_method: str = "qaoa",
+    model: str = "mlp",
+    heac: bool = False,
+    hardware: bool = False,
+):
+    """Run qasm_to_asic then routing (circuit-derived) then run_pipeline.py --skip-routing (inverse + optional HEaC)."""
+    task_id = self.request.id if getattr(self.request, "id", None) else None
+    _publish_progress(task_id, "Starting pipeline with circuit", step="pipeline", done=False)
+    try:
+        from src.core_compute.engineering.qasm_to_asic_pipeline import run_qasm_to_asic
+    except ImportError:
+        _publish_progress(task_id, "qasm_to_asic not available", step="pipeline", done=True)
+        return {"success": False, "error": "qasm_to_asic pipeline not available"}
+    output_dir = str(ENGINEERING_DIR / "circuit_runs" / (task_id or "sync"))
+    os.makedirs(output_dir, exist_ok=True)
+    try:
+        raw = run_qasm_to_asic(
+            qasm_string=qasm_string,
+            output_dir=output_dir,
+            circuit_name=circuit_name,
+        )
+    except Exception as e:
+        _publish_progress(task_id, str(e), step="pipeline", done=True)
+        return {"success": False, "error": str(e)}
+    graph = raw.get("_interaction_graph")
+    if graph is None or graph.number_of_nodes() == 0:
+        _publish_progress(task_id, "No interaction graph from circuit", step="pipeline", done=True)
+        return {"success": True, "circuit_to_asic": _circuit_to_asic_result_serializable(raw), "pipeline": None}
+    _publish_progress(task_id, "Running routing (circuit-derived topology)", step="routing", done=False)
+    routing_result = _routing_from_circuit_graph(graph, fast=fast, hardware=hardware)
+    routing_json = ENGINEERING_DIR / f"{output_base}_routing.json"
+    with open(routing_json, "w", encoding="utf-8") as f:
+        json.dump(routing_result, f, indent=2)
+    _publish_progress(task_id, "Running inverse design and pipeline", step="pipeline", done=False)
+    cmd = [sys.executable, str(ENGINEERING_DIR / "run_pipeline.py"), "-o", output_base, "--skip-routing"]
+    if fast:
+        cmd.append("--fast")
+    if model in ("mlp", "gnn"):
+        cmd.extend(["--model", model])
+    if heac:
+        cmd.append("--heac")
+    if hardware:
+        cmd.append("--hardware")
+    code, out, err = _run_cmd(cmd, timeout=1800)
+    if code != 0:
+        _publish_progress(task_id, f"Pipeline failed: {err or out}", step="pipeline", done=True)
+        try:
+            from storage.db import update_pipeline_run
+            update_pipeline_run(task_id=task_id, status="failed", error_message=err or out)
+        except Exception:
+            pass
+        return {"success": False, "exit_code": code, "stderr": err, "stdout": out, "circuit_to_asic": _circuit_to_asic_result_serializable(raw)}
+    _publish_progress(task_id, "Pipeline completed", step="pipeline", done=True)
+    try:
+        from storage.db import update_pipeline_run
+        update_pipeline_run(
+            task_id=task_id,
+            status="success",
+            routing_path=str(routing_json) if routing_json.exists() else None,
+            inverse_path=str(ENGINEERING_DIR / f"{output_base}_inverse.json") if (ENGINEERING_DIR / f"{output_base}_inverse.json").exists() else None,
+            gds_path=str(ENGINEERING_DIR / f"{output_base}.gds") if (ENGINEERING_DIR / f"{output_base}.gds").exists() else None,
+        )
+    except Exception:
+        pass
+    result = {"success": True, "output_base": output_base, "circuit_to_asic": _circuit_to_asic_result_serializable(raw)}
+    inv_path = ENGINEERING_DIR / f"{output_base}_inverse.json"
+    if inv_path.exists():
+        try:
+            with open(inv_path, encoding="utf-8") as f:
+                result["inverse"] = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            pass
+    result["routing"] = routing_result
+    return result
+
+
 @app.task(bind=True, name="qasic.run_dag")
 def run_dag_task(self, run_id: int):
     """Execute a DAG run (topological order, resolve I/O, dispatch per node)."""

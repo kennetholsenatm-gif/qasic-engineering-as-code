@@ -120,6 +120,10 @@ class RunRoutingRequest(BaseModel):
     routing_method: RoutingMethodKind | None = None
 
 
+# Max QASM length to avoid abuse (e.g. 100KB)
+QASM_STRING_MAX_LENGTH = 100_000
+
+
 class RunPipelineRequest(BaseModel):
     backend: BackendKind = "sim"
     fast: bool = False
@@ -129,6 +133,11 @@ class RunPipelineRequest(BaseModel):
     skip_routing: bool = False
     skip_inverse: bool = False
     project_id: int | None = None
+    # Phase 1: circuit ingestion — when set, run qasm_to_asic and return that result (sync or async)
+    qasm_string: str | None = None
+    circuit_name: str | None = None
+    # Phase 2: when True and qasm_string is set, run full pipeline with circuit-derived routing
+    full_pipeline_with_circuit: bool = False
 
 
 class RunInverseRequest(BaseModel):
@@ -827,12 +836,104 @@ def _celery_available() -> bool:
         return False
 
 
+def _validate_qasm_string(qasm_string: str) -> None:
+    """Raise HTTPException if qasm_string is invalid (length or parse)."""
+    if len(qasm_string) > QASM_STRING_MAX_LENGTH:
+        raise HTTPException(
+            status_code=400,
+            detail=f"QASM string too long (max {QASM_STRING_MAX_LENGTH} characters)",
+        )
+    try:
+        from src.core_compute.asic.qasm_loader import interaction_graph_from_qasm_string
+        interaction_graph_from_qasm_string(qasm_string)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=_sanitize_detail(e, "Invalid QASM: parse failed"))
+
+
+def _run_circuit_to_asic_sync(qasm_string: str, circuit_name: str | None) -> dict:
+    """Run run_qasm_to_asic in process and return JSON-serializable result."""
+    from src.backend.tasks import _circuit_to_asic_result_serializable
+    from src.core_compute.engineering.qasm_to_asic_pipeline import run_qasm_to_asic
+    with tempfile.TemporaryDirectory(prefix="qasic_circuit_") as tmp:
+        raw = run_qasm_to_asic(
+            qasm_string=qasm_string,
+            output_dir=tmp,
+            circuit_name=circuit_name or "circuit",
+        )
+        return {"success": True, "circuit_to_asic": _circuit_to_asic_result_serializable(raw)}
+
+
+def _run_pipeline_with_circuit_sync(req: RunPipelineRequest) -> dict:
+    """Run qasm_to_asic, then routing (circuit-derived), then run_pipeline.py --skip-routing. Returns combined result."""
+    from src.backend.tasks import _circuit_to_asic_result_serializable, _routing_from_circuit_graph
+    from src.core_compute.engineering.qasm_to_asic_pipeline import run_qasm_to_asic
+    with tempfile.TemporaryDirectory(prefix="qasic_circuit_") as tmp:
+        raw = run_qasm_to_asic(
+            qasm_string=req.qasm_string,
+            output_dir=tmp,
+            circuit_name=req.circuit_name or "circuit",
+        )
+    graph = raw.get("_interaction_graph")
+    if graph is None or graph.number_of_nodes() == 0:
+        return {"success": True, "circuit_to_asic": _circuit_to_asic_result_serializable(raw), "pipeline": None}
+    routing_result = _routing_from_circuit_graph(graph, fast=req.fast, hardware=req.backend.lower() == "hardware")
+    routing_json_path = ENGINEERING_DIR / f"{PIPELINE_BASE}_routing.json"
+    with open(routing_json_path, "w", encoding="utf-8") as f:
+        json.dump(routing_result, f, indent=2)
+    cmd = [sys.executable, str(ENGINEERING_DIR / "run_pipeline.py"), "-o", PIPELINE_BASE, "--skip-routing"]
+    if req.fast:
+        cmd.append("--fast")
+    if req.model:
+        cmd.extend(["--model", req.model])
+    if req.heac:
+        cmd.append("--heac")
+    if req.backend == "hardware":
+        cmd.append("--hardware")
+    code, err = _run(cmd)
+    if code != 0:
+        raise HTTPException(status_code=503, detail=_sanitize_detail(RuntimeError(err or "Pipeline run failed"), "Pipeline with circuit failed."))
+    result = {"success": True, "circuit_to_asic": _circuit_to_asic_result_serializable(raw), "routing": routing_result}
+    if ROUTING_JSON.exists():
+        try:
+            with open(ROUTING_JSON, encoding="utf-8") as f:
+                result["routing"] = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            pass
+    if INVERSE_JSON.exists():
+        try:
+            with open(INVERSE_JSON, encoding="utf-8") as f:
+                result["inverse"] = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            pass
+    return result
+
+
 @app.post("/api/run/pipeline/async")
 @limit_heavy
 def run_pipeline_async(request: Request, req: RunPipelineRequest):
-    """Enqueue pipeline run as Celery task. Returns task_id; poll GET /api/tasks/{task_id} for status. Requires CELERY_BROKER_URL (e.g. redis)."""
+    """Enqueue pipeline run as Celery task. Returns task_id; poll GET /api/tasks/{task_id} for status. Requires CELERY_BROKER_URL (e.g. redis). When qasm_string is provided, enqueues circuit-to-ASIC (and optionally full pipeline with circuit)."""
     if not _celery_available():
         raise HTTPException(status_code=503, detail="Celery/Redis not configured (set CELERY_BROKER_URL)")
+    if req.qasm_string:
+        _validate_qasm_string(req.qasm_string)
+        from src.backend.tasks import circuit_to_asic_task, run_pipeline_with_circuit_task
+        if req.full_pipeline_with_circuit:
+            task = run_pipeline_with_circuit_task.delay(
+                qasm_string=req.qasm_string,
+                circuit_name=req.circuit_name or "circuit",
+                output_base=PIPELINE_BASE,
+                fast=req.fast,
+                routing_method=req.routing_method or "qaoa",
+                model=req.model or "mlp",
+                heac=req.heac,
+                hardware=req.backend.lower() == "hardware",
+            )
+            return {"task_id": task.id, "status": "PENDING", "message": "Pipeline with circuit enqueued"}
+        task = circuit_to_asic_task.delay(
+            qasm_string=req.qasm_string,
+            circuit_name=req.circuit_name,
+        )
+        return {"task_id": task.id, "status": "PENDING", "message": "Circuit-to-ASIC task enqueued"}
     if log:
         log.info("Enqueueing pipeline task", fast=req.fast, routing_method=req.routing_method or "qaoa", model=req.model or "mlp", heac=req.heac)
     from src.backend.tasks import run_pipeline_task
@@ -881,7 +982,15 @@ def get_task_status(task_id: str):
 @app.post("/api/run/pipeline")
 @limit_heavy
 def run_pipeline(request: Request, req: RunPipelineRequest):
-    """Run full pipeline: routing then inverse design. Optional: routing_method, model, heac. Use /async when Celery available."""
+    """Run full pipeline: routing then inverse design. Optional: routing_method, model, heac. When qasm_string is provided, runs circuit-to-ASIC (Phase 1) or full pipeline with circuit (Phase 2). Use /async when Celery available."""
+    if req.qasm_string:
+        _validate_qasm_string(req.qasm_string)
+        if _celery_available() and os.environ.get("FORCE_ASYNC_HEAVY", "").strip().lower() in ("1", "true", "yes"):
+            raise HTTPException(status_code=400, detail="Use POST /api/run/pipeline/async for circuit/pipeline runs (Celery worker required).")
+        if req.full_pipeline_with_circuit:
+            result = _run_pipeline_with_circuit_sync(req)
+            return result
+        return _run_circuit_to_asic_sync(req.qasm_string, req.circuit_name)
     if os.environ.get("FORCE_ASYNC_HEAVY", "").strip().lower() in ("1", "true", "yes") and _celery_available():
         raise HTTPException(status_code=400, detail="Use POST /api/run/pipeline/async for pipeline runs (Celery worker required).")
     run_id = None
