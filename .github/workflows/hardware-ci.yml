@@ -6,30 +6,20 @@ on:
   push:
     branches: [main, master]
     paths:
-      - 'protocols/**'
-      - 'asic/**'
-      - 'engineering/**'
+      - 'src/**'
       - 'apps/**'
-      - 'state/**'
       - 'docs/**'
       - 'tests/**'
       - 'requirements*.txt'
-      - 'app/**'
-      - 'frontend/**'
       - '.github/workflows/**'
   pull_request:
     branches: [main, master]
     paths:
-      - 'protocols/**'
-      - 'asic/**'
-      - 'engineering/**'
+      - 'src/**'
       - 'apps/**'
-      - 'state/**'
       - 'docs/**'
       - 'tests/**'
       - 'requirements*.txt'
-      - 'app/**'
-      - 'frontend/**'
       - '.github/workflows/**'
 
 jobs:
@@ -47,15 +37,15 @@ jobs:
       - name: SCA Python (requirements)
         run: |
           pip-audit -r requirements.txt
-          pip-audit -r app/requirements.txt
-          [ ! -f engineering/requirements-engineering.txt ] || pip-audit -r engineering/requirements-engineering.txt
+          pip-audit -r src/backend/requirements.txt
+          [ ! -f src/core_compute/engineering/requirements-engineering.txt ] || pip-audit -r src/core_compute/engineering/requirements-engineering.txt
       - name: Setup Node (frontend SCA)
         uses: actions/setup-node@v4
         with:
           node-version: '20'
       - name: SCA frontend (npm audit)
         run: |
-          cd frontend && npm audit --audit-level=high
+          cd src/frontend && npm audit --audit-level=high
         continue-on-error: true
 
   sast:
@@ -69,10 +59,10 @@ jobs:
           cache: 'pip'
       - name: Install Bandit
         run: pip install bandit
-      - name: Run Bandit (app + engineering)
-        run: bandit -r app/ engineering/ -ll -x '*/tests/*','*_test.py' --format json -o bandit-report.json || true
+      - name: Run Bandit (backend + core_compute)
+        run: bandit -r src/backend/ src/core_compute/ -ll -x '*/tests/*','*_test.py' --format json -o bandit-report.json || true
       - name: Run Bandit (exit on high)
-        run: bandit -r app/ engineering/ -ll -x '*/tests/*','*_test.py' -q
+        run: bandit -r src/backend/ src/core_compute/ -ll -x '*/tests/*','*_test.py' -q
 
   test:
     name: Unit tests
@@ -87,7 +77,7 @@ jobs:
         run: |
           pip install -r requirements.txt
           pip install -r requirements-test.txt
-          pip install -r engineering/requirements-engineering.txt
+          pip install -r src/core_compute/engineering/requirements-engineering.txt
       - name: Run pytest
         run: python -m pytest tests/ -v --ignore=tests/test_engineering_protocol_ibm.py
 
@@ -104,28 +94,31 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
-          pip install -r engineering/requirements-engineering.txt
+          pip install -r src/core_compute/engineering/requirements-engineering.txt
           pip install -r requirements-test.txt
+          pip install -e .
       - name: Run pipeline (routing + inverse + HEaC, --fast, no Meep)
         run: |
-          python engineering/run_pipeline.py -o ci_result --heac --fast
+          python src/core_compute/engineering/run_pipeline.py -o ci_result --heac --fast
       - name: Thermodynamic validator
         run: |
-          if [ -f engineering/ci_result_inverse_phases.npy ]; then
-            python engineering/thermodynamic_validator.py engineering/ci_result_inverse_phases.npy -j
-          elif [ -f engineering/ci_result_inverse.json ]; then
-            python engineering/thermodynamic_validator.py engineering/ci_result_inverse.json -j
+          ENG=src/core_compute/engineering
+          if [ -f $ENG/ci_result_inverse_phases.npy ]; then
+            python $ENG/thermodynamic_validator.py $ENG/ci_result_inverse_phases.npy -j
+          elif [ -f $ENG/ci_result_inverse.json ]; then
+            python $ENG/thermodynamic_validator.py $ENG/ci_result_inverse.json -j
           else
             echo "No phases/inverse output; skipping thermodynamic validator"
           fi
       - name: HIL compile pulse and calibration and routing
-        run: python -m pulse --circuit teleport -o engineering/ci_schedule.json
+        run: qasic-pulse --circuit teleport -o src/core_compute/engineering/ci_schedule.json
       - name: HIL calibration and routing
         run: |
-          if [ -f engineering/ci_baseline/ci_synthetic_telemetry.json ]; then
-            python -m engineering.calibration.run_calibration_cycle engineering/ci_baseline/ci_synthetic_telemetry.json -o engineering/ci_decoherence_from_calibration.json --n-nodes 3
-            if [ -f engineering/ci_decoherence_from_calibration.json ]; then
-              python -m engineering.routing_qubo_qaoa -o engineering/ci_hil_routing.json --decoherence-file engineering/ci_decoherence_from_calibration.json
+          ENG=src/core_compute/engineering
+          if [ -f $ENG/ci_baseline/ci_synthetic_telemetry.json ]; then
+            python -m src.core_compute.engineering.calibration.run_calibration_cycle $ENG/ci_baseline/ci_synthetic_telemetry.json -o $ENG/ci_decoherence_from_calibration.json --n-nodes 3
+            if [ -f $ENG/ci_decoherence_from_calibration.json ]; then
+              python -m src.core_compute.engineering.routing_qubo_qaoa -o $ENG/ci_hil_routing.json --decoherence-file $ENG/ci_decoherence_from_calibration.json
             fi
           fi
       - name: Run HIL assertions
@@ -134,8 +127,9 @@ jobs:
           python -m pytest tests/test_hil_ci.py -v
       - name: Prepare pipeline artifacts
         run: |
+          ENG=src/core_compute/engineering
           mkdir -p ci-artifacts
-          for f in engineering/ci_result_routing.json engineering/ci_result_inverse.json engineering/ci_result_inverse_phases.npy engineering/ci_result_geometry_manifest.json engineering/ci_schedule.json engineering/ci_decoherence_from_calibration.json engineering/ci_hil_routing.json; do
+          for f in $ENG/ci_result_routing.json $ENG/ci_result_inverse.json $ENG/ci_result_inverse_phases.npy $ENG/ci_result_geometry_manifest.json $ENG/ci_schedule.json $ENG/ci_decoherence_from_calibration.json $ENG/ci_hil_routing.json; do
             [ -f "$f" ] && cp "$f" ci-artifacts/
           done
       - name: Upload pipeline artifacts
@@ -259,17 +253,19 @@ jobs:
           name: pipeline-outputs
       - name: Copy artifacts to engineering
         run: |
+          ENG=src/core_compute/engineering
           for f in ci_result_routing.json ci_result_inverse.json ci_result_inverse_phases.npy ci_result_geometry_manifest.json ci_schedule.json ci_decoherence_from_calibration.json ci_hil_routing.json; do
-            [ -f "$f" ] && cp "$f" engineering/
+            [ -f "$f" ] && cp "$f" $ENG/
           done
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
       - name: Run manifest diff script
         run: |
+          ENG=src/core_compute/engineering
           pip install -r requirements.txt
-          if [ -f engineering/ci_result_geometry_manifest.json ]; then
-            python engineering/ci_gds_diff.py engineering/ci_result_geometry_manifest.json --phases engineering/ci_result_inverse_phases.npy -o engineering/ci_diff_report.md || echo "Diff script failed; step continues"
+          if [ -f $ENG/ci_result_geometry_manifest.json ]; then
+            python $ENG/ci_gds_diff.py $ENG/ci_result_geometry_manifest.json --phases $ENG/ci_result_inverse_phases.npy -o $ENG/ci_diff_report.md || echo "Diff script failed; step continues"
           else
             echo "No manifest artifact; diff skipped"
           fi
