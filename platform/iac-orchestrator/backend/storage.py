@@ -39,6 +39,13 @@ def update_pipeline(pid: int, name: str | None = None, nodes: list[dict] | None 
     return rec
 
 
+def delete_pipeline(pid: int) -> bool:
+    if pid not in _pipelines:
+        return False
+    del _pipelines[pid]
+    return True
+
+
 def list_runs(pipeline_id: int) -> list[dict]:
     return [r for r in _runs.values() if r.get("pipeline_id") == pipeline_id]
 

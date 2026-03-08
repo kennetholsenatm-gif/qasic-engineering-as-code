@@ -343,7 +343,12 @@ def list_projects() -> list[dict[str, Any]]:
     try:
         from sqlalchemy import text
         with engine.connect() as conn:
-            r = conn.execute(text("SELECT id, name, description, config, mlflow_experiment_id, created_at, updated_at FROM projects ORDER BY updated_at DESC"))
+            r = conn.execute(text("""
+                SELECT p.id, p.name, p.description, p.config, p.mlflow_experiment_id, p.created_at, p.updated_at,
+                       (SELECT COUNT(*) FROM pipeline_runs pr WHERE pr.project_id = p.id AND pr.status = 'running') AS active_runs
+                FROM projects p
+                ORDER BY p.updated_at DESC
+            """))
             rows = r.fetchall()
         return [
             {
@@ -354,11 +359,70 @@ def list_projects() -> list[dict[str, Any]]:
                 "mlflow_experiment_id": row[4],
                 "created_at": row[5].isoformat() if row[5] else None,
                 "updated_at": row[6].isoformat() if row[6] else None,
+                "active_runs": row[7] if len(row) > 7 else 0,
             }
             for row in rows
         ]
     except Exception:
-        return []
+        try:
+            with engine.connect() as conn:
+                r = conn.execute(text("SELECT id, name, description, config, mlflow_experiment_id, created_at, updated_at FROM projects ORDER BY updated_at DESC"))
+                rows = r.fetchall()
+            return [
+                {
+                    "id": row[0],
+                    "name": row[1],
+                    "description": row[2] or "",
+                    "config": row[3] or {},
+                    "mlflow_experiment_id": row[4],
+                    "created_at": row[5].isoformat() if row[5] else None,
+                    "updated_at": row[6].isoformat() if row[6] else None,
+                    "active_runs": 0,
+                }
+                for row in rows
+            ]
+        except Exception:
+            return []
+
+
+def update_project(project_id: int, name: str | None = None, description: str | None = None) -> bool:
+    """Update project name and/or description."""
+    engine = get_engine()
+    if engine is None:
+        return False
+    try:
+        from sqlalchemy import text
+        updates = ["updated_at = :now"]
+        params = {"id": project_id, "now": datetime.now(timezone.utc)}
+        if name is not None:
+            updates.append("name = :name")
+            params["name"] = name
+        if description is not None:
+            updates.append("description = :description")
+            params["description"] = description
+        if len(params) <= 2:
+            return True
+        with engine.connect() as conn:
+            conn.execute(text(f"UPDATE projects SET {', '.join(updates)} WHERE id = :id"), params)
+            conn.commit()
+        return True
+    except Exception:
+        return False
+
+
+def delete_project(project_id: int) -> bool:
+    """Delete a project. Pipeline runs referencing it will have project_id set to NULL (ON DELETE SET NULL)."""
+    engine = get_engine()
+    if engine is None:
+        return False
+    try:
+        from sqlalchemy import text
+        with engine.connect() as conn:
+            conn.execute(text("DELETE FROM projects WHERE id = :id"), {"id": project_id})
+            conn.commit()
+        return True
+    except Exception:
+        return False
 
 
 def update_project_mlflow_experiment(project_id: int, mlflow_experiment_id: str) -> bool:

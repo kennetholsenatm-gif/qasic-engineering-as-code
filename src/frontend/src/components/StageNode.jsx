@@ -1,5 +1,6 @@
 import { memo } from 'react'
-import { Handle, Position } from '@xyflow/react'
+import { Handle, Position, useReactFlow } from '@xyflow/react'
+import { X } from 'lucide-react'
 
 const STAGE_LABELS = {
   tofu_init: 'Tofu init',
@@ -10,9 +11,15 @@ const STAGE_LABELS = {
   script: 'Script',
 }
 
-function StageNode({ data, selected }) {
+function StageNode({ id, data, selected }) {
+  const { deleteElements } = useReactFlow()
   const stageType = data?.stage_type || 'script'
   const label = data?.label || STAGE_LABELS[stageType] || stageType
+
+  const handleDelete = (e) => {
+    e.stopPropagation()
+    deleteElements({ nodes: [{ id }] })
+  }
 
   return (
     <div
@@ -32,10 +39,23 @@ function StageNode({ data, selected }) {
         id="input"
         className="!w-3 !h-3 !border-2 !-left-1.5 !border-sky-400 !bg-slate-600"
       />
-      <div className="text-xs font-medium text-slate-400 uppercase tracking-wider">
-        {STAGE_LABELS[stageType] || stageType}
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="text-xs font-medium text-slate-400 uppercase tracking-wider">
+            {STAGE_LABELS[stageType] || stageType}
+          </div>
+          <div className="text-sm font-semibold text-slate-100 mt-0.5">{label}</div>
+        </div>
+        <button
+          type="button"
+          onClick={handleDelete}
+          className="shrink-0 rounded p-0.5 text-slate-400 hover:bg-red-900/40 hover:text-red-300 transition-colors"
+          title="Delete node"
+          aria-label="Delete node"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
       </div>
-      <div className="text-sm font-semibold text-slate-100 mt-0.5">{label}</div>
       <Handle
         type="source"
         position={Position.Right}

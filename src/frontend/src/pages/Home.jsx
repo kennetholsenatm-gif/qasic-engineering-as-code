@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import {
   Play,
   Route,
@@ -7,9 +8,26 @@ import {
   BookOpen,
   Box,
   Radio,
-  Satellite,
   FlaskConical,
+  FolderOpen,
+  Loader2,
 } from 'lucide-react'
+
+function fetchProjects(apiBase) {
+  return fetch(`${apiBase}/api/projects`).then(async (r) => {
+    if (!r.ok) return { projects: [] }
+    return r.json()
+  })
+}
+
+function formatDate(iso) {
+  if (!iso) return ''
+  try {
+    return new Date(iso).toLocaleDateString(undefined, { dateStyle: 'medium' })
+  } catch {
+    return ''
+  }
+}
 
 const actions = [
   {
@@ -62,7 +80,15 @@ const actions = [
   },
 ]
 
-export default function Home() {
+export default function Home({ apiBase = '' }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ['projects', apiBase],
+    queryFn: () => fetchProjects(apiBase),
+    staleTime: 60_000,
+  })
+  const projects = data?.projects || []
+  const recentProjects = projects.slice(0, 3)
+
   return (
     <>
       <h1 className="text-2xl font-semibold text-slate-100">QASIC Engineering-as-Code</h1>
@@ -89,6 +115,49 @@ export default function Home() {
           ))}
         </div>
       </section>
+
+      {apiBase && (
+        <section className="mt-10">
+          <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-500">
+            Recent projects
+          </h2>
+          {isLoading ? (
+            <div className="flex items-center gap-2 text-slate-500">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span className="text-sm">Loading…</span>
+            </div>
+          ) : recentProjects.length === 0 ? (
+            <p className="text-sm text-slate-500">
+              No projects yet.{' '}
+              <Link to="/projects" className="text-sky-400 hover:underline">Create one</Link> to scope pipeline runs.
+            </p>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {recentProjects.map((p) => (
+                <Link
+                  key={p.id}
+                  to={`/results?project_id=${p.id}`}
+                  className="flex items-center gap-3 rounded-xl border border-slate-700 bg-slate-800/60 px-4 py-3 text-left transition-colors hover:border-sky-500/40 hover:bg-slate-700/40"
+                >
+                  <FolderOpen className="h-5 w-5 shrink-0 text-sky-400" />
+                  <div className="min-w-0 flex-1">
+                    <span className="font-medium text-slate-100">{p.name}</span>
+                    {p.updated_at && (
+                      <p className="text-xs text-slate-500 mt-0.5">Updated {formatDate(p.updated_at)}</p>
+                    )}
+                  </div>
+                  <span className="text-xs text-slate-500 shrink-0">View →</span>
+                </Link>
+              ))}
+            </div>
+          )}
+          {projects.length > 3 && (
+            <p className="mt-3">
+              <Link to="/projects" className="text-sm text-sky-400 hover:underline">View all projects</Link>
+            </p>
+          )}
+        </section>
+      )}
     </>
   )
 }

@@ -13,7 +13,7 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import StageNode from '../components/StageNode'
-import { Save, Play, Loader2, List } from 'lucide-react'
+import { Save, Play, Loader2, List, Trash2, Eraser } from 'lucide-react'
 
 const nodeTypes = { stageNode: StageNode }
 
@@ -200,6 +200,24 @@ function PipelinesInner({ apiBase }) {
     },
   })
 
+  const deletePipelineMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`${apiBase}/api/pipelines/${pipelineId}`, { method: 'DELETE' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.detail || res.statusText)
+      return data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pipelines', apiBase] })
+      setPipelineId(null)
+      setPipelineName('New pipeline')
+      setNodes([])
+      setEdges([])
+      setRunResult(null)
+      setSelectedRunId(null)
+    },
+  })
+
   const { data: runsData } = useQuery({
     queryKey: ['runs', apiBase, pipelineId],
     queryFn: () =>
@@ -299,7 +317,34 @@ function PipelinesInner({ apiBase }) {
               {runMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
               Run
             </button>
+            <button
+              type="button"
+              onClick={() => { setNodes([]); setEdges([]) }}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-600 bg-slate-700 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-600"
+              title="Clear all nodes and edges"
+            >
+              <Eraser className="h-4 w-4" />
+              Clear canvas
+            </button>
+            {pipelineId && (
+              <button
+                type="button"
+                onClick={() => window.confirm('Delete this pipeline? This cannot be undone.') && deletePipelineMutation.mutate()}
+                disabled={deletePipelineMutation.isPending}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-red-600 bg-red-900/50 px-3 py-1.5 text-sm text-red-200 hover:bg-red-800/50 disabled:opacity-60"
+                title="Delete pipeline"
+              >
+                {deletePipelineMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                Delete
+              </button>
+            )}
           </div>
+          {deletePipelineMutation.isError && (
+            <p className="mb-2 text-sm text-red-400">{deletePipelineMutation.error.message}</p>
+          )}
+          <p className="mb-2 text-xs text-slate-500">
+            Select a node and press Backspace to delete.
+          </p>
 
           {runResult && (
             <div className="mb-2 rounded-lg bg-slate-800 px-3 py-2 text-sm text-slate-300">

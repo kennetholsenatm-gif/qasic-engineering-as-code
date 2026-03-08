@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { Loader2, Terminal, CheckCircle, AlertCircle } from 'lucide-react'
+import { Loader2, Terminal, CheckCircle, AlertCircle, Square, Trash2, FileUp } from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
 import Editor from '@monaco-editor/react'
 import PipelineDag from '../components/PipelineDag'
@@ -41,6 +41,7 @@ export default function RunPipeline({ apiBase }) {
   const fileInputRef = useRef(null)
   const [validationResult, setValidationResult] = useState(null) // { valid, error?, line? }
   const [nodeStatuses, setNodeStatuses] = useState({}) // { [stepId]: 'pending' | 'running' | 'success' | 'failed' }
+  const [loadedFileName, setLoadedFileName] = useState(null) // "filename.qasm" after upload/drop
   const editorRef = useRef(null)
   const monacoRef = useRef(null)
   const validationTimeoutRef = useRef(null)
@@ -163,6 +164,11 @@ export default function RunPipeline({ apiBase }) {
     }
   }, [qasmString])
 
+  // Clear file-loaded badge when editor is cleared
+  useEffect(() => {
+    if (!qasmString.trim()) setLoadedFileName(null)
+  }, [qasmString])
+
   // Debounced live validation (500 ms)
   useEffect(() => {
     if (validationTimeoutRef.current) clearTimeout(validationTimeoutRef.current)
@@ -240,7 +246,12 @@ export default function RunPipeline({ apiBase }) {
       const f = files[0]
       if (f) {
         const reader = new FileReader()
-        reader.onload = () => { if (typeof reader.result === 'string') setQasmString(reader.result) }
+        reader.onload = () => {
+          if (typeof reader.result === 'string') {
+            setQasmString(reader.result)
+            setLoadedFileName(f.name)
+          }
+        }
         reader.readAsText(f)
       }
     },
@@ -284,11 +295,27 @@ export default function RunPipeline({ apiBase }) {
     if (!file) return
     const reader = new FileReader()
     reader.onload = () => {
-      if (typeof reader.result === 'string') setQasmString(reader.result)
+      if (typeof reader.result === 'string') {
+        setQasmString(reader.result)
+        setLoadedFileName(file.name)
+      }
     }
     reader.readAsText(file)
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
+
+  const cancelTaskMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`${apiBase}/api/tasks/${taskId}/cancel`, { method: 'POST' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.detail || res.statusText)
+      return data
+    },
+    onSuccess: () => {
+      setTaskId(null)
+      setNodeStatuses({})
+    },
+  })
 
   const activeStep = taskData?.status === 'STARTED' ? 'routing' : null
   const [dagTab, setDagTab] = useState('pipeline') // 'pipeline' | 'topology'
@@ -371,6 +398,12 @@ export default function RunPipeline({ apiBase }) {
               onChange={handleQasmFileChange}
               className="hidden"
             />
+            {loadedFileName && (
+              <span className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-600/50 bg-emerald-900/20 px-2.5 py-1 text-xs font-medium text-emerald-300">
+                <FileUp className="h-3.5 w-3.5" />
+                File loaded: {loadedFileName}
+              </span>
+            )}
             <label htmlFor="circuit-name" className="text-sm text-slate-400">
               Circuit name
             </label>
@@ -482,14 +515,37 @@ export default function RunPipeline({ apiBase }) {
               'Run pipeline'
             )}
           </button>
+          {taskId && (taskData?.status === 'PENDING' || taskData?.status === 'STARTED') && (
+            <button
+              type="button"
+              onClick={() => cancelTaskMutation.mutate()}
+              disabled={cancelTaskMutation.isPending}
+              className="inline-flex items-center gap-2 rounded-lg border border-red-600 bg-red-900/40 px-4 py-2 text-sm font-medium text-red-200 hover:bg-red-800/50 disabled:opacity-60"
+            >
+              {cancelTaskMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Square className="h-4 w-4" />}
+              Stop
+            </button>
+          )}
         </div>
+        {cancelTaskMutation.isError && <p className="text-sm text-red-400">{cancelTaskMutation.error.message}</p>}
       </form>
 
       {taskId && (logLines.length > 0 || !taskData?.result) && (
         <div className="mt-4 rounded-xl border border-slate-700 bg-slate-900/80 overflow-hidden">
-          <div className="flex items-center gap-2 border-b border-slate-700 bg-slate-800/60 px-3 py-2 text-sm text-slate-400">
-            <Terminal className="h-4 w-4" />
-            Live log (task: {taskId})
+          <div className="flex items-center justify-between gap-2 border-b border-slate-700 bg-slate-800/60 px-3 py-2 text-sm text-slate-400">
+            <span className="flex items-center gap-2">
+              <Terminal className="h-4 w-4" />
+              Live log (task: {taskId})
+            </span>
+            <button
+              type="button"
+              onClick={() => setLogLines([])}
+              className="inline-flex items-center gap-1 rounded border border-slate-600 bg-slate-700 px-2 py-1 text-xs text-slate-300 hover:bg-slate-600"
+              title="Clear log"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Clear
+            </button>
           </div>
           <div className="max-h-48 overflow-y-auto p-3 font-mono text-xs text-slate-300 whitespace-pre-wrap">
             {logLines.length ? logLines.map((line, i) => <div key={i}>{line}</div>) : 'Waiting for output…'}

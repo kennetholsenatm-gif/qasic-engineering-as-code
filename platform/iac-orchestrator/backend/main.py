@@ -97,6 +97,15 @@ def update_pipeline(pipeline_id: int, body: PipelineUpdate):
     return PipelineResponse(**rec)
 
 
+@app.delete("/api/pipelines/{pipeline_id}")
+def delete_pipeline(pipeline_id: int):
+    p = storage.get_pipeline(pipeline_id)
+    if not p:
+        raise HTTPException(status_code=404, detail="Pipeline not found")
+    storage.delete_pipeline(pipeline_id)
+    return {"ok": True}
+
+
 @app.post("/api/pipelines/{pipeline_id}/run")
 def start_run(pipeline_id: int):
     p = storage.get_pipeline(pipeline_id)

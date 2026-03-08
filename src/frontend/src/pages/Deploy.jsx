@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Copy, Check, Loader2 } from 'lucide-react'
 
 const TARGETS = [
   { id: 'local', label: 'Local', description: 'Docker Compose or Makefile from repo root' },
@@ -14,6 +15,7 @@ export default function Deploy({ apiBase }) {
   const [awsRegion, setAwsRegion] = useState('us-east-1')
   const [generateResult, setGenerateResult] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [copied, setCopied] = useState(false)
 
   const handleGenerate = () => {
     setLoading(true)
@@ -32,9 +34,26 @@ export default function Deploy({ apiBase }) {
       .finally(() => setLoading(false))
   }
 
+  const commandText = generateResult && !generateResult.error && (
+    Array.isArray(generateResult.commands)
+      ? generateResult.commands.join('\n\n')
+      : generateResult.commands
+  )
+
+  const handleCopy = async () => {
+    if (!commandText) return
+    try {
+      await navigator.clipboard.writeText(commandText)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      setGenerateResult((prev) => prev && !prev.error ? { ...prev, copyError: 'Clipboard failed' } : prev)
+    }
+  }
+
   return (
     <>
-      <h1>Deploy</h1>
+      <h1 className="text-2xl font-semibold text-slate-100">Deploy</h1>
       <p className="text-slate-400 mb-4">
         Choose where to run the QASIC stack. Generate commands to run locally or in your terminal; for full infra DAGs (Tofu init → plan → approval → apply), use the <strong>IaC Orchestrator</strong>.
       </p>
@@ -78,8 +97,9 @@ export default function Deploy({ apiBase }) {
           type="button"
           onClick={handleGenerate}
           disabled={loading}
-          className="rounded-lg bg-sky-600 px-4 py-2 font-medium text-white hover:bg-sky-500 disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded-lg bg-sky-600 px-4 py-2 font-medium text-white hover:bg-sky-500 disabled:opacity-50"
         >
+          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
           {loading ? 'Generating…' : 'Generate commands'}
         </button>
       </section>
@@ -88,7 +108,7 @@ export default function Deploy({ apiBase }) {
         <section className="mb-6">
           <h2 className="text-lg font-medium text-slate-200 mb-2">Commands</h2>
           {generateResult.error ? (
-            <pre className="rounded bg-red-900/20 border border-red-700/50 p-4 text-red-200 text-sm overflow-auto">
+            <pre className="rounded-lg bg-red-900/20 border border-red-700/50 p-4 text-red-200 text-sm overflow-auto">
               {generateResult.error}
             </pre>
           ) : (
@@ -96,11 +116,24 @@ export default function Deploy({ apiBase }) {
               {generateResult.hint && (
                 <p className="text-slate-400 text-sm mb-2">{generateResult.hint}</p>
               )}
-              <pre className="rounded bg-slate-800 border border-slate-600 p-4 text-slate-200 text-sm overflow-auto whitespace-pre-wrap">
-                {Array.isArray(generateResult.commands)
-                  ? generateResult.commands.join('\n\n')
-                  : generateResult.commands}
-              </pre>
+              <div className="relative rounded-lg bg-slate-800 border border-slate-600 overflow-hidden">
+                <div className="absolute top-2 right-2 z-10">
+                  <button
+                    type="button"
+                    onClick={handleCopy}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-600 bg-slate-700/90 px-3 py-1.5 text-sm font-medium text-slate-200 hover:bg-slate-600 transition-colors"
+                  >
+                    {copied ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
+                    {copied ? 'Copied!' : 'Copy'}
+                  </button>
+                </div>
+                <pre className="p-4 pr-24 text-slate-200 text-sm overflow-auto whitespace-pre-wrap max-h-[400px]">
+                  {commandText}
+                </pre>
+              </div>
+              {generateResult.copyError && (
+                <p className="mt-1 text-sm text-red-400">{generateResult.copyError}</p>
+              )}
             </>
           )}
         </section>

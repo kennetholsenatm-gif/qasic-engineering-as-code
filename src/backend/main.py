@@ -213,6 +213,11 @@ class CreateProjectRequest(BaseModel):
     config: dict | None = None
 
 
+class UpdateProjectRequest(BaseModel):
+    name: str | None = None
+    description: str | None = None
+
+
 @app.get("/api/projects")
 def list_projects_api():
     """List all projects (project-based workspace)."""
@@ -268,6 +273,45 @@ def get_project_api(project_id: int):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=_sanitize_detail(e, "Failed to get project."))
+
+
+@app.put("/api/projects/{project_id}")
+def update_project_api(project_id: int, req: UpdateProjectRequest):
+    """Update a project's name and/or description."""
+    try:
+        from storage.db import get_project, update_project, is_enabled
+        if not is_enabled():
+            raise HTTPException(status_code=503, detail="Database not configured.")
+        proj = get_project(project_id)
+        if not proj:
+            raise HTTPException(status_code=404, detail="Project not found.")
+        ok = update_project(project_id, name=req.name, description=req.description)
+        if not ok:
+            raise HTTPException(status_code=500, detail="Failed to update project.")
+        return get_project(project_id) or proj
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=_sanitize_detail(e, "Failed to update project."))
+
+
+@app.delete("/api/projects/{project_id}")
+def delete_project_api(project_id: int):
+    """Delete a project."""
+    try:
+        from storage.db import get_project, delete_project, is_enabled
+        if not is_enabled():
+            raise HTTPException(status_code=503, detail="Database not configured.")
+        if not get_project(project_id):
+            raise HTTPException(status_code=404, detail="Project not found.")
+        ok = delete_project(project_id)
+        if not ok:
+            raise HTTPException(status_code=500, detail="Failed to delete project.")
+        return {"ok": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=_sanitize_detail(e, "Failed to delete project."))
 
 
 @app.get("/api/projects/{project_id}/runs")
@@ -1119,6 +1163,19 @@ def get_task_status(task_id: str):
         else:
             out["error"] = str(ar.result) if ar.result else "Task failed"
     return out
+
+
+@app.post("/api/tasks/{task_id}/cancel")
+def cancel_task_api(task_id: str):
+    """Revoke a Celery task (abort if pending or running)."""
+    if not _celery_available():
+        raise HTTPException(status_code=503, detail="Celery/Redis not configured")
+    from src.backend.celery_app import get_celery_app
+    from celery.result import AsyncResult
+    celery_app = get_celery_app()
+    ar = AsyncResult(task_id, app=celery_app)
+    ar.revoke(terminate=True)
+    return {"task_id": task_id, "message": "Cancel requested"}
 
 
 @app.post("/api/run/pipeline")
