@@ -10,6 +10,8 @@ Push-Location $scriptDir
 $texFiles = @(
     "Whitepaper_Unified_Quantum_Metasurfaces_SATCOM.tex",
     "WHITEPAPER_Holographic_Metasurfaces_Quantum_SATCOM.tex",
+    "Graph_Theoretic_Inverse_Design_GNN_Metasurfaces.tex",
+    "Automated_HEaC_Deep_Cryogenic_Quantum_ASICs.tex",
     "Cryogenic_Metamaterial_Architectures_Quantum_SATCOM.tex",
     "Computational_Materials_Science_Cryogenic_Quantum_Metamaterials.tex",
     "Engineering_as_Code_Distributed_Computational_Roadmap.tex"

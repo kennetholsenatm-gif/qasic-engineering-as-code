@@ -29,3 +29,10 @@ matplotlib>=3.5.0
 
 # Optional: FDTD S-parameter dataset for forward prediction net (meep_s_param_dataset.py)
 # pymeep  # or install via conda: conda install -c conda-forge pymeep
+
+# HEaC (Hardware-Engineering-as-Code): phase-to-geometry, meta-atom library, manifest
+scipy>=1.7.0
+# Optional: Meep for real unit-cell sweep (engineering/heac/meep_unit_cell_sweep.py); else synthetic library
+# pymeep
+# Optional: GDSII export from geometry manifest (engineering/heac/manifest_to_gds.py)
+# gdsfactory

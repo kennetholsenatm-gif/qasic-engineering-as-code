@@ -18,6 +18,11 @@ Code supporting the **Holographic Metasurfaces and Cryogenic Architectures** whi
 | **`open_system_qutip.py`** | Optional. Lindblad master equation demo: qubit relaxation and dephasing (TLS-like). Requires `pip install qutip`. |
 | **`forward_prediction_net.py`** | Stub: config vector → S-parameters / transmission (FEM surrogate). Use `--synthetic` for random-data training stub; in production train on FEM/FDTD data. |
 | **`superscreen_demo.py`** | Optional. Minimal SuperScreen run: 2D London equation, ring device, Meissner screening. Requires `pip install superscreen`. See [../docs/superscreen_integration.md](../docs/superscreen_integration.md). |
+| **`thermodynamic_validator.py`** | **Graph-Theoretic whitepaper:** Validate phase profiles for π-radian baseline (sub-radian band) and 18 nW/cell Cryo-CMOS proxy. Input: .npy or inverse JSON. Output: report or JSON. |
+| **`phase_synthesis_report.py`** | Phase stats + thermodynamic validation in one report. Input: inverse JSON or .npy; optional `--json`. |
+| **`benchmark_mlp_vs_gnn.py`** | Compare MLP vs GNN inverse design: phase stats, thermodynamic compliance, optional MSE to π target. Use `--routing-result` for both models; `-o` JSON, `--table` for summary. |
+| **`graph_from_geometry.py`** | Build physics-aligned graphs for the GNN: 2D grid or coupling-matrix topology. `--grid NX,NY` or `--routing FILE`; optional `-o BASE` to save tensors. |
+| **`heac/`** | **HEaC (open-source, Meep):** `meep_unit_cell_sweep.py` (meta-atom library), `phase_to_dimension.py` (φ→d), `phases_to_geometry.py` (phases.npy→manifest), `manifest_to_gds.py` (optional gdsfactory). See [Hardware-Engineering-as-Code](#hardware-engineering-as-code-open-source-meep) below. |
 
 ## Relation to the rest of the repo
 
@@ -125,6 +130,63 @@ python engineering/metasurface_inverse_net.py
 - **Phase band:** `--phase-band pi` constrains phases to π ± 0.14 rad (≈ 3.03–3.28 rad) to match the whitepaper’s Cryo-CMOS 18 nW/cell constraint; `--phase-band lo,hi` uses custom bounds in radians.
 - **Device:** `--device auto|cpu|cuda|mps` (auto = GPU if available).
 - **Training:** Stub uses MSE to a target phase profile; in practice, loss can be EM-based or fidelity-based.
+
+### Graph-Theoretic Inverse Design (whitepaper-driven tools)
+
+The [Graph-Theoretic Inverse Design](../docs/Graph_Theoretic_Inverse_Design_GNN_Metasurfaces.tex) whitepaper motivates these utilities:
+
+**Thermodynamic validation and phase reports:**
+```bash
+python engineering/thermodynamic_validator.py pipeline_result_inverse.json
+python engineering/thermodynamic_validator.py engineering/pipeline_result_inverse_phases.npy -j   # JSON output
+python engineering/phase_synthesis_report.py engineering/pipeline_result_inverse.json
+python engineering/phase_synthesis_report.py engineering/pipeline_result_inverse_phases.npy --json
+```
+
+**MLP vs GNN benchmark** (same routing input, compare phase stats and π-band compliance):
+```bash
+python engineering/benchmark_mlp_vs_gnn.py --routing-result engineering/pipeline_result_routing.json --table -o benchmark.json
+python engineering/benchmark_mlp_vs_gnn.py --routing-result engineering/pipeline_result_routing.json --phase-band pi --meta-atoms 500
+```
+
+**Physics-aligned graph construction** (for GNN from grid or routing):
+```bash
+python engineering/graph_from_geometry.py --grid 10,10 -o engineering/grid_10x10
+python engineering/graph_from_geometry.py --routing engineering/pipeline_result_routing.json
+```
+
+### Hardware-Engineering-as-Code (open-source, Meep)
+
+The [Automated HEaC whitepaper](../docs/Automated_HEaC_Deep_Cryogenic_Quantum_ASICs.tex) describes compiling `phases.npy` and `routing.json` into manufacturing-ready geometry. The open-source stack uses **Meep** (FDTD) for EM validation and optional **gdsfactory** for GDSII. See [HEaC open-source (Meep)](../docs/HEaC_opensource_Meep.md) for the tool chain summary.
+
+**1. Build meta-atom library** (dimension → transmission phase). With Meep: real unit-cell sweep; without: synthetic formula.
+```bash
+python engineering/heac/meep_unit_cell_sweep.py -o engineering/meta_atom_library.json --points 21
+python engineering/heac/meep_unit_cell_sweep.py --no-meep -o engineering/meta_atom_library.json   # synthetic
+```
+
+**2. Phase-to-dimension interpolator** (load library, query dimension for a given phase):
+```bash
+python engineering/heac/phase_to_dimension.py engineering/meta_atom_library.json --table
+```
+
+**3. Phases.npy → geometry manifest** (compile pipeline phase array to cell list for GDS/CadQuery):
+```bash
+python engineering/heac/phases_to_geometry.py engineering/pipeline_result_inverse_phases.npy --library engineering/meta_atom_library.json -o engineering/geometry_manifest.json
+```
+
+**4. Optional: manifest → GDSII** (requires `gdsfactory`):
+```bash
+python engineering/heac/manifest_to_gds.py engineering/geometry_manifest.json -o engineering/metasurface.gds
+```
+
+**Pipeline integration:** Run routing, inverse design, and HEaC manifest in one command:
+```bash
+python engineering/run_pipeline.py --heac
+```
+If `meta_atom_library.json` is missing, a synthetic library is generated automatically. Use `--heac-library PATH` to supply a custom library.
+
+**Optional dependencies:** `scipy` (interpolator), `pymeep` (Meep FDTD for library sweep), `gdsfactory` (GDS export). See [engineering/requirements-engineering.txt](requirements-engineering.txt).
 
 ## Output formats (JSON schema)
 

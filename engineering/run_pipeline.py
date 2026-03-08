@@ -70,6 +70,17 @@ def main() -> int:
         choices=("qaoa", "rl"),
         help="Routing method: qaoa (QUBO/QAOA) or rl (RL-style local search).",
     )
+    parser.add_argument(
+        "--heac",
+        action="store_true",
+        help="After inverse design, compile phases.npy to HEaC geometry manifest (requires meta-atom library).",
+    )
+    parser.add_argument(
+        "--heac-library",
+        type=str,
+        default=None,
+        help="Path to meta_atom_library.json for --heac; default: engineering/meta_atom_library.json (created with synthetic library if missing).",
+    )
     args = parser.parse_args()
 
     # Resolve paths from repo root or cwd
@@ -146,6 +157,43 @@ def main() -> int:
     else:
         print("Skipping inverse design (--skip-inverse).")
 
+    # Optional: HEaC phase-to-geometry (phases.npy -> geometry manifest)
+    npy = os.path.join(script_dir, args.output + "_inverse_phases.npy")
+    if not os.path.isfile(npy) and os.path.isfile(inverse_json):
+        base_inv = os.path.splitext(inverse_json)[0]
+        alt_npy = base_inv + "_phases.npy"
+        if os.path.isfile(alt_npy):
+            npy = alt_npy
+    if args.heac and os.path.isfile(npy):
+        heac_library = args.heac_library or os.path.join(script_dir, "meta_atom_library.json")
+        if not os.path.isfile(heac_library):
+            print("HEaC: no meta-atom library found; generating synthetic library...")
+            heac_sweep = [
+                sys.executable,
+                os.path.join(script_dir, "heac", "meep_unit_cell_sweep.py"),
+                "--no-meep", "-o", heac_library, "--points", "11",
+            ]
+            rc_heac = subprocess.run(heac_sweep, cwd=repo_root)
+            if rc_heac.returncode != 0:
+                print("HEaC: synthetic library generation failed.", file=sys.stderr)
+        if os.path.isfile(heac_library):
+            manifest_path = os.path.join(
+                script_dir,
+                args.output + "_geometry_manifest.json",
+            )
+            heac_cmd = [
+                sys.executable,
+                os.path.join(script_dir, "heac", "phases_to_geometry.py"),
+                npy, "--library", heac_library, "-o", manifest_path,
+                "--routing", routing_json,
+            ]
+            print("Running HEaC phases -> geometry manifest...")
+            rc_heac = subprocess.run(heac_cmd, cwd=repo_root)
+            if rc_heac.returncode != 0:
+                print("HEaC step failed.", file=sys.stderr)
+            else:
+                print(f"  Geometry manifest: {manifest_path}")
+
     print("Pipeline done. Outputs:")
     if os.path.isfile(routing_json):
         print(f"  Routing: {routing_json}")
@@ -153,7 +201,6 @@ def main() -> int:
         print(f"  Inductance: {inductance_json}")
     if os.path.isfile(inverse_json):
         print(f"  Inverse: {inverse_json}")
-        npy = os.path.join(script_dir, args.output + "_inverse_phases.npy")
         if os.path.isfile(npy):
             print(f"  Phases:  {npy}")
     return 0

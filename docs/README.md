@@ -7,6 +7,10 @@ Documentation and whitepapers for **QASIC Engineering-as-Code** ([GitHub](https:
 | Document | Description |
 |----------|-------------|
 | [APPLICATIONS.md](APPLICATIONS.md) | **Applications:** BQTC (traffic control) and qrnc (quantum-backed tokens, exchange); run instructions and security caveats |
+| [DATA_AND_CONTROL_PLANE_QUANTUM_ASIC.md](DATA_AND_CONTROL_PLANE_QUANTUM_ASIC.md) | **Data and control plane extensions:** Low-qubit ASIC applications in data plane (MACsec/tamper-evident tunneling, FEC, key streaming) and control plane (BGP commitment, SD-WAN QAOA, OAM fault localization); links to demos and apps |
+| [Graph_Theoretic_Inverse_Design_GNN_Metasurfaces.tex](Graph_Theoretic_Inverse_Design_GNN_Metasurfaces.tex) | **LaTeX whitepaper:** Graph-theoretic inverse design; GNNs for scaling quantum metamaterial topologies; thermodynamic constraints, $\pi$-radian baseline, MLP vs.\ GNN benchmarking |
+| [Automated_HEaC_Deep_Cryogenic_Quantum_ASICs.tex](Automated_HEaC_Deep_Cryogenic_Quantum_ASICs.tex) | **LaTeX whitepaper:** Hardware-Engineering-as-Code (HEaC) for deep-cryogenic (10\,mK) Quantum ASICs; phase-to-geometry (CadQuery, PyAEDT, Meep), GDSII/DRC/LVS (gdsfactory, OpenROAD), PCB (KiCad, scikit-rf), fab package (Sphinx, thermal budget, ATPG) |
+| [HEaC_opensource_Meep.md](HEaC_opensource_Meep.md) | **HEaC open-source (Meep):** Tool chain summary—meta-atom library (Meep sweep), phase-to-dimension, phases.npy → geometry manifest, optional GDSII (gdsfactory) |
 | [Whitepaper_Unified_Quantum_Metasurfaces_SATCOM.tex](Whitepaper_Unified_Quantum_Metasurfaces_SATCOM.tex) | **Unified whitepaper (LaTeX):** EaC for Quantum ASICs; protocol, simulation, routing, applications |
 | [Whitepaper_Unified_Quantum_Metasurfaces_SATCOM.md](Whitepaper_Unified_Quantum_Metasurfaces_SATCOM.md) | (Unified; see .tex for canonical source) |
 | [architecture_overview.md](architecture_overview.md) | Full-stack diagram: protocol layer → routing → inverse design → hardware → applications |

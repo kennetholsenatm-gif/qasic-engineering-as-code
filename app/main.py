@@ -555,6 +555,7 @@ def get_docs_links():
         {"name": "Quantum terrestrial backhaul (MD)", "path": "docs/quantum-terrestrial-backhaul.md", "url": None},
         {"name": "Unified quantum metasurfaces SATCOM (MD)", "path": "docs/Whitepaper_Unified_Quantum_Metasurfaces_SATCOM.md", "url": None},
         {"name": "Applications (BQTC, QRNC)", "path": "docs/APPLICATIONS.md", "url": None},
+        {"name": "Data and control plane extensions", "path": "docs/DATA_AND_CONTROL_PLANE_QUANTUM_ASIC.md", "url": None},
     ]
     for L in links:
         full = REPO_ROOT / L["path"]
@@ -579,6 +580,7 @@ _ALLOWED_DOC_PATHS = frozenset({
     "docs/Cryogenic_Metamaterial_Architectures_Quantum_SATCOM.md",
     "engineering/README.md",
     "docs/APPLICATIONS.md",
+    "docs/DATA_AND_CONTROL_PLANE_QUANTUM_ASIC.md",
 })
 
 

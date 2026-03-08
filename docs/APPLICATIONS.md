@@ -59,3 +59,9 @@ The pipeline runs periodically (default 300 s). The Bayesian stage uses the last
 ## Shared QRNG
 
 `QRNG.PY` at the QASIC repo root is used by **qrnc** for minting. It uses Qiskit (StatevectorSampler for simulation; optional IBM Runtime for real hardware). BQTC does not require this file for its main pipeline; it is provided once at repo root for qrnc.
+
+---
+
+## Future directions
+
+Conceptual extensions of the same stack to **data plane** (quantum-assisted MACsec/tamper-evident tunneling, entanglement-assisted FEC, ephemeral key streaming) and **control plane** (quantum-backed BGP route commitment, real-time QAOA for SD-WAN load balancing, OAM fault localization with quantum illumination) are described in [DATA_AND_CONTROL_PLANE_QUANTUM_ASIC.md](DATA_AND_CONTROL_PLANE_QUANTUM_ASIC.md). That document maps each concept to existing demos, protocols, and apps in the repo.

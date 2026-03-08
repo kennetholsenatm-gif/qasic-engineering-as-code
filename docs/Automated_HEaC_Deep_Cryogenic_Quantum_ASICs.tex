@@ -1,0 +1,171 @@
+% !TEX TS-program = xelatex
+% !TEX program = xelatex
+\documentclass[11pt, a4paper]{article}
+\usepackage[a4paper, top=2.5cm, bottom=2.5cm, left=2cm, right=2cm]{geometry}
+\usepackage{fontspec}
+\usepackage[bidi=bidi, provide=*]{babel}
+\babelprovide[import, main]{english}
+\babelfont{rm}{Noto Sans}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{booktabs}
+\usepackage{hyperref}
+
+\title{\textbf{Automated Hardware-Engineering-as-Code for Deep-Cryogenic Quantum ASICs}}
+\author{Quantum Systems Architecture Group}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+The development of a low-qubit Quantum Application-Specific Integrated Circuit (ASIC) operating at deep-cryogenic temperatures (10\,mK) represents a formidable convergence of quantum physics, microwave engineering, and advanced semiconductor fabrication. Utilizing a programmable holographic metasurface as a dynamic quantum bus introduces an entirely new layer of complexity, demanding the translation of continuous, theoretical software matrices into highly precise, discrete physical geometries. Traditional, GUI-driven Electronic Design Automation (EDA) workflows are fundamentally unsuited for this task due to their manual nature, lack of scalability, and inability to handle custom, algorithmically generated quantum structures.
+
+The transition to a Hardware-Engineering-as-Code (HEaC) paradigm resolves these bottlenecks by treating physical chip design as a software compilation problem. By establishing a fully programmatic pipeline, high-level computational outputs---such as logical routing topologies (\texttt{routing.json}) and spatial phase-shift arrays (\texttt{phases.npy})---can be automatically and deterministically compiled into manufacturing-ready formats, including GDSII for lithography, Gerber for printed circuit boards, and STEP for three-dimensional mechanical and electromagnetic assemblies. This report provides a peer-level analysis of the programmatic tools, Python libraries, APIs, and theoretical workflows required to architect an end-to-end HEaC pipeline capable of bridging the gap between quantum software specifications and cryogenic fabrication realities.
+\end{abstract}
+
+\section{Electromagnetic Metasurface Design Automation}
+
+The foundation of the dynamic quantum bus relies on a programmable holographic metasurface. Metasurfaces control the wavefront of electromagnetic waves by imparting local, gradient phase shifts to the incoming signals, enabling complex functionalities such as vortex generation and beam deflection. The primary architectural challenge involves programmatically translating a two-dimensional continuous phase-shift array, provided as a NumPy matrix (\texttt{phases.npy}), into a physical, three-dimensional array of discrete meta-atoms. These meta-atoms typically take the form of radio-frequency Superconducting Quantum Interference Device (rf-SQUID) loops, Bulk Acoustic Wave (BAW) resonators, or purely geometric dielectric pillars.
+
+\subsection{Parametric 3D CAD Generation}
+
+To transition from analytical phase mapping to physical structure, the engineering pipeline requires a robust programmatic Computer-Aided Design (CAD) kernel capable of generating complex, parameterized three-dimensional geometries and exporting them to standard engineering formats like STEP and DXF.
+
+The most capable open-source Python library for this application is \textbf{CadQuery}. Unlike script-based mesh generators such as OpenSCAD, which rely on Constructive Solid Geometry (CSG) and export lossy STL files, CadQuery operates natively on the Open CASCADE Technology (OCCT) boundary representation (B-rep) kernel. This underlying C++ kernel natively supports Non-Uniform Rational B-Splines (NURBS), complex surface sewing, and exact mathematical representations of curves, which are critical for preserving the high-fidelity radial arcs required in microwave SQUID resonators and acoustic wave structures.
+
+CadQuery utilizes a fluent, method-chaining API centered around the concept of a Workplane, enabling the compositional construction of three-dimensional solids through sequential two-dimensional sketches and extrusion operations. This allows a Python script to define the exact radius, trace width, and gap dimension of an rf-SQUID parametrically. For applications requiring even stricter object-oriented structures, the \textbf{build123d} library offers an alternative algebraic approach to the same OCCT kernel. Furthermore, \textbf{pythonOCC} provides a direct, albeit verbose, interface to the OCCT kernel for maximum control over topological data structures. CadQuery remains the standard for programmatic CAD integration within scientific continuous integration (CI) pipelines due to its concise syntax and headless execution capabilities.
+
+\subsection{Programmatic Full-Wave Electromagnetic Validation}
+
+Validating the localized phase shift of each generated meta-atom at cryogenic temperatures requires robust programmatic interfaces to full-wave electromagnetic solvers. Mathematical approximations are insufficient; the pipeline must capture mutual coupling, parasitic capacitance, and kinetic inductance shifts inherent to superconducting materials operating at 10\,mK.
+
+For commercial, industry-standard rigorous simulation, \textbf{Ansys HFSS} is unparalleled for high-frequency microwave applications. The \textbf{PyAEDT} (Python Ansys Electronics Desktop) library provides a comprehensive framework to control HFSS completely via Python. Through PyAEDT, an automated script can initialize the HFSS application in a headless, client-server mode. The API can programmatically import the STEP files generated by CadQuery and assign specialized cryogenic material properties. For metasurfaces, \texttt{Hfss.assign\_secondary} is utilized to programmatically define coupled periodic boundary conditions (Lattice Pairs) and Floquet ports, which are mathematically required to simulate an infinite array of unit cells and extract the exact phase delay parameters (\texttt{UseScanAngle} or \texttt{InputPhaseDelay}). Post-processing can be automated to extract S-parameters and calculate the precise phase shift using \texttt{hfss.post.create\_report()} and NumPy integration.
+
+For open-source stacks, the \textbf{Meep} (Finite Difference Time Domain) solver provides an effective alternative. Meep can be scripted entirely in Python and is integrated into the \textbf{gdsfactory} EDA framework via the \textbf{gmeep} plugin. This integration allows engineers to define the two-dimensional planar meta-atom in GDS format using gdsfactory, automatically extrude it into a three-dimensional Meep simulation volume with Perfectly Matched Layers (PML), and compute the S-parameter matrix using \texttt{gm.write\_sparameters\_meep()}. Additionally, \textbf{CST Microwave Studio} offers a dedicated Python API for automating three-dimensional model generation and solver sweeps.
+
+\subsection{Phase-to-Geometry Theoretical Code Flow}
+
+To fully automate the physical generation of the metasurface from the continuous \texttt{phases.npy} target profile, the pipeline must execute a deterministic, multi-step programmatic loop.
+
+\textbf{First}, the pipeline establishes a ``meta-atom library'' or lookup table. An electromagnetic parameter sweep is executed (via PyAEDT or gdsfactory/Meep) across the primary geometric variable of the meta-atom (e.g., loop radius for an rf-SQUID, or pillar width for a dielectric structure). The solver calculates and extracts the transmission phase delay for each dimensional increment. This empirical data is ingested into a Python script to construct a continuous interpolation function (e.g., \texttt{scipy.interpolate.interp1d}), creating a deterministic, bijective mapping between a desired phase shift $\phi$ and the necessary physical dimension $d$.
+
+\textbf{Second}, the automation script loads the user-provided \texttt{phases.npy} array, which dictates the spatial distribution of required phase shifts across the $N \times M$ grid. The script iterates through each coordinate $(i, j)$. For each discrete phase value, the interpolator computes the exact physical dimension required for that unit cell. For propagation phase modulation the dimension is modified; for Pancharatnam--Berry (geometric) phase, the physical rotation angle of the unit cell is modified.
+
+\textbf{Finally}, the script invokes the CadQuery or gdsfactory layout API, instantiating the meta-atom with the newly calculated dimension or rotation, and translating the geometry to the absolute Cartesian coordinate corresponding to $(i, j)$ on the substrate layout. This loop produces a single, monolithic GDSII or STEP file containing a spatially varying, aperiodic metasurface derived from the theoretical target matrix, ready for lithographic masking or physical machining.
+
+\section{Cryo-CMOS and Superconducting IC Layout Automation}
+
+The active-matrix backplane of the Quantum ASIC requires the seamless co-integration of 28\,nm Fully-Depleted Silicon-on-Insulator (FD-SOI) Cryo-CMOS logic with custom superconducting signal traces. The CMOS logic multiplexes and controls the metasurface unit cells, minimizing the number of coaxial lines running up the dilution refrigerator. Translating the logical netlist into a valid, design-rule-checked GDSII layout necessitates advanced programmatic geometry generation and specialized silicon compilation techniques.
+
+\subsection{Programmatic GDSII Generation Frameworks}
+
+The modern standard for superconducting quantum circuits and photonics has shifted toward \textbf{phidl} and \textbf{gdsfactory}. \textbf{phidl} is an open-source layout tool for nanolithography and superconducting nanowire circuits, providing a functional-programming approach that streamlines complex superconducting structures such as meandering coplanar waveguides, interdigitated capacitors, and alignment calipers. phidl has integrated the KLayout tile processor as a backend, accelerating boolean operations on layouts with millions of vertices.
+
+Building on phidl, gdspy, and KLayout, \textbf{gdsfactory} is an expansive EDA framework and the de facto open-source standard for algorithmic chip layout. gdsfactory natively supports Process Design Kits (PDKs). The pipeline can programmatically define a \texttt{LayerStack} that includes both standard 28\,nm FD-SOI front-end-of-line (FEOL) layers and custom superconducting Niobium (Nb) and Aluminum (Al) back-end layers. gdsfactory includes auto-routing capabilities such as \texttt{gf.routing.route\_bundle} for river and bus routing to connect logic outputs to distributed active components. For specialized superconducting qubit layouts, \textbf{IQM's KQCircuits} provides a KLayout-based Python framework with parameterized microwave resonators, charge-coupled devices, and superconducting airbridges, optimized for export to Ansys HFSS and Elmer multiphysics.
+
+\subsection{Cryogenic DRC and LVS Automation}
+
+Automating Design Rule Checks (DRC) and Layout Versus Schematic (LVS) in a hybrid cryogenic context requires extending traditional commercial rulesets. Standard CMOS DRC verifies minimum trace widths, via enclosures, and metal densities; incorporating Niobium and Aluminum requires custom spatial rules (e.g., clearances for superconducting airbridges, minimum track widths to avoid exceeding localized critical current density $J_c$).
+
+Within the HEaC pipeline, gdsfactory integrates with KLayout's DRC engine. Python scripts can trigger headless KLayout instances, passing a custom \texttt{.lydrc} file that unions commercial 28\,nm rules with specialized academic foundry rules (e.g., UCSD Nano3 or SMM). LVS automation extracts the SPICE netlist from the programmatically generated layout; gdsfactory compares it against the original logical source netlist before the GDSII is locked for fabrication.
+
+\subsection{Cryogenic Silicon Compilation and Thermal Constraints}
+
+At 10\,mK, the cooling power of a standard $^3$He/$^4$He dilution refrigerator is heavily restricted (low micro-watt range). The CMOS logic controlling the dynamic quantum bus must adhere to a maximum of 18\,nW per standard cell. Exceeding this budget causes localized thermal occlusion and destroys fragile quantum states.
+
+Operating 28\,nm FD-SOI at deep-cryogenic temperatures alters semiconductor physics (incomplete carrier ionization, interface trap freezing, $V_{\mathrm{th}}$ shifts). FD-SOI allows forward body-biasing (FBB) to compensate threshold voltage at low temperatures, yielding high switching speeds at ultra-low $V_{\mathrm{dd}} \approx 0.3$\,V and quadratically reduced dynamic power.
+
+To enforce the 18\,nW constraint algorithmically, the pipeline utilizes \textbf{SiliconCompiler} and the \textbf{OpenROAD} project. SiliconCompiler automates RTL-to-GDSII through a Python API with technology-specific ``target'' bundles. OpenROAD serves as the placement and routing engine. Empirical characterization of 28\,nm FD-SOI cells at 4\,K (extrapolated to 10\,mK) is codified into non-linear delay model (NLDM) Liberty (\texttt{.lib}) files defining leakage and dynamic switching power. During logic synthesis (Yosys) and physical placement (OpenROAD), the EDA pipeline evaluates every cell's power. A custom \texttt{.sdc} (Synopsys Design Constraints) file constrains the tool; power-aware placement prevents dense clustering of high-activity nodes, spreading logic to distribute thermal load and ensure no localized hotspot violates the 18\,nW per cell threshold.
+
+\section{Cryogenic Packaging and PCB Routing Automation}
+
+Interfacing the 10\,mK dilution refrigerator mixing chamber with the Quantum ASIC requires specialized cryogenic printed circuit board (PCB) packaging. The automated software must ingest the logical qubit mapping (\texttt{routing.json}) and output physical board-level manufacturing files (Gerber or ODB++) that maintain microwave signal integrity down to the millikelvin regime.
+
+\subsection{Code-Driven PCB Design Frameworks}
+
+To programmatically define schematics and generate layouts, the pipeline uses code-driven PCB libraries. \textbf{SKiDL} provides a Python framework for describing circuits: components, pinouts, and netlist connectivity are defined in code, producing a netlist that serves as the logical truth for layout.
+
+For physical layout, the \textbf{KiCad Python API} is the optimal open-source tool. Recent updates are transitioning from legacy SWIG-based bindings to an IPC API based on Protocol Buffers and UNIX sockets, allowing external Python agents to perform non-interactive manipulations of the \texttt{.kicad\_pcb} database. An automation script can parse the SKiDL netlist, inject SMA connector footprints, configure design rules, and command routing from a headless environment.
+
+\subsection{Programmatic Definition of Microwave Substrates}
+
+High-frequency quantum bus signals (4--8\,GHz for superconducting transmons) require specialized dielectric substrates. Standard FR4 is excessively lossy at microwave frequencies and unreliable under cryogenic thermal cycling.
+
+The automation must configure the PCB stackup to use woven glass-reinforced hydrocarbon or PTFE ceramic laminates such as \textbf{Rogers RO4350B}, RO3003, or RT/duroid 5870. RO4350B maintains stable relative permittivity $D_k \approx 3.48$ and low dissipation factor $D_f \approx 0.0037$. Empirical characterizations show $D_k$ of RO4350B shifts by only $\sim 1\%$ when cooled from room temperature to 40\,mK, making it phase-stable for deep-cryogenic interconnects. Within the KiCad API, the board stackup object is programmatically set with $D_k$, $D_f$, and CTE for these materials so that trace impedance calculations use correct deep-cryogenic parameters.
+
+\subsection{Automated Coplanar Waveguide Routing Algorithm}
+
+The user-supplied \texttt{routing.json} dictates which logical quantum bus port on the ASIC connects to which physical SMP or SMA connector on the PCB. These interconnects must be Grounded Coplanar Waveguides (CPW) for matched impedance and minimal crosstalk.
+
+\textbf{Phase 1:} The Python script parses \texttt{routing.json} to establish source and target Cartesian coordinates on the board.
+
+\textbf{Phase 2:} The script computes geometric parameters for 50\,$\Omega$ CPW characteristic impedance $Z_0$. The \textbf{scikit-rf} library provides \texttt{skrf.media.cpw.CPW} with \texttt{analyse\_quasi\_static}. By passing cryogenic $D_k$, substrate height $h$, and copper thickness $t$, the script computes center conductor width $w$ and ground-plane gap $g$ for 50\,$\Omega$.
+
+\textbf{Phase 3:} An automated routing engine draws the physical copper. For matched electrical time-of-flight, grid-based A* pathfinding (e.g., KiCadRoutingTools with Rust backends) is used to route from die pads to perimeter connectors with octilinear or orthogonal movements. For phase length-matching, the script adds programmatic meanders to shorter CPW traces until propagation delays are equalized. The KiCad CLI is then invoked to export Gerber and Excellon drill files.
+
+\section{Automated ``Fab Package'' Generation}
+
+Specialized foundries (e.g., UCSD SMM, Nano3) require detailed documentation alongside raw GDSII prior to tapeout. The HEaC pipeline automatically compiles a ``Fab Package'' containing layer stackups, thermodynamic analyses, and post-fabrication testing protocols.
+
+\subsection{Cryogenic Stackup and Thermal Budget Automation}
+
+The pipeline parses the layout database and generates YAML or JSON configuration files with nanometer-level thicknesses of SiN$_x$ passivation, S1805 resist, and superconducting Niobium sputtering targets. A thermal budget analysis is appended: static heat loads (thermal conduction down coaxial cabling and PCB copper) and dynamic heat loads (18\,nW/cell CMOS switching and microwave dissipation) are integrated. Programmatic thermodynamics (e.g., CryoSolver or custom scripts) query the NIST Cryogenic Materials Property Database for specific heat and thermal conductivity of Silicon, Copper, and Niobium over the spatial volumes extracted from the GDSII layout, computing steady-state operating temperature and producing a verifiable thermal budget report.
+
+\subsection{Functional Testing Protocol Manifest}
+
+The fab package includes an executable testing protocol: microwave pulse sequences to validate quantum state discrimination and the fidelity of Hadamard (H), Pauli (X, Z), and CNOT gates. Python quantum libraries (e.g., Qiskit) generate Automatic Test Pattern Generation (ATPG) adapted for quantum circuits: state-vector mathematics, Clifford-group circuits, and matrix descriptions for CNOT verification, plus Randomized Benchmarking (RB) algorithms for fidelity metrics, yielding a standardized, fab-agnostic testing checklist.
+
+\subsection{Documentation Compilation Frameworks}
+
+To avoid disorganized JSON, PDFs, and Gerber plots, the HEaC pipeline uses \textbf{Sphinx} to package simulation reports, GDSII hashes, thermal constraints, and test protocols into a unified document. With \textbf{Jupyter-Book} (built on Sphinx) and extensions such as \texttt{sphinx-jupyterbook-latex}, the pipeline can embed Python plotting scripts in the documentation; when the PDF manifest is built, the code runs to render HFSS S-parameter plots and GDSII layout visualizations. This ensures plots and tables match the exact Git commit of the compiled layout, creating an immutable chain of custody from software to silicon.
+
+\section{Synthesis and Proof-of-Concept Architecture}
+
+\subsection{Tool Stack Recommendation}
+
+\begin{table}[htbp]
+\centering
+\caption{HEaC pipeline tool stack recommendation.}
+\label{tab:toolstack}
+\begin{tabular}{@{}lll@{}}
+\toprule
+Design Stage & Primary Tool / Library & Core Function in HEaC Pipeline \\
+\midrule
+3D Parametric CAD & CadQuery (Python) & Phase maps to 3D meta-atom geometries; OCCT B-rep; STEP/DXF export. \\
+EM Simulation & PyAEDT (Ansys HFSS) & Unit-cell phase extraction; Floquet boundaries; S-parameter analysis. \\
+EM (open-source) & gdsfactory (Meep FDTD) & Headless FDTD; periodic unit cells; S-parameters. \\
+IC Layout (Supercon.) & gdsfactory / phidl & Niobium/Aluminum layers; headless KLayout DRC \& LVS. \\
+IC Layout (CMOS) & OpenROAD / SiliconCompiler & 18\,nW/cell thermal budget; 28\,nm FD-SOI; cryogenic .lib. \\
+PCB \& Packaging & KiCad Python API (IPC) & Schematic netlists; Rogers RO4350B stackup; Gerber export. \\
+Impedance Calc. & scikit-rf & Quasi-static 50\,$\Omega$ CPW dimensions. \\
+Manifest & Sphinx + Jupyter-Book & Thermal budgets; ATPG quantum tests; layout hashes; executable PDF. \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Feasibility Analysis and Bottlenecks}
+
+\textbf{Electromagnetic metasurface simulation:} Full-wave validation of the entire aperiodic metasurface array is computationally prohibitive. Simulating thousands of uniquely tuned, mutually coupled rf-SQUID loops breaks periodic boundary assumptions. Fast Multipole Methods (FMM) or Domain Decomposition within PyAEDT must partition the mesh across HPC clusters.
+
+\textbf{Cryogenic LVS extraction:} Extracting parasitic capacitance and non-linear kinetic inductance from meandered superconducting Niobium traces with arbitrary radial geometries requires customized parasitic extraction decks (e.g., Mentor Calibre or KLayout Ruby), often foundry-specific.
+
+\textbf{KiCad API transition:} KiCad's migration from SWIG to IPC/RPC implies version pinning (e.g., Docker) to avoid breakage of automated CPW pathfinding as upstream APIs evolve.
+
+\subsection{Proof-of-Concept System Architecture}
+
+The HEaC paradigm is realized by a single command (e.g., \texttt{make physical\_chip}) triggering the full EDA workflow without manual GUI intervention. The system is a Directed Acyclic Graph (DAG) piping data through successive stages.
+
+\textbf{Initialization:} The orchestrator (Makefile or CI/CD runner) detects changes in \texttt{phases.npy} and \texttt{routing.json}.
+
+\textbf{Stage 1 (EM \& CAD):} The interpolator maps \texttt{phases.npy} to physical dimensions. CadQuery generates 3D unit cells. PyAEDT runs headless HFSS, applies cryogenic boundaries, validates phase profile of STEP files, and passes validated parameters downstream.
+
+\textbf{Stage 2 (Silicon compilation):} SiliconCompiler synthesizes control RTL. OpenROAD places and routes 28\,nm FD-SOI standard cells using cryogenic .lib files for power-aware placement (18\,nW/cell). gdsfactory merges the CMOS core with superconducting Nb resonator structures into a unified, DRC-checked GDSII.
+
+\textbf{Stage 3 (Packaging):} scikit-rf outputs CPW dimensions for Rogers RO4350B. A* pathfinder scripts interface with the KiCad IPC API to import \texttt{routing.json}, place SMA pads, route phase-matched CPWs, and export Gerber.
+
+\textbf{Stage 4 (Compilation):} Thermodynamic scripts query NIST data for Niobium and Silicon volumes and compute the total thermal budget. Qiskit (or equivalent) generates ATPG quantum test sequences.
+
+\textbf{Finalization:} Jupyter-Book and Sphinx ingest generated data (SPICE netlists, validation logs, HFSS plots, test protocol). A cryptographically hashed PDF manifest is generated and archived with the GDSII and Gerber outputs, yielding a complete, deterministic, lab-ready cryogenic fabrication package.
+
+\end{document}
