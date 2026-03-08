@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import Form from '@rjsf/core'
-import { Ajv8Validator } from '@rjsf/validator-ajv8'
+import validator from '@rjsf/validator-ajv8'
 import { Loader2 } from 'lucide-react'
 
 function fetchSchema(apiBase, name) {
@@ -71,7 +71,7 @@ export default function ConfigForm({ apiBase }) {
           <Form
             schema={schema}
             formData={formData}
-            validator={new Ajv8Validator()}
+            validator={validator}
             uiSchema={uiSchema}
             onChange={(e) => setFormData(e.formData)}
             onSubmit={handleSubmit}
