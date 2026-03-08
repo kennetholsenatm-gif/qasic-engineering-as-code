@@ -72,3 +72,32 @@ def test_apply_op_rx_requires_param():
     state = product_state("0", "0")
     with pytest.raises(ValueError, match="Rx requires param"):
         apply_op(state, Op("Rx", [0]))  # param=None
+
+
+def test_interaction_graph_from_ops():
+    """Interaction graph: nodes = qubits, edges = 2q gates, weight = count."""
+    from src.core_compute.asic.qasm_loader import interaction_graph_from_ops
+    ops = [
+        Op("H", [0]),
+        Op("CNOT", [0, 1]),
+        Op("CNOT", [1, 2]),
+        Op("CNOT", [0, 1]),
+    ]
+    G = interaction_graph_from_ops(ops)
+    assert G.number_of_nodes() == 3
+    assert G.number_of_edges() == 2  # (0,1) and (1,2); (0,1) has weight 2
+    assert G.has_edge(0, 1) and G.has_edge(1, 2)
+    assert G.edges[0, 1].get("weight") == 2
+    assert G.edges[1, 2].get("weight") == 1
+
+
+def test_build_topology_from_interaction_graph():
+    """Topology from interaction graph: n_qubits and can_cnot on edges."""
+    import networkx as nx
+    from src.core_compute.asic.topology_builder import build_topology_from_interaction_graph
+    G = nx.Graph()
+    G.add_edges_from([(0, 1), (1, 2)])
+    topo = build_topology_from_interaction_graph(G)
+    assert topo.n_qubits == 3
+    assert topo.can_cnot(0, 1) and topo.can_cnot(1, 2)
+    assert not topo.can_cnot(0, 2)

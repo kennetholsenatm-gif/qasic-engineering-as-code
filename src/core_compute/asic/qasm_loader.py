@@ -1,6 +1,7 @@
 """
 Load OpenQASM 2/3 source and map to ASIC op list (Op) for circuit.py and pulse compiler.
 Ref: NEXT_STEPS_ROADMAP.md §4.1 OpenQASM 3.0 / QIR Integration.
+Also provides interaction graph extraction for Algorithm-to-ASIC pipeline.
 """
 from __future__ import annotations
 
@@ -8,7 +9,10 @@ import re
 from pathlib import Path
 from typing import Any
 
+import networkx as nx
+
 from .circuit import Op
+from .gate_set import DEFAULT_GATE_SET, GateSet
 
 
 # ASIC-supported gates: H, X, Z, CNOT, Rx(theta)
@@ -108,3 +112,35 @@ def _quantum_circuit_to_ops(circuit: Any) -> list[Op]:
 def load_qasm_string(qasm_text: str) -> list[Op]:
     """Load from string (OpenQASM 2 style, no include)."""
     return _qasm2_to_ops(qasm_text)
+
+
+def interaction_graph_from_ops(ops: list[Op], gate_set: GateSet | None = None) -> nx.Graph:
+    """
+    Build an undirected interaction graph from a circuit op list.
+    Nodes are qubit indices; an edge (u, v) exists if a 2-qubit gate acts on (u, v).
+    Edge weight = number of 2-qubit gates between that pair.
+    """
+    gs = gate_set if gate_set is not None else DEFAULT_GATE_SET
+    G: nx.Graph = nx.Graph()
+    for op in ops:
+        for q in op.targets:
+            G.add_node(q)
+        if len(op.targets) == 2 and gs.is_two_qubit(op.gate):
+            u, v = min(op.targets[0], op.targets[1]), max(op.targets[0], op.targets[1])
+            if G.has_edge(u, v):
+                G.edges[u, v]["weight"] = G.edges[u, v].get("weight", 1) + 1
+            else:
+                G.add_edge(u, v, weight=1)
+    return G
+
+
+def interaction_graph_from_qasm_string(qasm_text: str) -> nx.Graph:
+    """Parse QASM string to ops, then build interaction graph."""
+    ops = load_qasm_string(qasm_text)
+    return interaction_graph_from_ops(ops)
+
+
+def interaction_graph_from_qasm_path(path: str) -> nx.Graph:
+    """Load QASM file to ops, then build interaction graph."""
+    ops = load_qasm(path)
+    return interaction_graph_from_ops(ops)
