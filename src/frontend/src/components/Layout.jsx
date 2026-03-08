@@ -19,6 +19,13 @@ import {
   Settings,
   GitBranch,
   Server,
+  Key,
+  Send,
+  ClipboardCheck,
+  Thermometer,
+  Ruler,
+  Globe,
+  Cpu,
 } from 'lucide-react'
 
 const navGroups = [
@@ -29,7 +36,6 @@ const navGroups = [
       { to: '/', label: 'Home', icon: Home },
       { to: '/projects', label: 'Projects', icon: FolderOpen },
       { to: '/results', label: 'Results', icon: FileBarChart },
-      { to: '/phase-viewer', label: 'Phase Viewer 3D', icon: Box },
     ],
   },
   {
@@ -48,8 +54,28 @@ const navGroups = [
     icon: Radio,
     items: [
       { to: '/run/protocol', label: 'Run protocol', icon: Play },
+      { to: '/run/qkd', label: 'QKD (BB84 / E91)', icon: Key },
+      { to: '/run/teleportation', label: 'Teleportation', icon: Send },
+      { to: '/run/commitment', label: 'Commitment', icon: ClipboardCheck },
       { to: '/run/quantum-radar', label: 'Quantum radar', icon: Satellite },
       { to: '/run/quantum-illumination', label: 'Quantum illumination', icon: Sparkles },
+    ],
+  },
+  {
+    label: 'Hardware Engineering',
+    icon: Box,
+    items: [
+      { to: '/phase-viewer', label: 'Phase Viewer 3D', icon: Box },
+      { to: '/engineering/thermal', label: 'Thermal & Packaging FEA', icon: Thermometer },
+      { to: '/engineering/heac', label: 'HEaC DRC/LVS', icon: Ruler },
+    ],
+  },
+  {
+    label: 'Standalone Apps',
+    icon: FlaskConical,
+    items: [
+      { to: '/apps/bqtc', label: 'BQTC (Terrestrial Backhaul)', icon: Globe },
+      { to: '/apps/qrnc', label: 'QRNC', icon: Cpu },
     ],
   },
   {

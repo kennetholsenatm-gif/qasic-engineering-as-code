@@ -1,16 +1,25 @@
-# QASIC Engineering-as-Code: FastAPI backend
+# QASIC Engineering-as-Code: FastAPI backend + Celery worker (core compute with qiskit, torch, scipy)
 FROM python:3.11-slim
+
+# System deps for torch/scipy (OpenMP and optional native builds)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Repo root contents (API runs from repo root; src.backend and src.core_compute are under src/)
-COPY requirements.txt .
-COPY src/backend/requirements.txt src/backend/
-RUN pip install --no-cache-dir -r requirements.txt && pip install --no-cache-dir -r src/backend/requirements.txt
+# Dependency and package metadata first (maximize layer cache: only reinstall when these change)
+COPY pyproject.toml README.md MANIFEST.in ./
 
+# Package directories required by setuptools (pyproject.toml [tool.setuptools.packages.find])
 COPY src/ src/
 COPY config/ config/
 COPY storage/ storage/
+COPY dashboard/ dashboard/
+COPY apps/ apps/
+
+# Install project with API and engineering extras (fastapi, celery, qiskit, torch, scipy)
+RUN pip install --no-cache-dir .[app,engineering]
 
 # Run as unprivileged user (DevSecOps: no root in container)
 RUN adduser --disabled-password --gecos "" appuser && chown -R appuser:appuser /app
