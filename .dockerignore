@@ -9,7 +9,9 @@ __pycache__
 venv
 env
 node_modules
+**/node_modules
 frontend/dist
+src/frontend/dist
 *.npy
 *.log
 .cursor

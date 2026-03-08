@@ -1,10 +1,14 @@
 # QASIC Engineering-as-Code: Frontend SPA (production build served by nginx)
-FROM node:20-alpine AS builder
+# Use slim (Debian) for builder to avoid Alpine esbuild/native-module issues; final image stays Alpine
+FROM node:20-slim AS builder
 
 WORKDIR /app
 # Copy entire frontend (no package-lock.json in repo; npm install uses package.json)
 COPY src/frontend/ ./
 RUN npm install
+# Avoid OOM in constrained containers; explicit production build
+ENV NODE_ENV=production
+ENV NODE_OPTIONS=--max-old-space-size=4096
 RUN npm run build
 
 FROM nginx:alpine
