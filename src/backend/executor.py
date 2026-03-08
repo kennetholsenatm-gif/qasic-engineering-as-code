@@ -3,12 +3,14 @@ DAG executor: topological run of nodes, resolve inputs from upstream outputs, di
 """
 from __future__ import annotations
 
-import os
 import sys
 import tempfile
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+HEARTBEAT_INTERVAL_SECONDS = 10
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
@@ -79,186 +81,25 @@ def _get_inputs_for_node(
     return inputs
 
 
-def _run_cmd(cmd: list[str], cwd: Path | None = None, timeout: int = 600) -> tuple[int, str, str]:
-    import subprocess
-    r = subprocess.run(
-        cmd,
-        cwd=cwd or REPO_ROOT,
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-    )
-    return r.returncode, (r.stdout or "").strip(), (r.stderr or "").strip()
+def _heartbeat_loop(run_id: int, stop_event: threading.Event) -> None:
+    """Update last_heartbeat every HEARTBEAT_INTERVAL_SECONDS until stop_event is set."""
+    from storage.db import update_dag_run_heartbeat
+    while not stop_event.wait(timeout=HEARTBEAT_INTERVAL_SECONDS):
+        update_dag_run_heartbeat(run_id)
 
 
-def _execute_local(
-    task_type: str,
-    config: dict,
-    inputs: dict,
-    work_dir: Path,
-) -> tuple[dict[str, Any], str | None]:
-    """Execute task locally. Returns (outputs dict, error_message or None)."""
-    engineering = REPO_ROOT / "src" / "core_compute" / "engineering"
-    outputs = {}
-
-    if task_type == "routing":
-        out_json = work_dir / "routing.json"
-        use_rl = (config.get("routing_method") or "qaoa") == "rl"
-        if use_rl:
-            cmd = [sys.executable, str(engineering / "routing_rl.py"), "-o", str(out_json), "--qubits", "3"]
-        else:
-            cmd = [sys.executable, str(engineering / "routing_qubo_qaoa.py"), "-o", str(out_json)]
-            if config.get("fast"):
-                cmd.append("--fast")
-        code, _, err = _run_cmd(cmd, cwd=REPO_ROOT, timeout=300)
-        if code != 0:
-            return {}, err
-        outputs["routing_json"] = str(out_json)
-        return outputs, None
-
-    if task_type == "inverse_design":
-        routing_json = inputs.get("routing_json")
-        if not routing_json or not os.path.isfile(routing_json):
-            return {}, "Missing input routing_json"
-        out_json = work_dir / "inverse.json"
-        cmd = [
-            sys.executable,
-            str(engineering / "metasurface_inverse_net.py"),
-            "--routing-result", routing_json,
-            "--model", config.get("model", "mlp"),
-            "--device", config.get("device", "auto"),
-            "-o", str(out_json),
-        ]
-        code, _, err = _run_cmd(cmd, cwd=REPO_ROOT, timeout=600)
-        if code != 0:
-            return {}, err
-        npy_path = work_dir / "inverse_phases.npy"
-        if not npy_path.exists():
-            npy_path = Path(str(out_json).replace(".json", "_phases.npy"))
-        outputs["inverse_json"] = str(out_json)
-        outputs["npy_path"] = str(npy_path) if npy_path.exists() else str(out_json)
-        return outputs, None
-
-    if task_type == "protocol_teleport":
-        # Sim only in executor (blocking)
-        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
-            out_path = f.name
-        try:
-            cmd = [sys.executable, str(engineering / "run_protocol_on_ibm.py"), "--protocol", "teleport", "-o", out_path]
-            code, _, err = _run_cmd(cmd, cwd=REPO_ROOT, timeout=120)
-            if code != 0:
-                return {}, err
-            import json
-            with open(out_path) as fp:
-                data = json.load(fp)
-            outputs["result"] = data
-            return outputs, None
-        finally:
-            if os.path.isfile(out_path):
-                try:
-                    os.unlink(out_path)
-                except OSError:
-                    pass
-
-    if task_type == "protocol_bb84":
-        try:
-            from src.core_compute.protocols.qkd import run_bb84
-            result = run_bb84(n_bits=config.get("n_bits", 64), seed=config.get("seed"))
-            outputs["result"] = result
-            return outputs, None
-        except Exception as e:
-            return {}, str(e)
-
-    if task_type == "protocol_e91":
-        try:
-            from src.core_compute.protocols.qkd import run_e91
-            result = run_e91(n_trials=config.get("n_trials", 500), seed=config.get("seed"))
-            outputs["result"] = result
-            return outputs, None
-        except Exception as e:
-            return {}, str(e)
-
-    if task_type == "quantum_illumination":
-        try:
-            from src.core_compute.protocols.quantum_illumination import entangled_probe_metrics, unentangled_probe_metrics
-            eta = max(0.0, min(1.0, config.get("eta", 0.1)))
-            ent = entangled_probe_metrics(eta)
-            unent = unentangled_probe_metrics(eta)
-            outputs["result"] = {"eta": eta, "entangled": ent, "unentangled": unent}
-            return outputs, None
-        except Exception as e:
-            return {}, str(e)
-
-    if task_type == "quantum_radar":
-        try:
-            from src.core_compute.protocols.quantum_radar import run_quantum_radar
-            out = run_quantum_radar(
-                eta=config.get("eta", 0.1),
-                n_b=max(0.0, config.get("n_b", 10.0)),
-                r=max(0.0, config.get("r", 0.5)),
-            )
-            outputs["result"] = out
-            return outputs, None
-        except Exception as e:
-            return {}, str(e)
-
-    return {}, f"Unsupported task_type for local: {task_type}"
-
-
-def _execute_ibm(task_type: str, config: dict, inputs: dict) -> tuple[dict[str, Any], str | None]:
-    """Execute on IBM QPU where supported. Returns (outputs, error)."""
-    if task_type == "protocol_teleport":
-        try:
-            from src.core_compute.engineering.run_protocol_on_ibm import submit_protocol_job, get_job_status_and_result
-            job_id, job, backend_name = submit_protocol_job("teleport", shots=1024)
-            while True:
-                status_str, result_dict = get_job_status_and_result(job)
-                if status_str in ("DONE", "ERROR"):
-                    break
-                import time
-                time.sleep(2)
-            if status_str != "DONE":
-                return {}, result_dict.get("error") or status_str
-            outputs = {"result": result_dict}
-            return outputs, None
-        except Exception as e:
-            return {}, str(e)
-
-    if task_type == "routing":
-        # Run routing with --hardware
-        engineering = REPO_ROOT / "src" / "core_compute" / "engineering"
-        work_dir = Path(tempfile.mkdtemp(prefix="qasic_dag_"))
-        out_json = work_dir / "routing.json"
-        try:
-            cmd = [sys.executable, str(engineering / "routing_qubo_qaoa.py"), "-o", str(out_json), "--hardware"]
-            if config.get("fast"):
-                cmd.append("--fast")
-            code, _, err = _run_cmd(cmd, cwd=REPO_ROOT, timeout=600)
-            if code != 0:
-                return {}, err
-            return {"routing_json": str(out_json)}, None
-        finally:
-            try:
-                import shutil
-                shutil.rmtree(work_dir, ignore_errors=True)
-            except Exception:
-                pass
-
-    return {}, f"IBM QPU not supported for task_type: {task_type}"
-
-
-def run_dag(run_id: int, celery_task_id: str | None = None) -> dict[str, Any]:
+def run_dag(run_id: int, celery_task_id: str | None = None, run_dag_node_task: Any = None) -> dict[str, Any]:
     """
-    Execute a DAG run: load run and snapshot, topo sort, run each node, store outputs.
-    Updates dag_runs and dag_run_nodes. Returns summary dict.
+    Execute a DAG run. When run_dag_node_task is provided (by Celery), use canvas for parallel waves;
+    otherwise run nodes sequentially. Updates dag_runs and dag_run_nodes. Returns summary dict.
     """
     from storage.db import (
         get_dag_run,
         update_dag_run,
+        update_dag_run_heartbeat,
         upsert_dag_run_node,
         is_enabled,
     )
-    from datetime import datetime, timezone
 
     if not is_enabled():
         return {"success": False, "error": "Database not configured"}
@@ -276,14 +117,44 @@ def run_dag(run_id: int, celery_task_id: str | None = None) -> dict[str, Any]:
         return {"success": False, "error": "No nodes"}
 
     update_dag_run(run_id, status="running")
+    update_dag_run_heartbeat(run_id)
     order = _topological_order(nodes, edges)
     if len(order) != len(nodes):
         update_dag_run(run_id, status="failed", error_message="Graph has cycle")
         return {"success": False, "error": "Cycle detected"}
 
+    # Use Celery canvas when task is provided (parallel waves)
+    if run_dag_node_task is not None:
+        from src.backend.dag_compiler import build_dag_canvas
+        canvas = build_dag_canvas(run_id, nodes, edges, run_dag_node_task)
+        if canvas is None:
+            update_dag_run(run_id, status="failed", error_message="Graph has cycle")
+            return {"success": False, "error": "Cycle detected"}
+        stop_heartbeat = threading.Event()
+        heartbeat_thread = threading.Thread(target=_heartbeat_loop, args=(run_id, stop_heartbeat), daemon=True)
+        heartbeat_thread.start()
+        try:
+            result = canvas.apply_async()
+            result.get(timeout=3600)
+            update_dag_run(run_id, status="success", finished_at=datetime.now(timezone.utc))
+            return {"success": True, "run_id": run_id}
+        except Exception as e:
+            # Node task already updated run to failed if it failed
+            run_after = get_dag_run(run_id)
+            if run_after and run_after.get("status") == "running":
+                update_dag_run(run_id, status="failed", finished_at=datetime.now(timezone.utc), error_message=str(e))
+            return {"success": False, "error": str(e), "run_id": run_id}
+        finally:
+            stop_heartbeat.set()
+            heartbeat_thread.join(timeout=2)
+
+    # Sequential fallback (no Celery canvas)
     work_dir = Path(tempfile.mkdtemp(prefix="qasic_dag_"))
     node_outputs: dict[str, dict] = {}
     now = datetime.now(timezone.utc)
+    stop_heartbeat = threading.Event()
+    heartbeat_thread = threading.Thread(target=_heartbeat_loop, args=(run_id, stop_heartbeat), daemon=True)
+    heartbeat_thread.start()
 
     try:
         for node_id in order:
@@ -308,7 +179,6 @@ def run_dag(run_id: int, celery_task_id: str | None = None) -> dict[str, Any]:
 
             upsert_dag_run_node(run_id, node_id, status="running", started_at=now)
 
-            # Hybrid Compute Dispatcher: route by task_type + backend to local/IBM/EKS
             outputs, err = dispatcher_dispatch(task_type, config, inputs, work_dir)
 
             if err:
@@ -333,13 +203,11 @@ def run_dag(run_id: int, celery_task_id: str | None = None) -> dict[str, Any]:
                 outputs=outputs,
             )
 
-        update_dag_run(
-            run_id,
-            status="success",
-            finished_at=datetime.now(timezone.utc),
-        )
+        update_dag_run(run_id, status="success", finished_at=datetime.now(timezone.utc))
         return {"success": True, "run_id": run_id}
     finally:
+        stop_heartbeat.set()
+        heartbeat_thread.join(timeout=2)
         try:
             import shutil
             shutil.rmtree(work_dir, ignore_errors=True)

@@ -312,12 +312,12 @@ def run_pipeline_with_circuit_task(
 
 @app.task(bind=True, name="qasic.run_dag")
 def run_dag_task(self, run_id: int):
-    """Execute a DAG run (topological order, resolve I/O, dispatch per node)."""
+    """Execute a DAG run (Celery canvas for parallel waves, or sequential fallback)."""
     task_id = self.request.id if getattr(self.request, "id", None) else None
     _publish_progress(task_id, f"Starting DAG run {run_id}", step="dag", done=False)
     try:
         from src.backend.executor import run_dag
-        result = run_dag(run_id, celery_task_id=task_id)
+        result = run_dag(run_id, celery_task_id=task_id, run_dag_node_task=run_dag_node_task)
         if result.get("success"):
             _publish_progress(task_id, "DAG run completed", step="dag", done=True)
             return result
@@ -326,6 +326,104 @@ def run_dag_task(self, run_id: int):
     except Exception as e:
         _publish_progress(task_id, str(e), step="dag", done=True)
         raise
+
+
+@app.task(bind=True, name="qasic.run_dag_node")
+def run_dag_node_task(self, a, b, c=None):
+    """
+    Run a single DAG node. Called by the DAG compiler canvas.
+    Signature: (run_id, node_id) when first in chain, else (prev_results, run_id, node_id).
+    Reads node_outputs from DB (completed upstream nodes), dispatches, writes outputs to DB.
+    """
+    if c is None:
+        run_id, node_id = int(a), str(b)
+    else:
+        run_id, node_id = int(b), str(c)
+    from datetime import datetime, timezone
+    from pathlib import Path
+    import tempfile
+    from storage.db import get_dag_run, update_dag_run, upsert_dag_run_node, is_enabled
+    from src.backend.executor import _get_node_by_id, _get_inputs_for_node
+    from src.backend.dispatcher import dispatch as dispatcher_dispatch
+    from src.backend.task_registry import get_task_type
+
+    if not is_enabled():
+        raise RuntimeError("Database not configured")
+    run = get_dag_run(run_id)
+    if not run:
+        raise RuntimeError("Run not found")
+    nodes = run.get("nodes_snapshot") or []
+    edges = run.get("edges_snapshot") or []
+    node_outputs = {}
+    for ns in run.get("nodes") or []:
+        if ns.get("status") == "success" and ns.get("outputs"):
+            node_outputs[ns["node_id"]] = ns["outputs"]
+    node = _get_node_by_id(nodes, node_id)
+    if not node:
+        upsert_dag_run_node(run_id, node_id, status="failed", error_message="Node not found")
+        update_dag_run(run_id, status="failed", error_message="Node not found")
+        raise RuntimeError("Node not found")
+    data = node.get("data") or {}
+    config = data.get("config") or {}
+    task_type = data.get("task_type")
+    if not task_type:
+        upsert_dag_run_node(run_id, node_id, status="failed", error_message="Missing task_type")
+        update_dag_run(run_id, status="failed", error_message="Missing task_type")
+        raise RuntimeError("Missing task_type")
+    if not get_task_type(task_type):
+        upsert_dag_run_node(run_id, node_id, status="failed", error_message=f"Unknown task_type: {task_type}")
+        update_dag_run(run_id, status="failed", error_message=f"Unknown task_type: {task_type}")
+        raise RuntimeError(f"Unknown task_type: {task_type}")
+    inputs = _get_inputs_for_node(node_id, nodes, edges, node_outputs)
+    # Resolve URI inputs to local paths for this worker
+    try:
+        from src.backend.artifact_store import resolve_input_to_path
+        inputs = {k: str(resolve_input_to_path(v)) if isinstance(v, str) and (v.startswith("file://") or v.startswith("s3://")) else v for k, v in inputs.items()}
+    except Exception:
+        pass
+    now = datetime.now(timezone.utc)
+    upsert_dag_run_node(run_id, node_id, status="running", started_at=now)
+    work_dir = Path(tempfile.mkdtemp(prefix="qasic_dag_"))
+    try:
+        outputs, err = dispatcher_dispatch(task_type, config, inputs, work_dir)
+        if err:
+            upsert_dag_run_node(
+                run_id, node_id,
+                status="failed",
+                finished_at=datetime.now(timezone.utc),
+                error_message=err,
+            )
+            update_dag_run(run_id, status="failed", finished_at=datetime.now(timezone.utc), error_message=f"Node {node_id}: {err}")
+            raise RuntimeError(err)
+        # Store file outputs as URIs for cross-worker use
+        try:
+            from src.backend.artifact_store import store_outputs_as_uris
+            outputs = store_outputs_as_uris(run_id, outputs)
+        except Exception:
+            pass
+        upsert_dag_run_node(
+            run_id, node_id,
+            status="success",
+            finished_at=datetime.now(timezone.utc),
+            outputs=outputs,
+        )
+        return (node_id, outputs)
+    finally:
+        try:
+            import shutil
+            shutil.rmtree(work_dir, ignore_errors=True)
+        except Exception:
+            pass
+
+
+@app.task(name="qasic.sweep_stale_dag_runs")
+def sweep_stale_dag_runs_task(interval_seconds: int = 60) -> int:
+    """Mark DAG runs as failed when status=running and no heartbeat in interval_seconds. For Celery beat."""
+    try:
+        from storage.db import sweep_stale_dag_runs
+        return sweep_stale_dag_runs(interval_seconds=interval_seconds)
+    except Exception:
+        return 0
 
 
 @app.task(bind=True, name="qasic.meep_sweep")

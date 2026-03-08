@@ -3,7 +3,7 @@ Hybrid Compute Dispatcher: routes DAG nodes to the appropriate compute resource.
 
 When the WUI submits a DAG, the dispatcher parses each node, determines the required
 compute resource (classical simulation, FDTD/MEEP-style, or quantum backend), and
-delegates to the matching executor (local subprocess, IBM QPU, or future EKS).
+delegates to the matching adapter (local, IBM QPU, EKS).
 
 Compute resources:
 - CLASSICAL_SIM: Pure Python/NumPy simulation (QKD, quantum illumination, quantum radar, protocol sim).
@@ -13,9 +13,7 @@ Compute resources:
 """
 from __future__ import annotations
 
-import os
 import sys
-import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +21,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from src.backend.adapters import get_adapter_for
 from src.backend.task_registry import (
     BACKEND_LOCAL,
     BACKEND_IBM_QPU,
@@ -66,26 +65,14 @@ def dispatch(
 ) -> tuple[dict[str, Any], str | None]:
     """
     Single entry point for the Hybrid Compute Dispatcher.
-    Resolves compute resource, delegates to the appropriate executor, and returns (outputs, error).
+    Resolves (task_type, backend) to an adapter and calls adapter.execute().
     """
-    from src.backend.executor import _execute_local, _execute_ibm
-
     tt = get_task_type(task_type)
     if not tt:
         return {}, f"Unknown task_type: {task_type}"
 
     backend = config.get("backend", BACKEND_LOCAL)
-    resource = resolve_compute_resource(task_type, backend)
-
-    if backend == BACKEND_LOCAL:
-        outputs, err = _execute_local(task_type, config, inputs, work_dir)
-    elif backend == BACKEND_IBM_QPU:
-        outputs, err = _execute_ibm(task_type, config, inputs)
-    elif backend == BACKEND_AWS_EKS:
-        err = "EKS backend not configured"
-        outputs = {}
-    else:
-        err = f"Unknown backend: {backend}"
-        outputs = {}
-
-    return outputs, err
+    adapter = get_adapter_for(task_type, backend)
+    if adapter is None:
+        return {}, f"No adapter for backend: {backend}"
+    return adapter.execute(task_type, config, inputs, work_dir)

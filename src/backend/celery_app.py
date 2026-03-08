@@ -31,5 +31,12 @@ def get_celery_app():
             task_track_started=True,
             task_time_limit=3600,
             worker_prefetch_multiplier=1,
+            beat_schedule={
+                "sweep-stale-dag-runs": {
+                    "task": "qasic.sweep_stale_dag_runs",
+                    "schedule": 120.0,  # seconds
+                    "options": {"kwargs": {"interval_seconds": 60}},
+                },
+            },
         )
     return _celery_app

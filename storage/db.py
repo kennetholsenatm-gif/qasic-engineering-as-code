@@ -108,6 +108,7 @@ def get_engine():
             try:
                 conn.execute(text("ALTER TABLE pipeline_runs ADD COLUMN IF NOT EXISTS project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL"))
                 conn.execute(text("ALTER TABLE pipeline_runs ADD COLUMN IF NOT EXISTS gds_path TEXT"))
+                conn.execute(text("ALTER TABLE dag_runs ADD COLUMN IF NOT EXISTS last_heartbeat TIMESTAMP WITH TIME ZONE"))
                 conn.commit()
             except Exception:
                 pass
@@ -586,8 +587,8 @@ def get_dag_run(run_id: int) -> dict[str, Any] | None:
         return None
 
 
-def update_dag_run(run_id: int, status: str | None = None, finished_at: datetime | None = None, error_message: str | None = None, celery_task_id: str | None = None) -> bool:
-    """Update DAG run status."""
+def update_dag_run(run_id: int, status: str | None = None, finished_at: datetime | None = None, error_message: str | None = None, celery_task_id: str | None = None, last_heartbeat: datetime | None = None) -> bool:
+    """Update DAG run status and/or last_heartbeat."""
     engine = get_engine()
     if engine is None:
         return False
@@ -607,6 +608,9 @@ def update_dag_run(run_id: int, status: str | None = None, finished_at: datetime
         if celery_task_id is not None:
             updates.append("celery_task_id = :celery_task_id")
             params["celery_task_id"] = celery_task_id
+        if last_heartbeat is not None:
+            updates.append("last_heartbeat = :last_heartbeat")
+            params["last_heartbeat"] = last_heartbeat
         if not updates:
             return True
         with engine.connect() as conn:
@@ -615,6 +619,39 @@ def update_dag_run(run_id: int, status: str | None = None, finished_at: datetime
         return True
     except Exception:
         return False
+
+
+def update_dag_run_heartbeat(run_id: int) -> bool:
+    """Set last_heartbeat to now for the given run (worker liveness)."""
+    return update_dag_run(run_id, last_heartbeat=datetime.now(timezone.utc))
+
+
+def sweep_stale_dag_runs(interval_seconds: int = 60) -> int:
+    """
+    Mark runs as failed where status='running' and last_heartbeat is older than interval_seconds.
+    Returns the number of runs updated. Run as cron or Celery beat task.
+    """
+    engine = get_engine()
+    if engine is None:
+        return 0
+    try:
+        from sqlalchemy import text
+        with engine.connect() as conn:
+            r = conn.execute(
+                text("""
+                    UPDATE dag_runs
+                    SET status = 'failed', error_message = 'Run timed out (no heartbeat)'
+                    WHERE status = 'running'
+                    AND (last_heartbeat IS NULL OR last_heartbeat < NOW() - INTERVAL '1 second' * :interval)
+                    RETURNING id
+                """),
+                {"interval": interval_seconds},
+            )
+            ids = [row[0] for row in r.fetchall()]
+            conn.commit()
+        return len(ids)
+    except Exception:
+        return 0
 
 
 def upsert_dag_run_node(run_id: int, node_id: str, status: str, started_at: datetime | None = None, finished_at: datetime | None = None, outputs: dict | None = None, error_message: str | None = None) -> bool:
