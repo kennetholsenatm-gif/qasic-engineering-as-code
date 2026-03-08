@@ -14,13 +14,13 @@ import tempfile
 from pathlib import Path
 
 import asyncio
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-# In-memory store for async IBM protocol jobs: job_id -> {job, backend, protocol}
-_ibm_job_store: dict[str, dict] = {}
+# IBM protocol jobs: Redis-backed when CELERY_BROKER_URL set (multi-worker); else in-memory (single-worker)
+# Use app.job_store.get_job / set_job
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
@@ -58,6 +58,19 @@ app.add_middleware(
     allow_methods=_app_cfg.cors.allow_methods,
     allow_headers=_app_cfg.cors.allow_headers,
 )
+
+# Rate limiting (slowapi): protect heavy compute; key by IP or X-Forwarded-For
+try:
+    from slowapi import Limiter, _rate_limit_exceeded_handler
+    from slowapi.util import get_remote_address
+    from slowapi.errors import RateLimitExceeded
+    limiter = Limiter(key_func=get_remote_address, default_limits=["200/hour"])
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    limit_heavy = limiter.limit("15/minute")  # pipeline, inverse, routing, protocol
+except ImportError:
+    limiter = None
+    limit_heavy = lambda f: f  # no-op
 
 
 def _run(cmd: list[str], cwd: Path | None = None) -> tuple[int, str]:
@@ -256,14 +269,17 @@ def _run_e91(n_trials: int, seed: int | None) -> dict:
 
 
 @app.post("/api/run/protocol")
-def run_protocol(req: RunProtocolRequest):
+@limit_heavy
+def run_protocol(request: Request, req: RunProtocolRequest):
     """Run ASIC protocol on sim (blocking) or IBM hardware (returns job_id for WebSocket polling)."""
     use_hardware = req.backend.lower() == "hardware"
     if use_hardware:
         try:
-            from engineering.run_protocol_on_ibm import submit_protocol_job, get_job_status_and_result
+            from engineering.run_protocol_on_ibm import submit_protocol_job, get_ibm_job_id
+            from app.job_store import set_job
             job_id, job, backend_name = submit_protocol_job(req.protocol, shots=1024)
-            _ibm_job_store[job_id] = {"job": job, "backend": backend_name, "protocol": req.protocol}
+            ibm_job_id = get_ibm_job_id(job)
+            set_job(job_id, ibm_job_id=ibm_job_id, backend=backend_name or "", protocol=req.protocol, job=job)
             return {"job_id": job_id, "status": "submitted", "backend": backend_name}
         except Exception as e:
             raise HTTPException(status_code=503, detail=str(e))
@@ -296,18 +312,24 @@ def run_protocol(req: RunProtocolRequest):
 
 @app.websocket("/ws/job/{job_id}")
 async def websocket_job_status(websocket: WebSocket, job_id: str):
-    """Stream IBM job status (QUEUED, RUNNING, DONE, ERROR) until completion."""
+    """Stream IBM job status (QUEUED, RUNNING, DONE, ERROR) until completion. Uses Redis when set (multi-worker)."""
     await websocket.accept()
-    if job_id not in _ibm_job_store:
+    from app.job_store import get_job
+    entry = get_job(job_id)
+    if not entry:
         await websocket.send_json({"status": "ERROR", "error": "Unknown job_id"})
         await websocket.close()
         return
-    from engineering.run_protocol_on_ibm import get_job_status_and_result
-    entry = _ibm_job_store[job_id]
-    job = entry["job"]
+    from engineering.run_protocol_on_ibm import get_job_status_and_result, get_job_status_and_result_by_ibm_job_id
     try:
         while True:
-            status_str, result_dict = get_job_status_and_result(job)
+            if "job" in entry:
+                status_str, result_dict = get_job_status_and_result(entry["job"])
+            elif entry.get("ibm_job_id"):
+                status_str, result_dict = get_job_status_and_result_by_ibm_job_id(entry["ibm_job_id"])
+            else:
+                await websocket.send_json({"status": "ERROR", "error": "Missing job or ibm_job_id"})
+                break
             await websocket.send_json({"status": status_str, "result": result_dict})
             if status_str in ("DONE", "ERROR"):
                 break
@@ -319,7 +341,8 @@ async def websocket_job_status(websocket: WebSocket, job_id: str):
 
 
 @app.post("/api/run/routing")
-def run_routing(req: RunRoutingRequest):
+@limit_heavy
+def run_routing(request: Request, req: RunRoutingRequest):
     """Run QUBO routing (QAOA or RL) on sim or IBM hardware."""
     use_hardware = req.backend.lower() == "hardware"
     use_rl = (req.routing_method or "qaoa").lower() == "rl"
@@ -379,7 +402,8 @@ def _celery_available() -> bool:
 
 
 @app.post("/api/run/pipeline/async")
-def run_pipeline_async(req: RunPipelineRequest):
+@limit_heavy
+def run_pipeline_async(request: Request, req: RunPipelineRequest):
     """Enqueue pipeline run as Celery task. Returns task_id; poll GET /api/tasks/{task_id} for status. Requires CELERY_BROKER_URL (e.g. redis)."""
     if not _celery_available():
         raise HTTPException(status_code=503, detail="Celery/Redis not configured (set CELERY_BROKER_URL)")
@@ -428,8 +452,11 @@ def get_task_status(task_id: str):
 
 
 @app.post("/api/run/pipeline")
-def run_pipeline(req: RunPipelineRequest):
-    """Run full pipeline: routing then inverse design. Optional: routing_method, model, heac."""
+@limit_heavy
+def run_pipeline(request: Request, req: RunPipelineRequest):
+    """Run full pipeline: routing then inverse design. Optional: routing_method, model, heac. Use /async when Celery available."""
+    if os.environ.get("FORCE_ASYNC_HEAVY", "").strip().lower() in ("1", "true", "yes") and _celery_available():
+        raise HTTPException(status_code=400, detail="Use POST /api/run/pipeline/async for pipeline runs (Celery worker required).")
     run_id = None
     try:
         from storage.db import record_pipeline_run, update_pipeline_run, is_enabled as db_enabled
@@ -491,7 +518,8 @@ def run_pipeline(req: RunPipelineRequest):
 
 
 @app.post("/api/run/inverse/async")
-def run_inverse_async(req: RunInverseRequest):
+@limit_heavy
+def run_inverse_async(request: Request, req: RunInverseRequest):
     """Enqueue inverse design (metasurface_inverse_net / GNN) as Celery task. Returns task_id; poll GET /api/tasks/{task_id}. Control plane stays responsive."""
     if not _celery_available():
         raise HTTPException(status_code=503, detail="Celery/Redis not configured (set CELERY_BROKER_URL)")
@@ -508,8 +536,11 @@ def run_inverse_async(req: RunInverseRequest):
 
 
 @app.post("/api/run/inverse")
-def run_inverse(req: RunInverseRequest):
+@limit_heavy
+def run_inverse(request: Request, req: RunInverseRequest):
     """Run inverse design (topology -> phase profile). Blocking; use /api/run/inverse/async for offload to worker."""
+    if os.environ.get("FORCE_ASYNC_HEAVY", "").strip().lower() in ("1", "true", "yes") and _celery_available():
+        raise HTTPException(status_code=400, detail="Use POST /api/run/inverse/async for inverse design (Celery worker required).")
     with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
         out_path = f.name
     try:

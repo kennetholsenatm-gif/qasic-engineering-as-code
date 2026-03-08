@@ -137,6 +137,30 @@ def get_job_status_and_result(job: object) -> tuple[str, dict | None]:
     return "UNKNOWN", None
 
 
+def get_ibm_job_id(job: object) -> str | None:
+    """Return the IBM runtime job id for this job (for Redis/store)."""
+    if job is None:
+        return None
+    jid = getattr(job, "job_id", None)
+    if callable(jid):
+        return jid()
+    return str(jid) if jid is not None else None
+
+
+def get_job_status_and_result_by_ibm_job_id(ibm_job_id: str, ibm_token: str | None = None) -> tuple[str, dict | None]:
+    """Retrieve job from IBM by id and return (status_str, result_dict). Use when job state is in Redis (multi-worker)."""
+    try:
+        from qiskit_ibm_runtime import QiskitRuntimeService
+        token = ibm_token or os.environ.get(IBM_QUANTUM_TOKEN_ENV)
+        if not token:
+            return "ERROR", {"error": "IBM token not set"}
+        service = QiskitRuntimeService(channel=IBM_CHANNEL, token=token)
+        job = service.job(ibm_job_id)
+        return get_job_status_and_result(job)
+    except Exception as e:
+        return "ERROR", {"error": str(e)}
+
+
 def get_hardware_sampler_and_pass_manager(backend_name: str | None = None, ibm_token: str | None = None):
     """Get (sampler, pass_manager, backend) for real IBM hardware; (None, None, None) on failure."""
     try:

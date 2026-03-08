@@ -116,12 +116,47 @@ def meep_sweep_task(self, output_path: str | None = None, points: int = 21, no_m
     return result
 
 
+def _run_inverse_design_inprocess(
+    routing_result_path: str | None,
+    model: str,
+    device: str,
+    output_path: str,
+    phase_band: str | None,
+) -> dict | None:
+    """Call engineering inverse design in-process when available. Returns result dict or None on import error."""
+    try:
+        from engineering.metasurface_inverse_net import run_inverse_design
+    except ImportError:
+        try:
+            sys.path.insert(0, str(REPO_ROOT))
+            from engineering.metasurface_inverse_net import run_inverse_design
+        except ImportError:
+            return None
+    return run_inverse_design(
+        routing_result_path=routing_result_path,
+        output_path=output_path,
+        device=device,
+        model=model,
+        phase_band_str=phase_band,
+    )
+
+
 @app.task(bind=True, name="qasic.inverse_design")
 def inverse_design_task(self, routing_result_path: str | None = None, model: str = "mlp",
                         device: str = "auto", output_base: str = "pipeline_result",
                         phase_band: str | None = None):
-    """Run inverse design (MLP or GNN). Writes to <output_base>_inverse.json and _inverse_phases.npy for dashboard."""
+    """Run inverse design (MLP or GNN). Prefers in-process run_inverse_design; falls back to subprocess."""
     out_json = str(ENGINEERING_DIR / f"{output_base}_inverse.json")
+    inv = _run_inverse_design_inprocess(
+        routing_result_path=routing_result_path,
+        model=model,
+        device=device,
+        output_path=out_json,
+        phase_band=phase_band,
+    )
+    if inv is not None:
+        result = {"success": True, "output_json": out_json, "inverse": inv}
+        return result
     cmd = [sys.executable, str(ENGINEERING_DIR / "metasurface_inverse_net.py"),
            "-o", out_json, "--model", model, "--device", device]
     if routing_result_path and os.path.isfile(routing_result_path):

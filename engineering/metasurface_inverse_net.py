@@ -179,76 +179,29 @@ def _topology_from_routing(routing_path: str, target_dim: int, device: torch.dev
     return vec
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Metasurface inverse design: topology -> phase profile")
-    parser.add_argument(
-        "--device",
-        type=str,
-        default="auto",
-        choices=("cpu", "cuda", "mps", "auto"),
-        help="Device to run the model on (default: auto = cuda if available else cpu).",
-    )
-    parser.add_argument(
-        "--routing-result",
-        type=str,
-        default=None,
-        metavar="FILE",
-        help="Optional JSON from routing_qubo_qaoa.py -o; use its mapping/backend as topology input.",
-    )
-    parser.add_argument(
-        "-o", "--output",
-        type=str,
-        default=None,
-        metavar="FILE",
-        help="Write result (device, phase stats, optional routing ref) to JSON; phase array to same base + .npy.",
-    )
-    parser.add_argument(
-        "--target-dim",
-        type=int,
-        default=10,
-        help="Target topology feature dimension (default: 10).",
-    )
-    parser.add_argument(
-        "--meta-atoms",
-        type=int,
-        default=1000,
-        help="Number of meta-atoms in phase profile (default: 1000).",
-    )
-    parser.add_argument(
-        "--phase-band",
-        type=str,
-        default=None,
-        metavar="pi|lo,hi",
-        help="Constrain phases to narrow band: 'pi' (pi±0.14 rad) or 'lo,hi' in radians (Cryo-CMOS). Default: full [0, 2*pi].",
-    )
-    parser.add_argument(
-        "--seed",
-        type=int,
-        default=None,
-        help="Random seed for topology vector (when not using --routing-result).",
-    )
-    parser.add_argument(
-        "--model",
-        type=str,
-        default="mlp",
-        choices=("mlp", "gnn"),
-        help="Model type: mlp (default) or gnn (graph neural network; requires --routing-result).",
-    )
-    args = parser.parse_args()
+def run_inverse_design(
+    routing_result_path: str | None = None,
+    output_path: str | None = None,
+    device: str = "auto",
+    model: str = "mlp",
+    phase_band_str: str | None = None,
+    target_dim: int = 10,
+    num_meta_atoms: int = 1000,
+    seed: int | None = None,
+) -> dict:
+    """
+    Callable entry point: run inverse design and optionally write JSON + .npy.
+    Returns result dict (device, phase_min, phase_max, phase_mean, routing_result, etc.).
+    Use from API/Celery instead of subprocess when possible.
+    """
+    dev = _resolve_device(device)
+    phase_band = parse_phase_band(phase_band_str) if phase_band_str else None
+    if seed is not None:
+        torch.manual_seed(seed)
 
-    target_topology_features = args.target_dim
-    num_meta_atoms = args.meta_atoms
-    device = _resolve_device(args.device)
-    phase_band = None
-    if args.phase_band:
-        phase_band = parse_phase_band(args.phase_band)
-
-    if args.seed is not None:
-        torch.manual_seed(args.seed)
-
-    use_gnn = args.model.lower() == "gnn"
+    use_gnn = model.lower() == "gnn"
     if use_gnn:
-        if not args.routing_result or not os.path.isfile(args.routing_result):
+        if not routing_result_path or not os.path.isfile(routing_result_path):
             raise FileNotFoundError("GNN model requires --routing-result (routing JSON).")
         try:
             from engineering.metasurface_inverse_gnn import (
@@ -260,33 +213,33 @@ def main() -> None:
                 routing_json_to_graph,
                 create_gnn_model,
             )
-        node_feature_dim = min(8, target_topology_features)
-        model = create_gnn_model(
+        node_feature_dim = min(8, target_dim)
+        net = create_gnn_model(
             node_feature_dim=node_feature_dim,
             num_meta_atoms=num_meta_atoms,
-            device=device,
+            device=dev,
             phase_band=phase_band,
         )
-        x, edge_index = routing_json_to_graph(args.routing_result, node_feature_dim)
-        x = x.to(device)
-        edge_index = edge_index.to(device)
-        routing_ref = {"file": args.routing_result}
-        model.eval()
+        x, edge_index = routing_json_to_graph(routing_result_path, node_feature_dim)
+        x = x.to(dev)
+        edge_index = edge_index.to(dev)
+        routing_ref = {"file": routing_result_path}
+        net.eval()
         with torch.no_grad():
-            predicted_phase_array = model(x, edge_index)
+            predicted_phase_array = net(x, edge_index)
     else:
-        model = create_model(
-            target_topology_features, num_meta_atoms, device, phase_band=phase_band
+        net = create_model(
+            target_dim, num_meta_atoms, dev, phase_band=phase_band
         )
-        if args.routing_result and os.path.isfile(args.routing_result):
-            desired_topology = _topology_from_routing(args.routing_result, target_topology_features, device)
-            routing_ref = {"file": args.routing_result}
+        if routing_result_path and os.path.isfile(routing_result_path):
+            desired_topology = _topology_from_routing(routing_result_path, target_dim, dev)
+            routing_ref = {"file": routing_result_path}
         else:
-            desired_topology = torch.randn(1, target_topology_features, device=device)
+            desired_topology = torch.randn(1, target_dim, device=dev)
             routing_ref = None
-        model.eval()
+        net.eval()
         with torch.no_grad():
-            predicted_phase_array = model(desired_topology)
+            predicted_phase_array = net(desired_topology)
 
     phase = predicted_phase_array[0].cpu().numpy()
     phase_min = float(phase.min())
@@ -294,37 +247,55 @@ def main() -> None:
     phase_mean = float(phase.mean())
 
     phase_range_note = "[0, 2*pi]" if phase_band is None else f"[{phase_band[0]:.3f}, {phase_band[1]:.3f}]"
-    print("Metasurface Inverse Design Network")
-    print(f"  Device: {device}")
-    print(f"  Input: target topology features dim = {target_topology_features}")
-    print(f"  Output: phase shifts for {predicted_phase_array.shape[1]} meta-atoms")
-    print(f"  Phase range: [{phase_min:.3f}, {phase_max:.3f}] (expect {phase_range_note})")
+    out = {
+        "device": str(dev),
+        "target_topology_features": target_dim,
+        "num_meta_atoms": num_meta_atoms,
+        "phase_min": phase_min,
+        "phase_max": phase_max,
+        "phase_mean": phase_mean,
+        "phase_array_path": None,
+        "routing_result": routing_ref,
+        "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+    }
+    if phase_band is not None:
+        out["phase_band_lo"] = phase_band[0]
+        out["phase_band_hi"] = phase_band[1]
 
-    if args.output:
-        out_path = args.output
-        base, _ = os.path.splitext(out_path)
+    if output_path:
+        base, _ = os.path.splitext(output_path)
         npy_path = base + "_phases.npy"
         np.save(npy_path, phase)
-        out = {
-            "device": str(device),
-            "target_topology_features": target_topology_features,
-            "num_meta_atoms": num_meta_atoms,
-            "phase_min": phase_min,
-            "phase_max": phase_max,
-            "phase_mean": phase_mean,
-            "phase_array_path": os.path.basename(npy_path),
-            "routing_result": routing_ref,
-            "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-        }
-        if phase_band is not None:
-            out["phase_band_lo"] = phase_band[0]
-            out["phase_band_hi"] = phase_band[1]
+        out["phase_array_path"] = os.path.basename(npy_path)
         try:
-            with open(out_path, "w", encoding="utf-8") as f:
+            with open(output_path, "w", encoding="utf-8") as f:
                 json.dump(out, f, indent=2)
         except OSError as e:
-            raise OSError(f"Cannot write output {out_path}: {e}") from e
-        print(f"  Result written to {out_path}, phases to {npy_path}")
+            raise OSError(f"Cannot write output {output_path}: {e}") from e
+    return out
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Metasurface inverse design: topology -> phase profile")
+    parser.add_argument("--device", type=str, default="auto", choices=("cpu", "cuda", "mps", "auto"))
+    parser.add_argument("--routing-result", type=str, default=None, metavar="FILE")
+    parser.add_argument("-o", "--output", type=str, default=None, metavar="FILE")
+    parser.add_argument("--target-dim", type=int, default=10)
+    parser.add_argument("--meta-atoms", type=int, default=1000)
+    parser.add_argument("--phase-band", type=str, default=None, metavar="pi|lo,hi")
+    parser.add_argument("--seed", type=int, default=None)
+    parser.add_argument("--model", type=str, default="mlp", choices=("mlp", "gnn"))
+    args = parser.parse_args()
+    run_inverse_design(
+        routing_result_path=args.routing_result,
+        output_path=args.output,
+        device=args.device,
+        model=args.model,
+        phase_band_str=args.phase_band,
+        target_dim=args.target_dim,
+        num_meta_atoms=args.meta_atoms,
+        seed=args.seed,
+    )
 
 
 if __name__ == "__main__":

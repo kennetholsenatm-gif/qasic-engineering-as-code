@@ -8,6 +8,8 @@ celery[redis]>=5.3.0
 redis>=4.5.0
 # Structured logging
 loguru>=0.7.0
+# Rate limiting for heavy routes
+slowapi>=0.1.9
 # Optional persistence (PostgreSQL pipeline runs; MLflow/Influx when used from API)
 sqlalchemy>=2.0.0
 psycopg2-binary>=2.9.0
