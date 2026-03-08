@@ -1,0 +1,115 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "qasic-engineering-as-code"
+version = "0.1.0"
+description = "Quantum ASIC and Engineering-as-Code: protocols, routing, inverse design, quantum illumination, and CV quantum radar."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [
+  { name = "kennetholsenatm-gif" }
+]
+keywords = ["quantum", "ASIC", "engineering-as-code", "metasurface", "routing", "QKD", "teleportation"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Science/Research",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering :: Physics",
+]
+dependencies = [
+  "numpy>=1.20.0",
+  "PyYAML>=6.0",
+  "pydantic>=2.0",
+  "loguru>=0.7.0",
+  "mlflow>=2.9.0",
+  "influxdb-client>=1.38.0",
+  "sqlalchemy>=2.0.0",
+  "psycopg2-binary>=2.9.0",
+  "prefect>=2.14.0",
+]
+
+[project.optional-dependencies]
+dashboard = [
+  "rich>=10.0.0",
+]
+app = [
+  "fastapi>=0.100.0",
+  "uvicorn[standard]>=0.22.0",
+  "python-multipart>=0.0.6",
+  "httpx>=0.24.0",
+  "celery[redis]>=5.3.0",
+  "redis>=4.5.0",
+  "slowapi>=0.1.9",
+]
+engineering = [
+  "qiskit>=2.0",
+  "qiskit-optimization>=0.7.0",
+  "hashable-list>=0.2.0",
+  "ordered-set>=4.0.0",
+  "torch>=1.9.0",
+  "matplotlib>=3.5.0",
+  "scipy>=1.7.0",
+]
+test = [
+  "pytest>=7.0.0",
+  "torch>=1.9.0",
+]
+all = [
+  "rich>=10.0.0",
+  "fastapi>=0.100.0",
+  "uvicorn[standard]>=0.22.0",
+  "python-multipart>=0.0.6",
+  "httpx>=0.24.0",
+  "celery[redis]>=5.3.0",
+  "redis>=4.5.0",
+  "slowapi>=0.1.9",
+  "qiskit>=2.0",
+  "qiskit-optimization>=0.7.0",
+  "hashable-list>=0.2.0",
+  "ordered-set>=4.0.0",
+  "torch>=1.9.0",
+  "matplotlib>=3.5.0",
+  "scipy>=1.7.0",
+  "pytest>=7.0.0",
+]
+
+[project.scripts]
+qasic-dashboard = "dashboard.cli_dashboard:main"
+qasic-pulse = "pulse.compile_cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = [
+  "state*",
+  "asic*",
+  "protocols*",
+  "pulse*",
+  "dashboard*",
+  "app*",
+  "config*",
+  "storage*",
+  "engineering*",
+  "orchestration*",
+  "apps*",
+]
+exclude = [
+  "tests*",
+  "demos*",
+  "docs*",
+  "deploy*",
+  "infra*",
+  "frontend*",
+]
+
+[tool.setuptools.package-data]
+"*" = ["*.yaml", "*.yml", "*.json"]
+pulse = ["schedule_config_schema.json"]
+
+[tool.setuptools.exclude-package-data]
+"*" = ["*.pyc", "__pycache__"]

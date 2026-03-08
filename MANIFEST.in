@@ -1,0 +1,16 @@
+# Source distribution: include docs and config used at runtime
+include README.md
+include requirements.txt
+include requirements-dashboard.txt
+include requirements-test.txt
+include QRNG.PY
+recursive-include config *.yaml *.yml
+recursive-include engineering *.yaml *.yml
+recursive-include pulse *.json
+# Exclude build artifacts and local outputs
+global-exclude __pycache__
+global-exclude *.py[cod]
+global-exclude .env
+global-exclude engineering/*_routing.json
+global-exclude engineering/*_inverse.json
+global-exclude engineering/*_phases.npy

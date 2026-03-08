@@ -27,6 +27,16 @@ Documentation and whitepapers for **QASIC Engineering-as-Code** ([GitHub](https:
 | [Engineering_as_Code_Distributed_Computational_Roadmap.tex](Engineering_as_Code_Distributed_Computational_Roadmap.tex) | Full LaTeX report |
 | [quantum-terrestrial-backhaul.md](quantum-terrestrial-backhaul.md) | **Markdown:** Quantum-secured terrestrial P2P backhaul, metamaterials, QI, radiative cooling (GitHub-friendly) |
 | [quantum-terrestrial-backhaul.tex](quantum-terrestrial-backhaul.tex) | Full LaTeX report |
+| [PULSE_CONTROL.md](PULSE_CONTROL.md) | Gate → pulse schedule (OpenPulse / pseudo); pulse compiler usage |
+| [THERMAL_AND_PARASITICS.md](THERMAL_AND_PARASITICS.md) | Thermal stages (10 mK / 4 K / 50 K), parasitic extraction, decoherence feedback |
+| [CALIBRATION_DIGITAL_TWIN.md](CALIBRATION_DIGITAL_TWIN.md) | Telemetry → digital twin → decoherence for routing/simulation |
+| [CHANNEL_NOISE.md](CHANNEL_NOISE.md) | Kraus channels, noise simulator (depolarizing, amplitude/phase damping, thermal) |
+| [CV_QUANTUM_RADAR.md](CV_QUANTUM_RADAR.md) | Toy CV simulator: TMSV, covariance matrices, quantum radar |
+| [TOPOLOGY_BUILDER.md](TOPOLOGY_BUILDER.md) | Named topologies (linear, star, repeater), viz_topology, get_topology API |
+| [ROADMAP_STATUS.md](ROADMAP_STATUS.md) | Roadmap implementation status (done vs scaffold vs future) |
+| [DATA_PERSISTENCE.md](DATA_PERSISTENCE.md) | Data persistence (MLflow, InfluxDB, Postgres) for pipeline and app |
+| [ORCHESTRATION.md](ORCHESTRATION.md) | Prefect 2 DAG for pipeline and calibration; retries and server |
+| [superscreen_integration.md](superscreen_integration.md) | SuperScreen 2D London equation / Meissner screening integration |
 
 **How to read:** Each whitepaper has a **Markdown (.md)** version for GitHub and quick reading; the **LaTeX (.tex)** source is for full equations and PDF build. For vision and protocols → [WHITEPAPER_Holographic_Metasurfaces_Quantum_SATCOM.md](WHITEPAPER_Holographic_Metasurfaces_Quantum_SATCOM.md). For EaC roadmap, cryogenic metamaterials, computational materials science, and terrestrial backhaul → use the corresponding .md files above. See the main [README](../README.md) for repo layout.
 

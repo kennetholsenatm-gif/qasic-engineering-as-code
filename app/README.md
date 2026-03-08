@@ -11,6 +11,8 @@ pip install -r requirements.txt
 pip install -r app/requirements.txt
 ```
 
+Or install as a package with the app extra: `pip install -e ".[app]"` (see [main README – Installation and packaging](../README.md#installation-and-packaging)).
+
 Optional: install [engineering/requirements-engineering.txt](../engineering/requirements-engineering.txt) so routing and inverse design have Qiskit and PyTorch. For IBM hardware runs, set `IBM_QUANTUM_TOKEN`.
 
 **Runtime deps:** The API runs protocol, routing, and pipeline by subprocess and by importing `protocols`, `state`, etc. Start the server from the repository root and ensure base `requirements.txt` (and optionally engineering deps) are installed so those imports and subprocess calls succeed.

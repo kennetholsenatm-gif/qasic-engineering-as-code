@@ -137,6 +137,13 @@ qasic-engineering-as-code/
 ├── frontend/                 # Vite + React SPA (npm run dev / npm run build)
 │   ├── src/
 │   └── package.json
+├── config/                   # App and pipeline config (YAML loader, app_config, storage, thermal)
+├── deploy/                   # Kubernetes/Helm chart (API, frontend, Celery, Redis, Postgres, KEDA)
+│   └── helm/qasic/           # Helm chart; see deploy/README.md
+├── infra/                    # Infrastructure as Code (OpenTofu: local Compose or AWS RDS/ElastiCache)
+│   └── tofu/                 # OpenTofu modules; see infra/README.md
+├── orchestration/             # Prefect 2 DAG (pipeline, calibration) for retries and optional server
+├── storage/                  # Persistence (DB, MLflow artifacts) used by app and pipeline
 ├── tests/                    # Pytest suite (state, protocols, ASIC, pulse, engineering, calibration)
 │   ├── conftest.py
 │   ├── test_state.py
@@ -148,14 +155,14 @@ qasic-engineering-as-code/
 │   ├── test_engineering_*.py
 │   └── test_viz.py
 ├── demos/                    # Runnable scripts
-    ├── demo_teleport.py
-    ├── demo_thief.py
-    ├── demo_commitment.py
-    ├── demo_noise.py         # Teleport/tamper with channel noise (depolarizing, amplitude/phase damping)
-    ├── demo_asic.py          # Validate protocols on ASIC, run teleport
-    ├── demo_bitflip_code.py  # 3-qubit bit-flip repetition code (QEC)
-    ├── demo_bb84.py          # BB84 QKD
-    └── demo_e91.py           # E91 QKD (Bell + CHSH)
+│   ├── demo_teleport.py
+│   ├── demo_thief.py
+│   ├── demo_commitment.py
+│   ├── demo_noise.py         # Teleport/tamper with channel noise (depolarizing, amplitude/phase damping)
+│   ├── demo_asic.py          # Validate protocols on ASIC, run teleport
+│   ├── demo_bitflip_code.py  # 3-qubit bit-flip repetition code (QEC)
+│   ├── demo_bb84.py          # BB84 QKD
+│   └── demo_e91.py           # E91 QKD (Bell + CHSH)
 ```
 
 ### Channel noise and decoherence
@@ -187,6 +194,31 @@ python demos/demo_e91.py            # E91 QKD (Bell pairs + CHSH)
 ```
 
 Demos are script-style (no CLI arguments). For the full pipeline (routing + inverse design), run `python engineering/run_pipeline.py`; it writes `engineering/<base>_routing.json`, `engineering/<base>_inverse.json`, and `engineering/<base>_inverse_phases.npy` (default base: `pipeline_result`). Use `--routing-method rl` for RL-based routing or `--model gnn` for GNN inverse design; use `--with-superscreen` to compute inductance from the routing topology (optional). For tape-out–oriented runs: `--heac` (geometry manifest), `--gds --drc --lvs` (GDS + DRC/LVS), `--thermal` (thermal report), `--parasitic` (layout decoherence). For affordable runs on IBM Quantum (under 5 minutes QPU time), see [Engineering as Code on IBM Quantum](engineering/README.md#engineering-as-code-on-ibm-quantum-affordable-5-min) in the engineering README.
+
+### Installation and packaging
+
+The project is installable as a Python package for use in scripts, CI, or as the basis for an installer:
+
+```bash
+# From repo root: install in editable mode (development)
+pip install -e .
+
+# Install with optional extras (dashboard CLI, web app deps, engineering tools, tests)
+pip install -e ".[dashboard]"           # CLI dashboard (python -m dashboard)
+pip install -e ".[app]"                  # FastAPI + Celery (for uvicorn app.main:app)
+pip install -e ".[engineering]"         # Routing, inverse design, HEaC (Qiskit, PyTorch)
+pip install -e ".[test]"                # Pytest and test deps
+pip install -e ".[all]"                 # All optional dependencies
+```
+
+To build distributable artifacts (for packaging into an installer or uploading to PyPI):
+
+```bash
+pip install build
+python -m build
+```
+
+This produces `dist/qasic_engineering_as_code-<version>.tar.gz` (sdist) and `dist/*.whl` (wheel). Use the wheel with `pip install dist/*.whl` or with installer tools (e.g. PyInstaller, NSIS, Inno Setup) that bundle a Python environment. Entry points: `qasic-dashboard` (CLI dashboard), `qasic-pulse` (pulse compile CLI). For public distribution, add a `LICENSE` file at repo root and optionally reference it in `MANIFEST.in`.
 
 ### Docker
 
