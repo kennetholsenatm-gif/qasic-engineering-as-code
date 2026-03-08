@@ -11,7 +11,8 @@ paths:
   docs_dir: "docs"
 
 cors:
-  allow_origins: "*"  # comma-separated in env BACKEND_CORS_ORIGINS
+  # Production: set BACKEND_CORS_ORIGINS to comma-separated whitelist (e.g. https://app.example.com). Never use allow_credentials with "*".
+  allow_origins: ""
   allow_credentials: true
   allow_methods: ["*"]
   allow_headers: ["*"]

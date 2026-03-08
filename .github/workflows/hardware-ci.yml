@@ -1,5 +1,5 @@
 # Hardware CI: on PR/push to relevant paths, run tests + pipeline + thermodynamic validation.
-# Optional: GDS diff vs baseline; Meep in separate/scheduled run to keep PR fast.
+# DevSecOps: SCA, SAST, container scanning; no masked test failures.
 name: Hardware CI
 
 on:
@@ -14,6 +14,9 @@ on:
       - 'docs/**'
       - 'tests/**'
       - 'requirements*.txt'
+      - 'app/**'
+      - 'frontend/**'
+      - '.github/workflows/**'
   pull_request:
     branches: [main, master]
     paths:
@@ -25,8 +28,50 @@ on:
       - 'docs/**'
       - 'tests/**'
       - 'requirements*.txt'
+      - 'app/**'
+      - 'frontend/**'
+      - '.github/workflows/**'
 
 jobs:
+  sca:
+    name: SCA (dependency vulnerabilities)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install pip-audit
+        run: pip install pip-audit
+      - name: SCA Python (requirements)
+        run: |
+          pip-audit -r requirements.txt
+          pip-audit -r app/requirements.txt
+          [ ! -f engineering/requirements-engineering.txt ] || pip-audit -r engineering/requirements-engineering.txt
+      - name: Setup Node (frontend SCA)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: SCA frontend (npm audit)
+        run: |
+          cd frontend && npm audit --audit-level=high
+        continue-on-error: true
+
+  sast:
+    name: SAST (Bandit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install Bandit
+        run: pip install bandit
+      - name: Run Bandit (app + engineering)
+        run: bandit -r app/ engineering/ -ll -x '*/tests/*','*_test.py' --format json -o bandit-report.json || true
+      - name: Run Bandit (exit on high)
+        run: bandit -r app/ engineering/ -ll -x '*/tests/*','*_test.py' -q
+
   test:
     name: Unit tests
     runs-on: ubuntu-latest
@@ -41,13 +86,12 @@ jobs:
           pip install -r requirements-test.txt
           pip install -r engineering/requirements-engineering.txt
       - name: Run pytest
-        run: python -m pytest tests/ -v --ignore=tests/test_engineering_protocol_ibm.py 2>/dev/null || python -m pytest tests/ -v -k "not ibm" 2>/dev/null || python -m pytest tests/ -v
-        continue-on-error: false
+        run: python -m pytest tests/ -v --ignore=tests/test_engineering_protocol_ibm.py
 
   hardware-verify:
     name: Pipeline + thermodynamic + HEaC
     runs-on: ubuntu-latest
-    needs: test
+    needs: [test, sca, sast]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -98,6 +142,31 @@ jobs:
             engineering/ci_hil_routing.json
           if-no-files-found: ignore
 
+  container-scan:
+    name: Container scan (Trivy)
+    runs-on: ubuntu-latest
+    needs: [sca, sast]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build API image
+        run: docker build -f Dockerfile.api -t qasic-api:ci .
+      - name: Run Trivy (API image)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'qasic-api:ci'
+          format: 'sarif'
+          output: 'trivy-api.sarif'
+          severity: 'CRITICAL,HIGH'
+      - name: Build frontend image
+        run: docker build -f Dockerfile.frontend -t qasic-frontend:ci .
+      - name: Run Trivy (frontend image)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'qasic-frontend:ci'
+          format: 'sarif'
+          output: 'trivy-frontend.sarif'
+          severity: 'CRITICAL,HIGH'
+
   gds-diff:
     name: GDS diff (optional)
     runs-on: ubuntu-latest
@@ -115,8 +184,9 @@ jobs:
         run: |
           pip install -r requirements.txt
           if [ -f engineering/ci_result_geometry_manifest.json ]; then
-            python engineering/ci_gds_diff.py engineering/ci_result_geometry_manifest.json --phases engineering/ci_result_inverse_phases.npy -o engineering/ci_diff_report.md 2>/dev/null || echo "Diff report skipped"
+            python engineering/ci_gds_diff.py engineering/ci_result_geometry_manifest.json --phases engineering/ci_result_inverse_phases.npy -o engineering/ci_diff_report.md || echo "Diff script failed; step continues"
           else
             echo "No manifest artifact; diff skipped"
           fi
         working-directory: ${{ github.workspace }}
+        continue-on-error: true

@@ -19,18 +19,17 @@ services:
       context: .
       dockerfile: Dockerfile.frontend
     ports:
-      - "80:80"
+      - "80:8080"
     depends_on:
       - api
 
+  # Jupyter: no host volume mount (LFI/tampering risk). For local dev only, add: volumes: [".:/app"]
   jupyter:
     build:
       context: .
       dockerfile: Dockerfile.jupyter
     ports:
       - "8888:8888"
-    volumes:
-      - .:/app
     environment:
       - JUPYTER_ENABLE_LAB=0
       - IBM_QUANTUM_TOKEN=${IBM_QUANTUM_TOKEN:-}

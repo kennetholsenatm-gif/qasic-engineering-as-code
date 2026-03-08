@@ -12,6 +12,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from typing import Literal
 
 import asyncio
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
@@ -44,17 +45,19 @@ PIPELINE_BASE = _app_cfg.paths.pipeline_base
 ROUTING_JSON = ENGINEERING_DIR / f"{PIPELINE_BASE}_routing.json"
 INVERSE_JSON = ENGINEERING_DIR / f"{PIPELINE_BASE}_inverse.json"
 
-_cors_origins = (_app_cfg.cors.allow_origins or "*").strip()
-if _cors_origins == "*":
-    _allow_origins = ["*"]
+# CORS: strict whitelist in production. allow_credentials=True with allow_origins=["*"] is insecure (CSRF/data exfiltration).
+_cors_origins = (_app_cfg.cors.allow_origins or "").strip()
+if _cors_origins == "*" or not _cors_origins:
+    _allow_origins = ["*"]  # dev default; set BACKEND_CORS_ORIGINS for production
 else:
-    _allow_origins = [o.strip() for o in _cors_origins.split(",") if o.strip()] or ["*"]
+    _allow_origins = [o.strip() for o in _cors_origins.split(",") if o.strip()]
+_allow_credentials = _app_cfg.cors.allow_credentials and "*" not in _allow_origins
 
 app = FastAPI(title=_app_cfg.title, version=_app_cfg.version)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_allow_origins,
-    allow_credentials=_app_cfg.cors.allow_credentials,
+    allow_origins=_allow_origins if _allow_origins else ["*"],
+    allow_credentials=_allow_credentials,
     allow_methods=_app_cfg.cors.allow_methods,
     allow_headers=_app_cfg.cors.allow_headers,
 )
@@ -85,26 +88,43 @@ def _run(cmd: list[str], cwd: Path | None = None) -> tuple[int, str]:
     return r.returncode, err
 
 
-# --- Request bodies ---
+def _sanitize_detail(exc: Exception, default: str) -> str:
+    """Return safe detail for HTTPException; log full exception. Avoid exposing paths/stack to client (AppSec)."""
+    if log:
+        log.exception("Request error: %s", exc)
+    if os.environ.get("QASIC_DEBUG", "").strip().lower() in ("1", "true", "yes"):
+        return str(exc)
+    return default
+
+
+# --- Request bodies (strict Literal to prevent argument injection into subprocess) ---
+BackendKind = Literal["sim", "hardware"]
+ProtocolKind = Literal["teleport", "bb84", "e91"]
+TopologyKind = Literal["linear", "linear_chain", "star", "repeater", "repeater_chain"]
+RoutingMethodKind = Literal["qaoa", "rl"]
+ModelKind = Literal["mlp", "gnn"]
+DeviceKind = Literal["auto", "cpu", "cuda", "mps"]
+
+
 class RunProtocolRequest(BaseModel):
-    protocol: str = "teleport"
-    backend: str = "sim"
+    protocol: ProtocolKind = "teleport"
+    backend: BackendKind = "sim"
 
 
 class RunRoutingRequest(BaseModel):
-    backend: str = "sim"
+    backend: BackendKind = "sim"
     fast: bool = False
-    topology: str | None = None  # linear_chain | star | repeater_chain
+    topology: TopologyKind | None = None
     qubits: int | None = None
-    hub: int | None = None  # for star
-    routing_method: str | None = None  # qaoa (default) | rl
+    hub: int | None = None
+    routing_method: RoutingMethodKind | None = None
 
 
 class RunPipelineRequest(BaseModel):
-    backend: str = "sim"
+    backend: BackendKind = "sim"
     fast: bool = False
-    routing_method: str | None = None  # qaoa (default) | rl
-    model: str | None = None  # mlp (default) | gnn
+    routing_method: RoutingMethodKind | None = None
+    model: ModelKind | None = None
     heac: bool = False
     skip_routing: bool = False
     skip_inverse: bool = False
@@ -113,8 +133,8 @@ class RunPipelineRequest(BaseModel):
 class RunInverseRequest(BaseModel):
     phase_band: str | None = None
     routing_result_path: str | None = None
-    model: str | None = None  # mlp | gnn
-    device: str | None = None  # auto | cpu | cuda | mps
+    model: ModelKind | None = None
+    device: DeviceKind | None = None
 
 
 class QuantumIlluminationRequest(BaseModel):
@@ -149,8 +169,8 @@ class QuantumRadarOptimizeRequest(BaseModel):
 
 
 class RunQKDRequest(BaseModel):
-    protocol: str = "bb84"  # bb84 | e91
-    n_bits: int = 64  # for BB84
+    protocol: Literal["bb84", "e91"] = "bb84"
+    n_bits: int = 64
     n_trials: int = 500  # for E91
     seed: int | None = None
 
@@ -179,7 +199,7 @@ def apps_qrnc_mint(req: QRNCMintRequest):
     try:
         from apps.qrnc import mint_qrnc
     except Exception as e:
-        raise HTTPException(status_code=503, detail=f"QRNC import failed: {e}")
+        raise HTTPException(status_code=503, detail=_sanitize_detail(e, "QRNC service unavailable."))
     try:
         token = mint_qrnc(
             num_bytes=req.num_bytes,
@@ -193,7 +213,7 @@ def apps_qrnc_mint(req: QRNCMintRequest):
             "issued_at": token.issued_at.isoformat() if token.issued_at else None,
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=_sanitize_detail(e, "An internal error occurred."))
 
 
 @app.post("/api/apps/qrnc/exchange")
@@ -202,18 +222,18 @@ def apps_qrnc_exchange(req: QRNCExchangeRequest):
     try:
         from apps.qrnc import QRNC, run_two_party_exchange
     except Exception as e:
-        raise HTTPException(status_code=503, detail=f"QRNC import failed: {e}")
+        raise HTTPException(status_code=503, detail=_sanitize_detail(e, "QRNC service unavailable."))
     try:
         token_a = QRNC.from_hex(req.token_a_hex)
         token_b = QRNC.from_hex(req.token_b_hex)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Invalid token hex: {e}")
+        raise HTTPException(status_code=400, detail="Invalid token hex.")
     try:
         received_by_a, received_by_b, record = run_two_party_exchange(
             token_a, token_b, party_a_id=req.party_a_id, party_b_id=req.party_b_id
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=_sanitize_detail(e, "An internal error occurred."))
     if received_by_a is None:
         return {"success": False, "message": "Verification failed"}
     return {
@@ -243,18 +263,16 @@ def apps_bqtc_run_cycle(req: BQTCRunCycleRequest):
         data = json.loads(out) if out.strip() else []
         return {"results": data}
     except json.JSONDecodeError as e:
-        raise HTTPException(status_code=500, detail=f"Invalid BQTC output: {e}")
+        raise HTTPException(status_code=500, detail=_sanitize_detail(e, "Invalid BQTC output."))
 
 
 @app.post("/api/run/qkd")
 def run_qkd(req: RunQKDRequest):
     """Run pedagogical QKD (BB84 or E91) in simulation."""
-    if req.protocol.lower() == "bb84":
+    if req.protocol == "bb84":
         result = _run_bb84(n_bits=req.n_bits, seed=req.seed)
-    elif req.protocol.lower() == "e91":
-        result = _run_e91(n_trials=req.n_trials, seed=req.seed)
     else:
-        raise HTTPException(status_code=400, detail="protocol must be bb84 or e91")
+        result = _run_e91(n_trials=req.n_trials, seed=req.seed)
     return result
 
 
@@ -272,7 +290,7 @@ def _run_e91(n_trials: int, seed: int | None) -> dict:
 @limit_heavy
 def run_protocol(request: Request, req: RunProtocolRequest):
     """Run ASIC protocol on sim (blocking) or IBM hardware (returns job_id for WebSocket polling)."""
-    use_hardware = req.backend.lower() == "hardware"
+    use_hardware = req.backend == "hardware"
     if use_hardware:
         try:
             from engineering.run_protocol_on_ibm import submit_protocol_job, get_ibm_job_id
@@ -282,7 +300,7 @@ def run_protocol(request: Request, req: RunProtocolRequest):
             set_job(job_id, ibm_job_id=ibm_job_id, backend=backend_name or "", protocol=req.protocol, job=job)
             return {"job_id": job_id, "status": "submitted", "backend": backend_name}
         except Exception as e:
-            raise HTTPException(status_code=503, detail=str(e))
+            raise HTTPException(status_code=503, detail=_sanitize_detail(e, "Protocol submission failed."))
     with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
         out_path = f.name
     try:
@@ -294,14 +312,14 @@ def run_protocol(request: Request, req: RunProtocolRequest):
         ]
         code, err = _run(cmd)
         if code != 0:
-            raise HTTPException(status_code=503, detail=err or "Protocol run failed")
+            raise HTTPException(status_code=503, detail=_sanitize_detail(RuntimeError(err or "Protocol run failed"), "Protocol run failed."))
         with open(out_path, encoding="utf-8") as f:
             data = json.load(f)
         return data
     except FileNotFoundError as e:
-        raise HTTPException(status_code=503, detail=f"Script or output not found: {e}")
+        raise HTTPException(status_code=503, detail=_sanitize_detail(e, "Script or output not found."))
     except json.JSONDecodeError as e:
-        raise HTTPException(status_code=500, detail=f"Invalid output JSON: {e}")
+        raise HTTPException(status_code=500, detail=_sanitize_detail(e, "Invalid output JSON."))
     finally:
         if os.path.isfile(out_path):
             try:
@@ -344,8 +362,8 @@ async def websocket_job_status(websocket: WebSocket, job_id: str):
 @limit_heavy
 def run_routing(request: Request, req: RunRoutingRequest):
     """Run QUBO routing (QAOA or RL) on sim or IBM hardware."""
-    use_hardware = req.backend.lower() == "hardware"
-    use_rl = (req.routing_method or "qaoa").lower() == "rl"
+    use_hardware = req.backend == "hardware"
+    use_rl = (req.routing_method or "qaoa") == "rl"
     with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
         out_path = f.name
     try:
@@ -374,14 +392,14 @@ def run_routing(request: Request, req: RunRoutingRequest):
                 cmd.extend(["--hub", str(req.hub)])
         code, err = _run(cmd)
         if code != 0:
-            raise HTTPException(status_code=503, detail=err or "Routing run failed")
+            raise HTTPException(status_code=503, detail=_sanitize_detail(RuntimeError(err or "Routing run failed"), "Routing run failed."))
         with open(out_path, encoding="utf-8") as f:
             data = json.load(f)
         return data
     except FileNotFoundError as e:
-        raise HTTPException(status_code=503, detail=f"Script or output not found: {e}")
+        raise HTTPException(status_code=503, detail=_sanitize_detail(e, "Script or output not found."))
     except json.JSONDecodeError as e:
-        raise HTTPException(status_code=500, detail=f"Invalid output JSON: {e}")
+        raise HTTPException(status_code=500, detail=_sanitize_detail(e, "Invalid output JSON."))
     finally:
         if os.path.isfile(out_path):
             try:
@@ -468,14 +486,14 @@ def run_pipeline(request: Request, req: RunPipelineRequest):
     except Exception:
         pass
     cmd = [sys.executable, str(ENGINEERING_DIR / "run_pipeline.py")]
-    if req.backend.lower() == "hardware":
+    if req.backend == "hardware":
         cmd.append("--hardware")
     if req.fast:
         cmd.append("--fast")
-    if req.routing_method and req.routing_method.lower() in ("qaoa", "rl"):
-        cmd.extend(["--routing-method", req.routing_method.lower()])
-    if req.model and req.model.lower() in ("mlp", "gnn"):
-        cmd.extend(["--model", req.model.lower()])
+    if req.routing_method:
+        cmd.extend(["--routing-method", req.routing_method])
+    if req.model:
+        cmd.extend(["--model", req.model])
     if req.heac:
         cmd.append("--heac")
     if req.skip_routing:
@@ -490,7 +508,7 @@ def run_pipeline(request: Request, req: RunPipelineRequest):
                 update_pipeline_run(run_id=run_id, status="failed", error_message=err or "Pipeline run failed")
             except Exception:
                 pass
-        raise HTTPException(status_code=503, detail=err or "Pipeline run failed")
+        raise HTTPException(status_code=503, detail=_sanitize_detail(RuntimeError(err or "Pipeline run failed"), "Pipeline run failed."))
     try:
         from storage.db import update_pipeline_run
         update_pipeline_run(
@@ -557,14 +575,14 @@ def run_inverse(request: Request, req: RunInverseRequest):
             cmd.extend(["--routing-result", str(ROUTING_JSON)])
         code, err = _run(cmd)
         if code != 0:
-            raise HTTPException(status_code=503, detail=err or "Inverse design run failed")
+            raise HTTPException(status_code=503, detail=_sanitize_detail(RuntimeError(err or "Inverse design run failed"), "Inverse design run failed."))
         with open(out_path, encoding="utf-8") as f:
             data = json.load(f)
         return data
     except FileNotFoundError as e:
-        raise HTTPException(status_code=503, detail=f"Script or output not found: {e}")
+        raise HTTPException(status_code=503, detail=_sanitize_detail(e, "Script or output not found."))
     except json.JSONDecodeError as e:
-        raise HTTPException(status_code=500, detail=f"Invalid output JSON: {e}")
+        raise HTTPException(status_code=500, detail=_sanitize_detail(e, "Invalid output JSON."))
     finally:
         if os.path.isfile(out_path):
             try:
@@ -584,13 +602,13 @@ def run_quantum_illumination(req: QuantumIlluminationRequest):
     try:
         ent_fn, unent_fn = _quantum_illumination()
     except Exception as e:
-        raise HTTPException(status_code=503, detail=f"Import failed: {e}")
+        raise HTTPException(status_code=503, detail=_sanitize_detail(e, "Import failed."))
     eta = max(0.0, min(1.0, req.eta))
     try:
         ent = ent_fn(eta)
         unent = unent_fn(eta)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=_sanitize_detail(e, "An internal error occurred."))
     return {
         "eta": eta,
         "entangled": {"P_err": ent["P_err"], "chernoff_exponent": ent["chernoff_exponent"]},
@@ -613,11 +631,11 @@ def run_quantum_radar_api(req: QuantumRadarRequest):
     try:
         run_fn, _, _ = _quantum_radar()
     except Exception as e:
-        raise HTTPException(status_code=503, detail=f"Import failed: {e}")
+        raise HTTPException(status_code=503, detail=_sanitize_detail(e, "Import failed."))
     try:
         out = run_fn(eta=req.eta, n_b=max(0.0, req.n_b), r=max(0.0, req.r))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=_sanitize_detail(e, "An internal error occurred."))
     return out
 
 
@@ -629,7 +647,7 @@ def run_quantum_radar_sweep(req: QuantumRadarSweepRequest):
     try:
         _, sweep_fn, _ = _quantum_radar()
     except Exception as e:
-        raise HTTPException(status_code=503, detail=f"Import failed: {e}")
+        raise HTTPException(status_code=503, detail=_sanitize_detail(e, "Import failed."))
     defaults = {"eta": (0.01, 0.5), "n_b": (0.1, 50.0), "r": (0.1, 1.5)}
     lo, hi = defaults[req.param]
     min_val = req.min_val if req.min_val is not None else lo
@@ -637,7 +655,7 @@ def run_quantum_radar_sweep(req: QuantumRadarSweepRequest):
     try:
         results = sweep_fn(req.param, min_val, max_val, req.steps, req.eta, req.n_b, req.r)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=_sanitize_detail(e, "An internal error occurred."))
     return {"param": req.param, "results": results}
 
 
@@ -651,7 +669,7 @@ def run_quantum_radar_optimize(req: QuantumRadarOptimizeRequest):
     try:
         _, _, opt_fn = _quantum_radar()
     except Exception as e:
-        raise HTTPException(status_code=503, detail=f"Import failed: {e}")
+        raise HTTPException(status_code=503, detail=_sanitize_detail(e, "Import failed."))
     defaults = {"eta": (0.01, 0.99), "n_b": (0.0, 100.0), "r": (0.05, 2.0)}
     lo, hi = defaults[req.param]
     low = req.optimize_min if req.optimize_min is not None else lo
@@ -659,7 +677,7 @@ def run_quantum_radar_optimize(req: QuantumRadarOptimizeRequest):
     try:
         best_val, best_result = opt_fn(req.param, low, high, req.steps, req.eta, req.n_b, req.r, req.maximize)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=_sanitize_detail(e, "An internal error occurred."))
     return {"best_value": best_val, "best_result": best_result}
 
 
@@ -721,7 +739,7 @@ def get_inverse_phases():
             arr_2d = arr.reshape(1, -1).tolist()
         return {"phases": arr.tolist(), "shape": list(np.shape(np.load(npy_path))), "grid_2d": arr_2d, "grid_shape": [nx, ny]}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=_sanitize_detail(e, "An internal error occurred."))
 
 
 @app.get("/api/docs/links")

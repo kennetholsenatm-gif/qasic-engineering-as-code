@@ -38,7 +38,7 @@ class AppPathsConfig(BaseModel):
 
 
 class CorsConfig(BaseModel):
-    allow_origins: str = "*"
+    allow_origins: str = ""  # Production: set BACKEND_CORS_ORIGINS to a whitelist
     allow_credentials: bool = True
     allow_methods: list[str] = Field(default_factory=lambda: ["*"])
     allow_headers: list[str] = Field(default_factory=lambda: ["*"])

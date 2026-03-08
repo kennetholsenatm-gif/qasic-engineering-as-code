@@ -16,6 +16,10 @@ COPY asic/ asic/
 COPY protocols/ protocols/
 COPY engineering/ engineering/
 
+# Run as unprivileged user (DevSecOps: no root in container)
+RUN adduser --disabled-password --gecos "" appuser && chown -R appuser:appuser /app
+USER appuser
+
 ENV PYTHONPATH=/app
 EXPOSE 8000
 
