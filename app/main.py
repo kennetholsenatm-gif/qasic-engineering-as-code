@@ -13,10 +13,14 @@ import sys
 import tempfile
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+import asyncio
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
+
+# In-memory store for async IBM protocol jobs: job_id -> {job, backend, protocol}
+_ibm_job_store: dict[str, dict] = {}
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
@@ -105,10 +109,47 @@ class QuantumRadarOptimizeRequest(BaseModel):
     maximize: str = "mutual_info"  # mutual_info | snr
 
 
+class RunQKDRequest(BaseModel):
+    protocol: str = "bb84"  # bb84 | e91
+    n_bits: int = 64  # for BB84
+    n_trials: int = 500  # for E91
+    seed: int | None = None
+
+
+@app.post("/api/run/qkd")
+def run_qkd(req: RunQKDRequest):
+    """Run pedagogical QKD (BB84 or E91) in simulation."""
+    if req.protocol.lower() == "bb84":
+        result = _run_bb84(n_bits=req.n_bits, seed=req.seed)
+    elif req.protocol.lower() == "e91":
+        result = _run_e91(n_trials=req.n_trials, seed=req.seed)
+    else:
+        raise HTTPException(status_code=400, detail="protocol must be bb84 or e91")
+    return result
+
+
+def _run_bb84(n_bits: int, seed: int | None) -> dict:
+    from protocols.qkd import run_bb84
+    return run_bb84(n_bits=n_bits, seed=seed)
+
+
+def _run_e91(n_trials: int, seed: int | None) -> dict:
+    from protocols.qkd import run_e91
+    return run_e91(n_trials=n_trials, seed=seed)
+
+
 @app.post("/api/run/protocol")
 def run_protocol(req: RunProtocolRequest):
-    """Run ASIC protocol (teleport, bell, commitment, thief) on sim or IBM hardware."""
+    """Run ASIC protocol on sim (blocking) or IBM hardware (returns job_id for WebSocket polling)."""
     use_hardware = req.backend.lower() == "hardware"
+    if use_hardware:
+        try:
+            from engineering.run_protocol_on_ibm import submit_protocol_job, get_job_status_and_result
+            job_id, job, backend_name = submit_protocol_job(req.protocol, shots=1024)
+            _ibm_job_store[job_id] = {"job": job, "backend": backend_name, "protocol": req.protocol}
+            return {"job_id": job_id, "status": "submitted", "backend": backend_name}
+        except Exception as e:
+            raise HTTPException(status_code=503, detail=str(e))
     with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
         out_path = f.name
     try:
@@ -118,8 +159,6 @@ def run_protocol(req: RunProtocolRequest):
             "--protocol", req.protocol,
             "-o", out_path,
         ]
-        if use_hardware:
-            cmd.append("--hardware")
         code, err = _run(cmd)
         if code != 0:
             raise HTTPException(status_code=503, detail=err or "Protocol run failed")
@@ -136,6 +175,30 @@ def run_protocol(req: RunProtocolRequest):
                 os.unlink(out_path)
             except OSError:
                 pass
+
+
+@app.websocket("/ws/job/{job_id}")
+async def websocket_job_status(websocket: WebSocket, job_id: str):
+    """Stream IBM job status (QUEUED, RUNNING, DONE, ERROR) until completion."""
+    await websocket.accept()
+    if job_id not in _ibm_job_store:
+        await websocket.send_json({"status": "ERROR", "error": "Unknown job_id"})
+        await websocket.close()
+        return
+    from engineering.run_protocol_on_ibm import get_job_status_and_result
+    entry = _ibm_job_store[job_id]
+    job = entry["job"]
+    try:
+        while True:
+            status_str, result_dict = get_job_status_and_result(job)
+            await websocket.send_json({"status": status_str, "result": result_dict})
+            if status_str in ("DONE", "ERROR"):
+                break
+            await asyncio.sleep(2)
+    except WebSocketDisconnect:
+        pass
+    finally:
+        await websocket.close()
 
 
 @app.post("/api/run/routing")
@@ -347,6 +410,40 @@ def get_results_latest():
         except (OSError, json.JSONDecodeError):
             pass
     return result
+
+
+@app.get("/api/results/inverse-phases")
+def get_inverse_phases():
+    """Return phase array from latest inverse design (for 3D/2D visualization)."""
+    import numpy as np
+    npy_path = ENGINEERING_DIR / (PIPELINE_BASE + "_inverse_phases.npy")
+    if not npy_path.is_file() and INVERSE_JSON.exists():
+        try:
+            with open(INVERSE_JSON, encoding="utf-8") as f:
+                inv = json.load(f)
+            phase_array_path = inv.get("phase_array_path")
+            if phase_array_path:
+                npy_path = ENGINEERING_DIR / phase_array_path
+        except (OSError, json.JSONDecodeError):
+            pass
+    if not npy_path.is_file():
+        raise HTTPException(status_code=404, detail="No inverse phase array found. Run pipeline or inverse design first.")
+    try:
+        arr = np.load(npy_path)
+        arr = np.asarray(arr).ravel()
+        n = len(arr)
+        # Optionally reshape to 2D for grid display (e.g. sqrt(n) x sqrt(n))
+        nx = int(np.sqrt(n))
+        ny = (n + nx - 1) // nx
+        if nx * ny >= n:
+            arr_2d = np.zeros((nx, ny), dtype=float)
+            arr_2d.ravel()[:n] = arr
+            arr_2d = arr_2d.tolist()
+        else:
+            arr_2d = arr.reshape(1, -1).tolist()
+        return {"phases": arr.tolist(), "shape": list(np.shape(np.load(npy_path))), "grid_2d": arr_2d, "grid_shape": [nx, ny]}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/docs/links")

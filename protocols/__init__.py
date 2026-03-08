@@ -19,6 +19,8 @@ from .quantum_radar import (
     sweep_parameter,
     optimize_parameter,
 )
+from .bitflip_code import run_bitflip_code
+from .qkd import run_bb84, run_e91
 
 __all__ = [
     "create_bell_pair",
@@ -45,4 +47,7 @@ __all__ = [
     "run_quantum_radar",
     "sweep_parameter",
     "optimize_parameter",
+    "run_bitflip_code",
+    "run_bb84",
+    "run_e91",
 ]

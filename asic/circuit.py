@@ -114,3 +114,22 @@ def protocol_commitment_ops() -> list[Op]:
 def protocol_thief_ops(qubit: int = 2, angle: float = 0.3) -> list[Op]:
     """Teleport + Thief: after teleport circuit, apply Rx(angle) on one qubit (e.g. Bob's)."""
     return protocol_teleport_ops() + [Op("Rx", [qubit], param=angle)]
+
+
+def protocol_bitflip_code_ops(include_error_qubit: int | None = None) -> list[Op]:
+    """
+    3-qubit bit-flip repetition code on linear chain 0—1—2. Data on qubit 1, ancillas on 0 and 2.
+    Encode: |0_L> -> |000>, |1_L> -> |111> via CNOT(1,0), CNOT(1,2).
+    If include_error_qubit is 0, 1, or 2, append X on that qubit (single bit-flip error).
+    Syndrome extraction and correction are done classically in the protocol layer after measurement.
+    """
+    # Encode: data on 1; CNOT 1->0, 1->2 (both edges allowed on linear chain)
+    ops = [
+        Op("CNOT", [1, 0]),
+        Op("CNOT", [1, 2]),
+    ]
+    if include_error_qubit is not None:
+        if include_error_qubit not in (0, 1, 2):
+            raise ValueError("include_error_qubit must be 0, 1, or 2")
+        ops.append(Op("X", [include_error_qubit]))
+    return ops

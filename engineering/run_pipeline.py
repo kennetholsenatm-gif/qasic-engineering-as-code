@@ -51,6 +51,25 @@ def main() -> int:
         action="store_true",
         help="Pass --fast to routing (budget preset for affordable runs).",
     )
+    parser.add_argument(
+        "--with-superscreen",
+        action="store_true",
+        help="After routing, run SuperScreen to compute inductance from topology (optional; requires superscreen).",
+    )
+    parser.add_argument(
+        "--model",
+        type=str,
+        default="mlp",
+        choices=("mlp", "gnn"),
+        help="Inverse design model: mlp (default) or gnn.",
+    )
+    parser.add_argument(
+        "--routing-method",
+        type=str,
+        default="qaoa",
+        choices=("qaoa", "rl"),
+        help="Routing method: qaoa (QUBO/QAOA) or rl (RL-style local search).",
+    )
     args = parser.parse_args()
 
     # Resolve paths from repo root or cwd
@@ -58,19 +77,29 @@ def main() -> int:
     repo_root = os.path.dirname(script_dir)
     routing_json = os.path.join(script_dir, args.output + "_routing.json")
     inverse_json = os.path.join(script_dir, args.output + "_inverse.json")
+    inductance_json = os.path.join(script_dir, args.output + "_inductance.json")
 
     # Step 1: Routing
     if not args.skip_routing:
-        routing_cmd = [
-            sys.executable,
-            os.path.join(script_dir, "routing_qubo_qaoa.py"),
-            "-o", routing_json,
-        ]
-        if args.hardware:
-            routing_cmd.append("--hardware")
-        if args.fast:
-            routing_cmd.append("--fast")
-        print("Running routing (QUBO/QAOA)...")
+        if args.routing_method == "rl":
+            routing_cmd = [
+                sys.executable,
+                os.path.join(script_dir, "routing_rl.py"),
+                "-o", routing_json,
+                "--qubits", "3",
+            ]
+            print("Running routing (RL local search)...")
+        else:
+            routing_cmd = [
+                sys.executable,
+                os.path.join(script_dir, "routing_qubo_qaoa.py"),
+                "-o", routing_json,
+            ]
+            if args.hardware:
+                routing_cmd.append("--hardware")
+            if args.fast:
+                routing_cmd.append("--fast")
+            print("Running routing (QUBO/QAOA)...")
         rc = subprocess.run(routing_cmd, cwd=repo_root)
         if rc.returncode != 0:
             print("Routing failed.", file=sys.stderr)
@@ -83,6 +112,22 @@ def main() -> int:
             print(f"Skip-routing requested but {routing_json} not found.", file=sys.stderr)
             return 1
 
+    # Optional: SuperScreen inductance from routing topology
+    if args.with_superscreen and os.path.isfile(routing_json):
+        try:
+            from engineering.superscreen_demo import compute_inductance_from_routing
+            ran = compute_inductance_from_routing(routing_json, inductance_json)
+        except ImportError:
+            try:
+                from superscreen_demo import compute_inductance_from_routing
+                ran = compute_inductance_from_routing(routing_json, inductance_json)
+            except ImportError:
+                ran = False
+        if ran:
+            print(f"SuperScreen inductance: {inductance_json}")
+        else:
+            print("SuperScreen step skipped (not installed or failed).")
+
     # Step 2: Inverse design
     if not args.skip_inverse:
         inverse_cmd = [
@@ -90,6 +135,7 @@ def main() -> int:
             os.path.join(script_dir, "metasurface_inverse_net.py"),
             "--routing-result", routing_json,
             "--device", args.device,
+            "--model", args.model,
             "-o", inverse_json,
         ]
         print("Running inverse design (topology -> phase profile)...")
@@ -103,6 +149,8 @@ def main() -> int:
     print("Pipeline done. Outputs:")
     if os.path.isfile(routing_json):
         print(f"  Routing: {routing_json}")
+    if os.path.isfile(inductance_json):
+        print(f"  Inductance: {inductance_json}")
     if os.path.isfile(inverse_json):
         print(f"  Inverse: {inverse_json}")
         npy = os.path.join(script_dir, args.output + "_inverse_phases.npy")

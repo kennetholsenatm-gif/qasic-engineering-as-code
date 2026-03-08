@@ -227,6 +227,13 @@ def main() -> None:
         default=None,
         help="Random seed for topology vector (when not using --routing-result).",
     )
+    parser.add_argument(
+        "--model",
+        type=str,
+        default="mlp",
+        choices=("mlp", "gnn"),
+        help="Model type: mlp (default) or gnn (graph neural network; requires --routing-result).",
+    )
     args = parser.parse_args()
 
     target_topology_features = args.target_dim
@@ -239,19 +246,47 @@ def main() -> None:
     if args.seed is not None:
         torch.manual_seed(args.seed)
 
-    model = create_model(
-        target_topology_features, num_meta_atoms, device, phase_band=phase_band
-    )
-    if args.routing_result and os.path.isfile(args.routing_result):
-        desired_topology = _topology_from_routing(args.routing_result, target_topology_features, device)
+    use_gnn = args.model.lower() == "gnn"
+    if use_gnn:
+        if not args.routing_result or not os.path.isfile(args.routing_result):
+            raise FileNotFoundError("GNN model requires --routing-result (routing JSON).")
+        try:
+            from engineering.metasurface_inverse_gnn import (
+                routing_json_to_graph,
+                create_gnn_model,
+            )
+        except ImportError:
+            from metasurface_inverse_gnn import (
+                routing_json_to_graph,
+                create_gnn_model,
+            )
+        node_feature_dim = min(8, target_topology_features)
+        model = create_gnn_model(
+            node_feature_dim=node_feature_dim,
+            num_meta_atoms=num_meta_atoms,
+            device=device,
+            phase_band=phase_band,
+        )
+        x, edge_index = routing_json_to_graph(args.routing_result, node_feature_dim)
+        x = x.to(device)
+        edge_index = edge_index.to(device)
         routing_ref = {"file": args.routing_result}
+        model.eval()
+        with torch.no_grad():
+            predicted_phase_array = model(x, edge_index)
     else:
-        desired_topology = torch.randn(1, target_topology_features, device=device)
-        routing_ref = None
-
-    model.eval()
-    with torch.no_grad():
-        predicted_phase_array = model(desired_topology)
+        model = create_model(
+            target_topology_features, num_meta_atoms, device, phase_band=phase_band
+        )
+        if args.routing_result and os.path.isfile(args.routing_result):
+            desired_topology = _topology_from_routing(args.routing_result, target_topology_features, device)
+            routing_ref = {"file": args.routing_result}
+        else:
+            desired_topology = torch.randn(1, target_topology_features, device=device)
+            routing_ref = None
+        model.eval()
+        with torch.no_grad():
+            predicted_phase_array = model(desired_topology)
 
     phase = predicted_phase_array[0].cpu().numpy()
     phase_min = float(phase.min())

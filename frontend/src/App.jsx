@@ -8,6 +8,7 @@ import RunQuantumIllumination from './pages/RunQuantumIllumination'
 import RunQuantumRadar from './pages/RunQuantumRadar'
 import Results from './pages/Results'
 import Docs from './pages/Docs'
+import PhaseViewer3D from './pages/PhaseViewer3D'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
 
@@ -23,6 +24,7 @@ export default function App() {
         <Link to="/run/pipeline">Run pipeline</Link>
         <Link to="/run/inverse">Inverse design</Link>
         <Link to="/results">Results</Link>
+        <Link to="/phase-viewer">Phase viewer (3D)</Link>
         <Link to="/docs">Docs</Link>
       </nav>
       <Routes>
@@ -34,6 +36,7 @@ export default function App() {
         <Route path="/run/pipeline" element={<RunPipeline apiBase={API_BASE} />} />
         <Route path="/run/inverse" element={<RunInverse apiBase={API_BASE} />} />
         <Route path="/results" element={<Results apiBase={API_BASE} />} />
+        <Route path="/phase-viewer" element={<PhaseViewer3D apiBase={API_BASE} />} />
         <Route path="/docs" element={<Docs apiBase={API_BASE} />} />
       </Routes>
     </BrowserRouter>

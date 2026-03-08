@@ -13,6 +13,8 @@
 | **Entanglement & teleportation** | Bell pair creation, state transfer with classical message, no cloning. |
 | **Tamper-evidence (Thief)** | Intercepting the "message" disturbs the state; receiver sees fidelity drop. |
 | **Toy bit commitment** | Commit to a bit using shared entanglement + classical reveal; security relies on tamper-evident channel + bounded storage (toy assumptions). |
+| **3-qubit bit-flip code** | Minimal QEC: encode one logical qubit, correct one bit-flip error on the ASIC linear chain. |
+| **QKD (BB84 / E91)** | Pedagogical prepare-and-measure (BB84) and entanglement-based (E91) key distribution. |
 
 ## Security assumptions (toy)
 
@@ -96,7 +98,10 @@ qasic-engineering-as-code/
     ├── demo_thief.py
     ├── demo_commitment.py
     ├── demo_noise.py         # Teleport/tamper with channel noise (depolarizing, amplitude/phase damping)
-    └── demo_asic.py          # Validate protocols on ASIC, run teleport
+    ├── demo_asic.py          # Validate protocols on ASIC, run teleport
+    ├── demo_bitflip_code.py  # 3-qubit bit-flip repetition code (QEC)
+    ├── demo_bb84.py          # BB84 QKD
+    └── demo_e91.py           # E91 QKD (Bell + CHSH)
 ```
 
 ### Channel noise and decoherence
@@ -122,9 +127,22 @@ python demos/demo_thief.py
 python demos/demo_commitment.py
 python demos/demo_noise.py    # Channel noise (depolarizing, amplitude/phase damping)
 python demos/demo_asic.py     # Quantum ASIC: gates + topology
+python demos/demo_bitflip_code.py   # 3-qubit bit-flip repetition code (QEC)
+python demos/demo_bb84.py           # BB84 QKD (pedagogical)
+python demos/demo_e91.py            # E91 QKD (Bell pairs + CHSH)
 ```
 
-Demos are script-style (no CLI arguments). For the full pipeline (routing + inverse design), run `python engineering/run_pipeline.py`; it writes `engineering/<base>_routing.json`, `engineering/<base>_inverse.json`, and `engineering/<base>_inverse_phases.npy` (default base: `pipeline_result`). For affordable runs on IBM Quantum (under 5 minutes QPU time), see [Engineering as Code on IBM Quantum](engineering/README.md#engineering-as-code-on-ibm-quantum-affordable-5-min) in the engineering README.
+Demos are script-style (no CLI arguments). For the full pipeline (routing + inverse design), run `python engineering/run_pipeline.py`; it writes `engineering/<base>_routing.json`, `engineering/<base>_inverse.json`, and `engineering/<base>_inverse_phases.npy` (default base: `pipeline_result`). Use `--routing-method rl` for RL-based routing or `--model gnn` for GNN inverse design; use `--with-superscreen` to compute inductance from the routing topology (optional). For affordable runs on IBM Quantum (under 5 minutes QPU time), see [Engineering as Code on IBM Quantum](engineering/README.md#engineering-as-code-on-ibm-quantum-affordable-5-min) in the engineering README.
+
+### Docker
+
+Run the API, frontend, and optional Jupyter in one go:
+
+```bash
+docker-compose up --build
+```
+
+Then open the frontend at `http://localhost` (or port 80). For Jupyter: `docker-compose --profile jupyter run --service-ports jupyter`.
 
 ## CLI dashboard
 
@@ -140,6 +158,9 @@ Or `python dashboard/cli_dashboard.py` from the repo root. Options: run protocol
 ## Web app
 
 A browser UI is provided by the FastAPI backend and the front end SPA. From repo root: install backend deps (`pip install -r app/requirements.txt`), start the API (`uvicorn app.main:app --reload`), then run the front end (`cd frontend && npm install && npm run dev`) or build and serve the SPA from the backend. See [app/README.md](app/README.md) and [frontend/README.md](frontend/README.md).
+
+- **Phase viewer (3D):** In the app, open "Phase viewer (3D)" to view the latest inverse-design phase profile as an interactive 3D surface (requires running pipeline or inverse design first).
+- **Async IBM jobs:** When you run a protocol on IBM hardware, the API returns a `job_id` and the UI connects via WebSocket to show live status (Queued → Running → Done) and the result when ready.
 
 ## Testing
 

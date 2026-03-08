@@ -20,6 +20,7 @@ from .circuit import (
     protocol_teleport_ops,
     protocol_commitment_ops,
     protocol_thief_ops,
+    protocol_bitflip_code_ops,
 )
 
 __all__ = [
@@ -39,4 +40,5 @@ __all__ = [
     "protocol_teleport_ops",
     "protocol_commitment_ops",
     "protocol_thief_ops",
+    "protocol_bitflip_code_ops",
 ]

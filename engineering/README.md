@@ -91,9 +91,14 @@ Or from repo root: `python engineering/metasurface_inverse_net.py`
 
 The pipeline writes all outputs under the **`engineering/`** directory. With default base name `pipeline_result`, it creates `engineering/pipeline_result_routing.json`, `engineering/pipeline_result_inverse.json`, and `engineering/pipeline_result_inverse_phases.npy`. Use `-o BASE` to change the base (e.g. `-o my_run` → `my_run_routing.json`, etc., still under `engineering/`).
 
+- **Routing options:** `--routing-method qaoa` (default) or `--routing-method rl` for RL-based local-search routing. For decoherence-aware routing use `python engineering/routing_qubo_qaoa.py --use-qutip-decoherence` (requires `qutip`).
+- **Inverse design:** `--model mlp` (default) or `--model gnn` for graph neural network (requires `--routing-result`).
+- **SuperScreen:** `--with-superscreen` to compute inductance from routing topology (optional; requires `superscreen`).
+
 ```bash
 pip install -r engineering/requirements-engineering.txt
 python engineering/run_pipeline.py
+python engineering/run_pipeline.py --routing-method rl --model gnn   # RL routing + GNN inverse
 python engineering/viz_routing_phase.py engineering/pipeline_result_routing.json --inverse engineering/pipeline_result_inverse.json --histogram
 ```
 

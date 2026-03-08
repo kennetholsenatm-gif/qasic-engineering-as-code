@@ -1,0 +1,20 @@
+# QASIC Engineering-as-Code: Jupyter + Python environment for demos and notebooks
+FROM python:3.11-slim
+
+WORKDIR /app
+
+COPY requirements.txt .
+COPY app/requirements.txt app/
+COPY engineering/requirements-engineering.txt engineering/ 2>/dev/null || true
+
+RUN pip install --no-cache-dir -r requirements.txt \
+    && pip install --no-cache-dir -r app/requirements.txt \
+    && pip install --no-cache-dir jupyter numpy \
+    && (pip install --no-cache-dir -r engineering/requirements-engineering.txt 2>/dev/null || true)
+
+COPY . .
+
+ENV PYTHONPATH=/app
+EXPOSE 8888
+
+CMD ["jupyter", "notebook", "--ip=0.0.0.0", "--port=8888", "--no-browser", "--allow-root"]

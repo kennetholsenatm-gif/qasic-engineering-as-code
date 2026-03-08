@@ -1,0 +1,40 @@
+# QASIC Engineering-as-Code: API, frontend, and optional Jupyter
+# Usage: docker-compose up --build
+# Optional: docker-compose run --service-ports jupyter  # for notebooks
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    ports:
+      - "8000:8000"
+    environment:
+      - IBM_QUANTUM_TOKEN=${IBM_QUANTUM_TOKEN:-}
+    env_file:
+      - .env
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - api
+
+  jupyter:
+    build:
+      context: .
+      dockerfile: Dockerfile.jupyter
+    ports:
+      - "8888:8888"
+    volumes:
+      - .:/app
+    environment:
+      - JUPYTER_ENABLE_LAB=0
+      - IBM_QUANTUM_TOKEN=${IBM_QUANTUM_TOKEN:-}
+    env_file:
+      - .env
+    profiles:
+      - jupyter

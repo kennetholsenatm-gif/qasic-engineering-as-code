@@ -115,12 +115,16 @@ def build_routing_qubo(
     num_physical_nodes: int | None = None,
     interaction_matrix: np.ndarray | None = None,
     distance_penalty_scale: float = 1.0,
+    node_decoherence_rates: np.ndarray | None = None,
+    decoherence_penalty_scale: float = 1.0,
 ) -> QuadraticProgram:
     """
     Build QUBO for mapping logical qubits to physical nodes.
     - Each logical qubit maps to exactly one physical node (and vice versa).
     - Objective: minimize sum over (i1,i2) that need to interact of
-      distance_penalty(j1,j2) * x_{i1,j1}*x_{i2,j2}.
+      distance_penalty(j1,j2) * x_{i1,j1}*x_{i2,j2}, plus optional linear terms
+      decoherence_penalty_scale * node_decoherence_rates[j] * x_{i,j} to penalize
+      assigning qubits to high-decoherence nodes.
     If interaction_matrix is None, assume all pairs (i1,i2) need to interact (e.g. linear chain).
     """
     num_physical_nodes = num_physical_nodes or num_logical_qubits
@@ -168,7 +172,17 @@ def build_routing_qubo(
                             key = (f"x_{i1}_{j1}", f"x_{i2}_{j2}")
                             quadratic[key] = distance_penalty_scale * dist
 
-    qp.minimize(quadratic=quadratic)
+    # Optional: linear decoherence penalty per (i, j)
+    linear = {}
+    if node_decoherence_rates is not None and len(node_decoherence_rates) >= num_physical_nodes:
+        for i in range(num_logical_qubits):
+            for j in range(num_physical_nodes):
+                linear[f"x_{i}_{j}"] = decoherence_penalty_scale * float(node_decoherence_rates[j])
+
+    if linear:
+        qp.minimize(linear=linear, quadratic=quadratic)
+    else:
+        qp.minimize(quadratic=quadratic)
     return qp
 
 
@@ -358,6 +372,24 @@ def main() -> None:
         default=0,
         help="Hub node index for star topology (default: 0).",
     )
+    parser.add_argument(
+        "--use-qutip-decoherence",
+        action="store_true",
+        help="Use QuTiP-based per-node decoherence rates in QUBO (default gamma1/gamma2 per node).",
+    )
+    parser.add_argument(
+        "--decoherence-file",
+        type=str,
+        default=None,
+        metavar="FILE",
+        help="JSON file with per-node gamma1/gamma2 (or 'nodes' list); implies decoherence-aware routing.",
+    )
+    parser.add_argument(
+        "--decoherence-penalty-scale",
+        type=float,
+        default=1.0,
+        help="Scale factor for decoherence linear terms in QUBO (default: 1.0).",
+    )
     args = parser.parse_args()
 
     # Apply --fast preset
@@ -391,12 +423,41 @@ def main() -> None:
         print("  (Use the same 'python' you run this script with. Check: python -c \"import sys; print(sys.executable)\")", file=sys.stderr)
         sys.exit(1)
 
+    node_decoherence_rates = None
+    if args.decoherence_file:
+        try:
+            from engineering.decoherence_rates import get_node_decoherence_rates_from_file
+            node_decoherence_rates = get_node_decoherence_rates_from_file(args.decoherence_file)
+            print(f"  Decoherence rates loaded from {args.decoherence_file} (length {len(node_decoherence_rates)})")
+        except Exception as e:
+            try:
+                from decoherence_rates import get_node_decoherence_rates_from_file
+                node_decoherence_rates = get_node_decoherence_rates_from_file(args.decoherence_file)
+                print(f"  Decoherence rates loaded from {args.decoherence_file} (length {len(node_decoherence_rates)})")
+            except Exception as e2:
+                print(f"  Warning: could not load decoherence file: {e2}", file=sys.stderr)
+    elif args.use_qutip_decoherence:
+        try:
+            from engineering.decoherence_rates import get_node_decoherence_rates
+            node_decoherence_rates = get_node_decoherence_rates(num_physical)
+            print("  Using QuTiP-based default decoherence rates per node")
+        except Exception as e:
+            try:
+                from decoherence_rates import get_node_decoherence_rates
+                node_decoherence_rates = get_node_decoherence_rates(num_physical)
+                print("  Using QuTiP-based default decoherence rates per node")
+            except Exception as e2:
+                print(f"  Warning: could not compute decoherence rates: {e2}", file=sys.stderr)
+
     qp = build_routing_qubo(
         num_logical_qubits=num_logical,
         num_physical_nodes=num_physical,
         interaction_matrix=interaction_matrix,
+        node_decoherence_rates=node_decoherence_rates,
+        decoherence_penalty_scale=args.decoherence_penalty_scale,
     )
-    print("Metasurface Qubit Routing QUBO (minimize interaction distance)")
+    print("Metasurface Qubit Routing QUBO (minimize interaction distance" +
+          (", decoherence penalty" if node_decoherence_rates is not None else "") + ")")
     print(f"  Topology: {args.topology}, Logical qubits: {num_logical}, Physical nodes: {num_physical}")
 
     use_qaoa = HAS_QAOA or args.hardware

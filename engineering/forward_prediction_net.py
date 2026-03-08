@@ -68,7 +68,7 @@ def synthetic_training_stub(
 ) -> float:
     """
     Stub training: random (config, target) pairs, MSE loss.
-    In production, replace with FEM/FDTD (config -> S-params) data.
+    In production, replace with FEM/FDTD (config -> S-params) data or use --dataset.
     """
     if seed is not None:
         torch.manual_seed(seed)
@@ -86,6 +86,57 @@ def synthetic_training_stub(
         loss.backward()
         optimizer.step()
         final_loss = float(loss.item())
+    return final_loss
+
+
+def train_from_dataset(
+    dataset_path: str,
+    config_size: Optional[int] = None,
+    output_size: Optional[int] = None,
+    batch_size: int = 32,
+    epochs: int = 10,
+    lr: float = 0.001,
+    device: str | torch.device = "cpu",
+    seed: Optional[int] = None,
+) -> float:
+    """
+    Load (config, S_params) from dataset (see meep_s_param_dataset.py), train ForwardPredictionNet with MSE.
+    Returns final epoch mean loss.
+    """
+    try:
+        from engineering.meep_s_param_dataset import load_dataset
+    except ImportError:
+        from meep_s_param_dataset import load_dataset
+    configs, S_params = load_dataset(dataset_path)
+    if config_size is None:
+        config_size = configs.shape[1]
+    if output_size is None:
+        output_size = S_params.shape[1]
+    if seed is not None:
+        torch.manual_seed(seed)
+    model = create_model(config_size, output_size, device)
+    optimizer = optim.Adam(model.parameters(), lr=lr)
+    criterion = nn.MSELoss()
+    x = torch.tensor(configs, dtype=torch.float32, device=device)
+    y = torch.tensor(S_params, dtype=torch.float32, device=device)
+    n = x.size(0)
+    model.train()
+    final_loss = 0.0
+    for epoch in range(epochs):
+        perm = torch.randperm(n, device=device)
+        epoch_loss = 0.0
+        count = 0
+        for start in range(0, n, batch_size):
+            end = min(start + batch_size, n)
+            idx = perm[start:end]
+            optimizer.zero_grad()
+            pred = model(x[idx])
+            loss = criterion(pred, y[idx])
+            loss.backward()
+            optimizer.step()
+            epoch_loss += loss.item()
+            count += 1
+        final_loss = epoch_loss / max(count, 1)
     return final_loss
 
 
@@ -129,6 +180,19 @@ def main() -> int:
         default=42,
         help="Random seed (default: 42).",
     )
+    parser.add_argument(
+        "--dataset",
+        type=str,
+        default=None,
+        metavar="PATH",
+        help="Train on (config, S-params) dataset from meep_s_param_dataset.py (.npz or base for _config.npy/_S.npy).",
+    )
+    parser.add_argument(
+        "--epochs",
+        type=int,
+        default=10,
+        help="Epochs when training from --dataset (default: 10).",
+    )
     args = parser.parse_args()
 
     device = args.device
@@ -136,7 +200,17 @@ def main() -> int:
         device = "cuda" if torch.cuda.is_available() else "cpu"
     device = torch.device(device)
 
-    if args.synthetic:
+    if args.dataset:
+        loss = train_from_dataset(
+            args.dataset,
+            config_size=args.config_size,
+            output_size=args.output_size,
+            epochs=args.epochs,
+            device=device,
+            seed=args.seed,
+        )
+        print(f"Training from dataset finished; final MSE loss: {loss:.6f}")
+    elif args.synthetic:
         loss = synthetic_training_stub(
             config_size=args.config_size,
             output_size=args.output_size,

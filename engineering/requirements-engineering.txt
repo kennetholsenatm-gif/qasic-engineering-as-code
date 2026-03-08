@@ -18,11 +18,14 @@ torch>=1.9.0
 # Optional: meta-atom simulation (squid_spectrum_scqubits.py)
 # scqubits>=3.0
 
-# Optional: open quantum systems / TLS decoherence (open_system_qutip.py)
+# Optional: open quantum systems / TLS decoherence (decoherence_rates.py, routing --use-qutip-decoherence)
 # qutip>=4.7
 
 # Topology visualizer (viz_topology.py)
 matplotlib>=3.5.0
 
-# Optional: 2D London equation / Meissner screening (superscreen_demo.py)
+# Optional: 2D London equation / Meissner screening (superscreen_demo.py, run_pipeline --with-superscreen)
 # superscreen>=0.12
+
+# Optional: FDTD S-parameter dataset for forward prediction net (meep_s_param_dataset.py)
+# pymeep  # or install via conda: conda install -c conda-forge pymeep

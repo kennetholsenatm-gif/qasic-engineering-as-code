@@ -1,0 +1,20 @@
+# QASIC Engineering-as-Code: FastAPI backend
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Repo root contents (API runs from repo root so asic, protocols, state, engineering are importable)
+COPY requirements.txt .
+COPY app/requirements.txt app/
+RUN pip install --no-cache-dir -r requirements.txt && pip install --no-cache-dir -r app/requirements.txt
+
+COPY app/ app/
+COPY state/ state/
+COPY asic/ asic/
+COPY protocols/ protocols/
+COPY engineering/ engineering/
+
+ENV PYTHONPATH=/app
+EXPOSE 8000
+
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

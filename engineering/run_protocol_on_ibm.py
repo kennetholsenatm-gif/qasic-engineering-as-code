@@ -93,6 +93,50 @@ def _extract_counts(pub_result) -> dict:
     return dict(getattr(data, "counts", {}) or {})
 
 
+def submit_protocol_job(
+    protocol: str,
+    backend_name: str | None = None,
+    shots: int = 1024,
+    ibm_token: str | None = None,
+) -> tuple[str, object, str | None]:
+    """
+    Submit protocol job to IBM hardware without waiting. Returns (job_id, job, backend_name).
+    job_id is a string; job has .status() and .result() for async polling.
+    """
+    import uuid
+    ops = get_protocol_ops(protocol)
+    qc = asic_ops_to_qiskit_circuit(ops)
+    sampler, _pm, backend = get_hardware_sampler_and_pass_manager(backend_name, ibm_token=ibm_token)
+    if sampler is None or backend is None:
+        raise RuntimeError("IBM hardware not available (token or backend)")
+    from qiskit import transpile
+    qc_transpiled = transpile(qc, backend=backend, optimization_level=1)
+    job = sampler.run([(qc_transpiled,)], shots=shots)
+    job_id = str(uuid.uuid4())
+    return job_id, job, backend.name
+
+
+def get_job_status_and_result(job: object) -> tuple[str, dict | None]:
+    """Poll job: return (status_str, result_dict or None). status_str in QUEUED, RUNNING, DONE, ERROR."""
+    try:
+        status = job.status()
+        status_str = str(getattr(status, "name", status)).upper()
+        if "QUEUED" in status_str or "PENDING" in status_str:
+            return "QUEUED", None
+        if "RUNNING" in status_str or "IN_PROGRESS" in status_str:
+            return "RUNNING", None
+        if "DONE" in status_str or "COMPLETED" in status_str:
+            result = job.result()
+            pub_result = result[0] if result else None
+            counts = _extract_counts(pub_result) if pub_result else {}
+            return "DONE", {"counts": {k: int(v) for k, v in counts.items()}}
+        if "ERROR" in status_str or "FAILED" in status_str:
+            return "ERROR", {"error": str(getattr(status, "value", status))}
+    except Exception as e:
+        return "ERROR", {"error": str(e)}
+    return "UNKNOWN", None
+
+
 def get_hardware_sampler_and_pass_manager(backend_name: str | None = None, ibm_token: str | None = None):
     """Get (sampler, pass_manager, backend) for real IBM hardware; (None, None, None) on failure."""
     try:
