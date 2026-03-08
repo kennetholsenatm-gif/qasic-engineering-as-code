@@ -1,0 +1,4 @@
+# InfluxDB 2 is provisioned via docker-compose env (GF_DATASOURCES_DEFAULT_*).
+# Use this file only if you add more datasources; token for Influx comes from INFLUX_TOKEN in compose.
+apiVersion: 1
+datasources: []

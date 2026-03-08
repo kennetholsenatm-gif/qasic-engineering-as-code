@@ -154,11 +154,53 @@ def main() -> int:
         action="store_true",
         help="After HEaC manifest, run 2D→3D packaging (sample holder STEP). Requires CadQuery or build123d.",
     )
+    parser.add_argument(
+        "--use-orchestrator",
+        action="store_true",
+        help="Run pipeline as a Prefect DAG (retry failed nodes only; requires prefect).",
+    )
     args = parser.parse_args()
 
     # Resolve paths from repo root or cwd
     script_dir = os.path.dirname(os.path.abspath(__file__))
     repo_root = os.path.dirname(script_dir)
+
+    # Optional: run via Prefect DAG (retriable tasks)
+    if getattr(args, "use_orchestrator", False) or os.environ.get("PREFECT_ORCHESTRATOR", "").strip() in ("1", "true", "yes"):
+        if str(repo_root) not in sys.path:
+            sys.path.insert(0, str(repo_root))
+        try:
+            from orchestration import pipeline_flow, PipelineParams
+            params = PipelineParams(
+                output_base=args.output,
+                device=args.device,
+                model=args.model,
+                routing_method=args.routing_method,
+                skip_routing=args.skip_routing,
+                skip_inverse=args.skip_inverse,
+                fast=args.fast,
+                hardware=args.hardware,
+                with_superscreen=args.with_superscreen,
+                heac=args.heac,
+                heac_library=args.heac_library,
+                pdk=args.pdk,
+                pdk_config=args.pdk_config,
+                gds=args.gds,
+                drc=args.drc,
+                lvs=args.lvs,
+                dft=args.dft,
+                thermal=args.thermal,
+                parasitic=args.parasitic,
+                meep_verify=args.meep_verify,
+                packaging=args.packaging,
+                script_dir=script_dir,
+                repo_root=repo_root,
+            )
+            pipeline_flow(params)
+            return 0
+        except Exception as e:
+            log.error("Orchestrator run failed: {}", str(e))
+            return 1
     routing_json = os.path.join(script_dir, args.output + "_routing.json")
     inverse_json = os.path.join(script_dir, args.output + "_inverse.json")
     inductance_json = os.path.join(script_dir, args.output + "_inductance.json")

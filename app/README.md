@@ -31,8 +31,9 @@ Then open http://localhost:8000/docs for Swagger UI, or point the front end at h
 - `POST /api/run/routing` — body: `{ "backend", "fast", "topology", "qubits", "hub", "routing_method": "qaoa"|"rl" }`
 - `POST /api/run/pipeline` — body: `{ "backend", "fast", "routing_method", "model": "mlp"|"gnn", "heac", "skip_routing", "skip_inverse" }` (synchronous)
 - `POST /api/run/pipeline/async` — same body; enqueues pipeline as Celery task, returns `{ "task_id", "status": "PENDING" }` (requires Redis + Celery worker)
-- `GET /api/tasks/{task_id}` — Celery task status and result (when ready)
-- `POST /api/run/inverse` — body: `{ "phase_band": "pi"|null, "routing_result_path": null|"..." }`
+- `POST /api/run/inverse/async` — body: `{ "phase_band", "routing_result_path", "model", "device" }`; enqueues inverse design (metasurface_inverse_net / GNN) as Celery task, returns `task_id` for polling
+- `GET /api/tasks/{task_id}` — Celery task status and result (when ready). Used by dashboard after calling pipeline/async or inverse/async.
+- `POST /api/run/inverse` — body: `{ "phase_band": "pi"|null, "routing_result_path": null|"..." }` (blocking; use inverse/async when workers are available)
 - `GET /api/results/latest` — last pipeline routing + inverse summary
 - `GET /api/docs/links` — list of doc links for the UI
 - `GET /health` — health check

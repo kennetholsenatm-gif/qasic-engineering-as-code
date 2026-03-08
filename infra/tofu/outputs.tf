@@ -17,6 +17,7 @@ output "local_urls" {
     frontend = "http://localhost:80"
     mlflow   = "http://localhost:5000"
     influx   = "http://localhost:8086"
+    grafana  = "http://localhost:3000"
   } : null
 }
 

@@ -34,6 +34,7 @@ Then open:
 - **API / Swagger:** http://localhost:8000/docs  
 - **MLflow:** http://localhost:5000  
 - **InfluxDB:** http://localhost:8086  
+- **Grafana:** http://localhost:3000 (admin / admin; InfluxDB telemetry preconfigured)  
 
 API and Celery worker use:
 

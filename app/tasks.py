@@ -118,13 +118,16 @@ def meep_sweep_task(self, output_path: str | None = None, points: int = 21, no_m
 
 @app.task(bind=True, name="qasic.inverse_design")
 def inverse_design_task(self, routing_result_path: str | None = None, model: str = "mlp",
-                        device: str = "auto", output_base: str = "inverse_result"):
-    """Run inverse design (MLP or GNN)."""
-    out_json = str(ENGINEERING_DIR / f"{output_base}.json")
+                        device: str = "auto", output_base: str = "pipeline_result",
+                        phase_band: str | None = None):
+    """Run inverse design (MLP or GNN). Writes to <output_base>_inverse.json and _inverse_phases.npy for dashboard."""
+    out_json = str(ENGINEERING_DIR / f"{output_base}_inverse.json")
     cmd = [sys.executable, str(ENGINEERING_DIR / "metasurface_inverse_net.py"),
            "-o", out_json, "--model", model, "--device", device]
     if routing_result_path and os.path.isfile(routing_result_path):
         cmd.extend(["--routing-result", routing_result_path])
+    if phase_band:
+        cmd.extend(["--phase-band", phase_band])
     code, stdout, stderr = _run_cmd(cmd, timeout=600)
     if code != 0:
         return {"success": False, "exit_code": code, "stderr": stderr}

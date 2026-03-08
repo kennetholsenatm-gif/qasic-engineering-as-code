@@ -119,8 +119,36 @@ services:
       postgres:
         condition: service_healthy
 
+  grafana:
+    image: grafana/grafana:10.2-alpine
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: "http://localhost:3000"
+      # InfluxDB 2 (Flux) as default datasource for telemetry/calibration
+      GF_DATASOURCES_DEFAULT_NAME: InfluxDB-QASIC
+      GF_DATASOURCES_DEFAULT_TYPE: influxdb
+      GF_DATASOURCES_DEFAULT_URL: http://influxdb:8086
+      GF_DATASOURCES_DEFAULT_JSON_DATA: '{"version":"Flux","organization":"qasic-org","defaultBucket":"qasic-telemetry","tlsSkipVerify":true}'
+      GF_DATASOURCES_DEFAULT_SECURE_JSON_DATA: '{"token":"${INFLUX_TOKEN:-qasic-telemetry-token}"}'
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      influxdb:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:3000/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
 volumes:
   redis_data:
   postgres_data:
   influxdb_data:
   mlflow_artifacts:
+  grafana_data:

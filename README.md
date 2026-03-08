@@ -208,7 +208,7 @@ docker compose -f docker-compose.full.yml up -d --build
 cd infra/tofu && tofu init && tofu apply -var="deployment_target=local"
 ```
 
-Then open: frontend **http://localhost**, API **http://localhost:8000/docs**, MLflow **http://localhost:5000**. To provision **AWS** (RDS + ElastiCache) instead and point your containers at managed DBs: `tofu apply -var="deployment_target=aws" -var="db_password=..."`. See [infra/tofu/README.md](infra/tofu/README.md).
+Then open: frontend **http://localhost**, API **http://localhost:8000/docs**, MLflow **http://localhost:5000**, Grafana **http://localhost:3000** (dashboards; InfluxDB telemetry). To provision **AWS** (RDS + ElastiCache) instead and point your containers at managed DBs: `tofu apply -var="deployment_target=aws" -var="db_password=..."`. See [infra/tofu/README.md](infra/tofu/README.md).
 
 ## CLI dashboard
 

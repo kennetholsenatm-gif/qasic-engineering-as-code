@@ -100,6 +100,8 @@ class RunPipelineRequest(BaseModel):
 class RunInverseRequest(BaseModel):
     phase_band: str | None = None
     routing_result_path: str | None = None
+    model: str | None = None  # mlp | gnn
+    device: str | None = None  # auto | cpu | cuda | mps
 
 
 class QuantumIlluminationRequest(BaseModel):
@@ -488,9 +490,26 @@ def run_pipeline(req: RunPipelineRequest):
     return result
 
 
+@app.post("/api/run/inverse/async")
+def run_inverse_async(req: RunInverseRequest):
+    """Enqueue inverse design (metasurface_inverse_net / GNN) as Celery task. Returns task_id; poll GET /api/tasks/{task_id}. Control plane stays responsive."""
+    if not _celery_available():
+        raise HTTPException(status_code=503, detail="Celery/Redis not configured (set CELERY_BROKER_URL)")
+    routing_path = req.routing_result_path if req.routing_result_path and os.path.isfile(req.routing_result_path) else (str(ROUTING_JSON) if ROUTING_JSON.exists() else None)
+    from app.tasks import inverse_design_task
+    task = inverse_design_task.delay(
+        routing_result_path=routing_path,
+        model=req.model or "mlp",
+        device=req.device or "auto",
+        output_base=PIPELINE_BASE,
+        phase_band=req.phase_band,
+    )
+    return {"task_id": task.id, "status": "PENDING", "message": "Inverse design task enqueued"}
+
+
 @app.post("/api/run/inverse")
 def run_inverse(req: RunInverseRequest):
-    """Run inverse design (topology -> phase profile)."""
+    """Run inverse design (topology -> phase profile). Blocking; use /api/run/inverse/async for offload to worker."""
     with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
         out_path = f.name
     try:
