@@ -63,6 +63,12 @@ def main() -> int:
         default=None,
         help="Write schedule to JSON (pseudo format) or leave empty for stdout.",
     )
+    parser.add_argument(
+        "--backend",
+        default="default",
+        choices=("default", "qick", "zurich"),
+        help="Output backend: default (pseudo/OpenPulse), qick (QICK), zurich (Zurich Instruments).",
+    )
     args = parser.parse_args()
 
     try:
@@ -71,6 +77,26 @@ def main() -> int:
         print(f"Failed to load circuit: {e}", file=sys.stderr)
         return 1
     config = load_config(args.config)
+
+    # For QICK/Zurich we need a dict schedule; use pseudo when backend is not default
+    if args.backend in ("qick", "zurich"):
+        try:
+            from pulse.pseudo_schedule import build_pseudo_schedule
+            schedule = build_pseudo_schedule(ops, config)
+        except Exception as e:
+            print(f"Pseudo schedule failed: {e}", file=sys.stderr)
+            return 1
+        if args.backend == "qick":
+            from pulse.qick_export import write_qick_config
+            out_path = args.output or "schedule_qick.json"
+            write_qick_config(schedule, out_path, config)
+            print(f"Wrote {out_path} (QICK format)")
+        else:
+            from pulse.zurich_export import write_zurich_config
+            out_path = args.output or "schedule_zurich.json"
+            write_zurich_config(schedule, out_path, config)
+            print(f"Wrote {out_path} (Zurich format)")
+        return 0
 
     try:
         from pulse.compiler import compile_circuit_to_schedule

@@ -11,6 +11,9 @@ description: Minimal design rules for HEaC metasurface GDS; CI and open-source u
 # Layer mapping: (layer, datatype) for GDS. Match gdsfactory (layer, datatype) convention.
 layers:
   metal: [1, 0]   # Meta-atom / active layer
+  pads: [2, 0]   # DFT bond pads (dft_structures.py)
+  alignment: [3, 0]  # DFT alignment marks
+  witness: [4, 0]   # DFT witness structures (resonators, single JJ)
   # Optional future: substrate, via, etc.
 
 # Design rules (um). Enforced when building PDK-compliant layout from manifest.

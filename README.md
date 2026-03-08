@@ -255,6 +255,7 @@ Store reference outputs in `engineering/ci_baseline/` (see `engineering/ci_basel
 | **Engineering as Code distributed roadmap** (virtualized quantum hardware, HPC/simulation stack, QAOA, DNN surrogates, cost-effective infra, potential partners) | [Engineering_as_Code_Distributed_Computational_Roadmap.tex](docs/Engineering_as_Code_Distributed_Computational_Roadmap.tex) (LaTeX report; build PDF: same) |
 | **Full-stack diagram** (protocol → routing → inverse design → hardware → apps) | [docs/architecture_overview.md](docs/architecture_overview.md) |
 | **Next steps / maturity roadmap** (tapeout, HIL, cryogenic loop, OpenQASM/GDS–MEEP) | [docs/NEXT_STEPS_ROADMAP.md](docs/NEXT_STEPS_ROADMAP.md) |
+| **Roadmap implementation status** (what’s done vs scaffold vs future) | [docs/ROADMAP_STATUS.md](docs/ROADMAP_STATUS.md) |
 
 ### Documents
 

@@ -120,6 +120,31 @@ class MetasurfaceInverseGNN(nn.Module):
         return self.sigmoid(raw) * (2 * math.pi)
 
 
+def drc_penalty_tensor(
+    phases: torch.Tensor,
+    min_width_um: float = 0.1,
+    min_spacing_um: float = 0.05,
+) -> torch.Tensor:
+    """
+    Differentiable DRC proxy: penalize large phase gradients (proxy for min feature / spacing).
+    Use as an extra loss term: loss = mse_loss + scale * drc_penalty_tensor(phases).
+    Ref: NEXT_STEPS_ROADMAP.md §6.2 Physics-Informed GNN (DRC in loss).
+    """
+    if phases.dim() == 1:
+        phases = phases.unsqueeze(0)
+    # Reshape to 2D grid if possible (sqrt)
+    n = phases.size(-1)
+    s = int(n ** 0.5)
+    if s * s == n:
+        p = phases.view(-1, s, s)
+        dx = (p[:, 1:, :] - p[:, :-1, :]).abs().mean()
+        dy = (p[:, :, 1:] - p[:, :, :-1]).abs().mean()
+        penalty = dx + dy  # larger gradient -> larger penalty
+    else:
+        penalty = torch.tensor(0.0, device=phases.device, dtype=phases.dtype)
+    return penalty
+
+
 def create_gnn_model(
     node_feature_dim: int = 8,
     num_meta_atoms: int = 1000,

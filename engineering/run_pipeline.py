@@ -117,6 +117,21 @@ def main() -> int:
         action="store_true",
         help="After HEaC manifest, run parasitic extraction (manifest -> decoherence_from_layout.json).",
     )
+    parser.add_argument(
+        "--dft",
+        action="store_true",
+        help="After HEaC manifest->GDS, run DFT script (padframes, alignment marks, witnesses) and merge into GDS.",
+    )
+    parser.add_argument(
+        "--meep-verify",
+        action="store_true",
+        help="After HEaC manifest (or GDS), run MEEP verification and write S-param summary (optional; continues if Meep not installed).",
+    )
+    parser.add_argument(
+        "--packaging",
+        action="store_true",
+        help="After HEaC manifest, run 2D→3D packaging (sample holder STEP). Requires CadQuery or build123d.",
+    )
     args = parser.parse_args()
 
     # Resolve paths from repo root or cwd
@@ -278,6 +293,25 @@ def main() -> int:
             if rc_lvs.returncode != 0:
                 print("LVS failed.", file=sys.stderr)
                 return rc_lvs.returncode
+        # DFT: merge padframes, alignment marks, witnesses into GDS
+        if args.dft:
+            dft_manifest_path = os.path.join(script_dir, args.output + "_dft_manifest.json")
+            dft_cmd = [
+                sys.executable,
+                os.path.join(heac_dir, "dft_structures.py"),
+                manifest_path,
+                "-o", dft_manifest_path,
+                "--merge", gds_path,
+                "--output-gds", gds_path,
+            ]
+            if pdk_cfg and os.path.isfile(pdk_cfg):
+                dft_cmd += ["--pdk-config", pdk_cfg]
+            print("Running DFT (padframes, alignment, witnesses)...")
+            rc_dft = subprocess.run(dft_cmd, cwd=repo_root)
+            if rc_dft.returncode != 0:
+                print("DFT merge failed.", file=sys.stderr)
+                return rc_dft.returncode
+            print(f"  DFT merged into {gds_path}")
     elif do_gds and not os.path.isfile(manifest_path):
         print("--gds/--drc/--lvs require HEaC manifest; run with --heac first.", file=sys.stderr)
         return 1
@@ -303,6 +337,44 @@ def main() -> int:
                 print("Thermal report failed (check phase/routing inputs).", file=sys.stderr)
             else:
                 print(f"  Thermal report: {thermal_report_path}")
+
+    # Optional: MEEP verification (S-param summary; continues on failure if Meep not installed)
+    if args.meep_verify:
+        manifest_for_meep = os.path.join(script_dir, args.output + "_geometry_manifest.json")
+        meep_summary_path = os.path.join(script_dir, args.output + "_meep_verify_summary.json")
+        heac_lib = args.heac_library or os.path.join(script_dir, "meta_atom_library.json")
+        meep_cmd = [
+            sys.executable,
+            os.path.join(script_dir, "meep_verify.py"),
+            "-o", meep_summary_path,
+        ]
+        if os.path.isfile(manifest_for_meep):
+            meep_cmd += ["--manifest", manifest_for_meep]
+        if os.path.isfile(heac_lib):
+            meep_cmd += ["--library", heac_lib]
+        print("Running MEEP verification...")
+        rc_meep = subprocess.run(meep_cmd, cwd=repo_root, capture_output=True, text=True, timeout=120)
+        if rc_meep.returncode == 0:
+            print(f"  MEEP summary: {meep_summary_path}")
+        else:
+            print("  MEEP verification skipped or failed (Meep optional).")
+
+    # Optional: 2D→3D packaging (STEP)
+    if args.packaging:
+        manifest_for_pkg = os.path.join(script_dir, args.output + "_geometry_manifest.json")
+        if os.path.isfile(manifest_for_pkg):
+            step_path = os.path.join(script_dir, args.output + "_sample_holder.step")
+            pkg_cmd = [
+                sys.executable,
+                os.path.join(script_dir, "packaging", "cad_3d.py"),
+                manifest_for_pkg, "-o", step_path,
+            ]
+            print("Running packaging (2D→3D STEP)...")
+            rc_pkg = subprocess.run(pkg_cmd, cwd=repo_root, capture_output=True, text=True, timeout=60)
+            if rc_pkg.returncode == 0:
+                print(f"  STEP: {step_path}")
+            else:
+                print("  Packaging skipped (CadQuery/build123d optional).")
 
     # Optional: parasitic extraction (manifest -> decoherence file)
     manifest_for_parasitic = os.path.join(script_dir, args.output + "_geometry_manifest.json")

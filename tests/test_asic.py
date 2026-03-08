@@ -47,6 +47,18 @@ def test_validate_circuit_rejects_cnot_on_non_edge():
     assert "not allowed" in errors[0] or "no edge" in errors[0].lower()
 
 
+def test_qasm_loader_string():
+    """OpenQASM loader: parse string to Op list (H, X, Z, CNOT, Rx)."""
+    from asic.qasm_loader import load_qasm_string
+    qasm = "h q[0];\nx q[1];\ncx q[0], q[1];\nz q[0];"
+    ops = load_qasm_string(qasm)
+    assert len(ops) == 4
+    assert ops[0].gate == "H" and ops[0].targets == [0]
+    assert ops[1].gate == "X" and ops[1].targets == [1]
+    assert ops[2].gate == "CNOT" and ops[2].targets == [0, 1]
+    assert ops[3].gate == "Z" and ops[3].targets == [0]
+
+
 def test_run_asic_circuit_teleport():
     psi = State(np.array([1, 1], dtype=np.complex128).reshape(-1, 1) / np.sqrt(2), 1)
     initial = product_state(psi, "0", "0")

@@ -36,8 +36,17 @@ Cryogenic thermal and crosstalk co-simulation: routing topologies and GDS-derive
 - **Routing** (`routing_qubo_qaoa.py`, `routing_rl.py`) accepts `--decoherence-file`. Pass the output of parasitic extraction so that physical nodes with higher layout-derived coupling get higher decoherence penalty in the QUBO.
 - **Simulation** (`state/channels.py`, `protocols/noise.py`) can use per-node rates from the same file for more realistic noise models.
 
+## Cryo-CMOS / classical interface heat model
+
+If the ASIC uses **deep cryogenic classical logic** (e.g. SFQ or Cryo-CMOS) for control/readout, its dissipation can be included in the thermal budget:
+
+- **CLI:** `thermal_stages.py` accepts `--classical-power-nw N` to add N nW to the total power (lumped). This is a placeholder for per-node or per-control-line power from routing/readout density; future work can feed power from `routing_rl.py` or a control-line activity model.
+- **Report:** The thermal report includes `P_quantum_nW`, `P_classical_nW`, and `P_total_nW` so design can balance readout/control density against qubit coherence.
+- **Thermal → decoherence:** Use `thermal_to_decoherence.py` to map the thermal report (and optional per-node power) to per-node gamma1/gamma2 for routing and open-system simulation.
+
 ## See also
 
 - [CHANNEL_NOISE.md](CHANNEL_NOISE.md) — Kraus channels and noise injection in protocols.
 - [engineering/thermodynamic_validator.py](../engineering/thermodynamic_validator.py) — π-baseline and 18 nW/cell compliance.
 - [engineering/decoherence_rates.py](../engineering/decoherence_rates.py) — `get_node_decoherence_rates_from_file()`.
+- [engineering/thermal_to_decoherence.py](../engineering/thermal_to_decoherence.py) — thermal report → decoherence file for routing/simulation.

@@ -40,16 +40,19 @@ def thermal_report(
     routing_json_path: str,
     phases_path: str,
     nw_per_cell_limit: float = NW_PER_CELL_LIMIT,
+    classical_power_nw: float = 0.0,
 ) -> dict[str, Any]:
     """
     Compute lumped thermal report: total power, per-stage proxy temperatures.
-    Model: P_total = sum over cells of power_proxy(phase); T_stage = T_base + R_th * P_total (simple).
+    Model: P_total = sum over cells of power_proxy(phase) + classical_power_nw; T_stage = T_base + R_th * P_total.
+    classical_power_nw: optional Cryo-CMOS / classical interface power (readout, control logic) added to total.
     """
     routing = load_routing(routing_json_path)
     phases = load_phases(phases_path)
     n_cells = phases.size
     power_per_cell = power_proxy_from_phases(phases, nw_per_cell_limit)
-    P_total_nw = float(np.sum(power_per_cell))
+    P_quantum_nw = float(np.sum(power_per_cell))
+    P_total_nw = P_quantum_nw + float(classical_power_nw)
     P_mean_nw = float(np.mean(power_per_cell)) if n_cells else 0.0
 
     # Lumped resistance proxy (K/nW): arbitrary scale for reporting
@@ -68,6 +71,8 @@ def thermal_report(
     return {
         "num_cells": n_cells,
         "P_total_nW": round(P_total_nw, 4),
+        "P_quantum_nW": round(P_quantum_nw, 4),
+        "P_classical_nW": round(float(classical_power_nw), 4),
         "P_mean_nW_per_cell": round(P_mean_nw, 4),
         "nw_per_cell_limit": nw_per_cell_limit,
         "T_10mK_K": round(T_10mK, 6),
@@ -91,6 +96,7 @@ def main() -> int:
     parser.add_argument("phases_npy", help="Path to phases .npy")
     parser.add_argument("-o", "--output", default=None, help="Output JSON report path")
     parser.add_argument("--nw-limit", type=float, default=NW_PER_CELL_LIMIT, help="nW per cell limit")
+    parser.add_argument("--classical-power-nw", type=float, default=0.0, help="Cryo-CMOS/classical interface power (nW) to add to total")
     args = parser.parse_args()
 
     if not os.path.isfile(args.routing_json):
@@ -100,7 +106,12 @@ def main() -> int:
         print(f"Phases file not found: {args.phases_npy}", file=sys.stderr)
         return 1
 
-    report = thermal_report(args.routing_json, args.phases_npy, args.nw_limit)
+    report = thermal_report(
+        args.routing_json,
+        args.phases_npy,
+        args.nw_limit,
+        classical_power_nw=args.classical_power_nw,
+    )
     out_path = args.output
     if out_path:
         with open(out_path, "w", encoding="utf-8") as f:

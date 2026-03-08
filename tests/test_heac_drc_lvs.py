@@ -116,3 +116,100 @@ def test_manifest_to_gds_with_pdk(tmp_path):
     assert rc.returncode == 0, (rc.stdout or "") + (rc.stderr or "")
     assert gds_path.exists()
     assert gds_path.stat().st_size > 0
+
+
+def test_dft_structures_build(tmp_path):
+    """DFT structures: build_dft_manifest produces pads, alignment, witnesses."""
+    from engineering.heac.dft_structures import build_dft_manifest
+    manifest_path = _minimal_manifest_path(tmp_path)
+    dft = build_dft_manifest(str(manifest_path), str(HEAC / "pdk_config.yaml") if (HEAC / "pdk_config.yaml").exists() else None)
+    assert dft["source"] == "dft_structures"
+    assert dft["core_width_um"] == 2.0
+    assert dft["core_height_um"] == 2.0
+    assert len(dft["pads"]) > 0
+    assert len(dft["alignment_marks"]) > 0
+    assert len(dft["witness_structures"]) >= 2
+    out_json = tmp_path / "dft_manifest.json"
+    import json
+    with open(out_json, "w", encoding="utf-8") as f:
+        json.dump(dft, f, indent=2)
+    assert out_json.exists()
+
+
+@pytest.mark.skipif(not (HEAC / "pdk_config.yaml").exists(), reason="pdk_config.yaml not found")
+def test_dft_structures_cli_and_merge(tmp_path):
+    """DFT structures CLI: output JSON; with gdsfactory, merge into GDS."""
+    try:
+        import gdsfactory
+    except ImportError:
+        pytest.skip("gdsfactory not installed")
+    manifest_path = _minimal_manifest_path(tmp_path)
+    gds_path = tmp_path / "out.gds"
+    pdk_config = str(HEAC / "pdk_config.yaml")
+    # Create GDS first
+    cmd_gds = [
+        sys.executable,
+        str(HEAC / "manifest_to_gds.py"),
+        str(manifest_path), "-o", str(gds_path),
+        "--pdk-config", pdk_config,
+    ]
+    rc = subprocess.run(cmd_gds, cwd=str(REPO_ROOT), capture_output=True, text=True, timeout=30)
+    assert rc.returncode == 0
+    # DFT manifest only
+    dft_json = tmp_path / "dft_manifest.json"
+    cmd_dft = [
+        sys.executable,
+        str(HEAC / "dft_structures.py"),
+        str(manifest_path), "-o", str(dft_json),
+        "--pdk-config", pdk_config,
+    ]
+    rc = subprocess.run(cmd_dft, cwd=str(REPO_ROOT), capture_output=True, text=True, timeout=30)
+    assert rc.returncode == 0
+    assert dft_json.exists()
+    # Merge DFT into GDS
+    cmd_merge = [
+        sys.executable,
+        str(HEAC / "dft_structures.py"),
+        str(manifest_path),
+        "--pdk-config", pdk_config,
+        "--merge", str(gds_path),
+        "--output-gds", str(gds_path),
+    ]
+    rc = subprocess.run(cmd_merge, cwd=str(REPO_ROOT), capture_output=True, text=True, timeout=30)
+    assert rc.returncode == 0
+    assert gds_path.stat().st_size > 0
+
+
+def test_superconducting_extraction(tmp_path):
+    """Superconducting extraction: kinetic L and optional JJ L from manifest."""
+    from engineering.superconducting_extraction import extract_kinetic_inductance
+    manifest_path = _minimal_manifest_path(tmp_path)
+    data = extract_kinetic_inductance(str(manifest_path), routing_path=None)
+    assert data["source"] == "superconducting_extraction"
+    assert len(data["nodes"]) == 4
+    assert all("gamma1" in n and "gamma2" in n and "L_kinetic_nH" in n for n in data["nodes"])
+    assert "edges" in data
+    assert isinstance(data["jj"], list)
+
+
+def test_process_variation_sweep(tmp_path):
+    """Process variation sweep: perturb manifest, run extraction, get stats."""
+    from engineering.process_variation_sweep import run_sweep, perturb_manifest
+    import numpy as np
+    manifest_path = _minimal_manifest_path(tmp_path)
+    # Quick sweep with 2 samples
+    result = run_sweep(
+        str(manifest_path),
+        routing_path=None,
+        n_samples=2,
+        dimension_std_um=0.01,
+        seed=123,
+        run_superconducting=True,
+        script_dir=str(ENGINEERING),
+        repo_root=str(REPO_ROOT),
+    )
+    assert result["source"] == "process_variation_sweep"
+    assert result["n_samples"] == 2
+    assert "parasitic_metric" in result
+    assert result["parasitic_metric"]["count"] == 2
+    assert result.get("superconducting_metric") is None or result["superconducting_metric"]["count"] in (0, 2)
