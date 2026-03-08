@@ -2,4 +2,4 @@
 # For full engineering tests (routing, inverse net, viz): also install engineering deps.
 -r requirements.txt
 pytest>=7.0.0
-torch>=1.9.0
+torch>=1.13.0

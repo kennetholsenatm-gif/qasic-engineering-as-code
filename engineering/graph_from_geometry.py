@@ -141,11 +141,11 @@ def save_graph_for_gnn(
 
 
 def load_graph_for_gnn(path_base: str) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor | None]:
-    """Load x, edge_index, edge_attr from path_base_*.pt."""
-    x = torch.load(path_base + "_x.pt")
-    edge_index = torch.load(path_base + "_edge_index.pt")
+    """Load x, edge_index, edge_attr from path_base_*.pt (weights_only=True for safe deserialization)."""
+    x = torch.load(path_base + "_x.pt", weights_only=True)
+    edge_index = torch.load(path_base + "_edge_index.pt", weights_only=True)
     edge_attr_path = path_base + "_edge_attr.pt"
-    edge_attr = torch.load(edge_attr_path) if os.path.isfile(edge_attr_path) else None
+    edge_attr = torch.load(edge_attr_path, weights_only=True) if os.path.isfile(edge_attr_path) else None
     return x, edge_index, edge_attr
 
 

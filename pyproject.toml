@@ -52,13 +52,13 @@ engineering = [
   "qiskit-optimization>=0.7.0",
   "hashable-list>=0.2.0",
   "ordered-set>=4.0.0",
-  "torch>=1.9.0",
+  "torch>=1.13.0",
   "matplotlib>=3.5.0",
   "scipy>=1.7.0",
 ]
 test = [
   "pytest>=7.0.0",
-  "torch>=1.9.0",
+  "torch>=1.13.0",
 ]
 all = [
   "rich>=10.0.0",
@@ -73,7 +73,7 @@ all = [
   "qiskit-optimization>=0.7.0",
   "hashable-list>=0.2.0",
   "ordered-set>=4.0.0",
-  "torch>=1.9.0",
+  "torch>=1.13.0",
   "matplotlib>=3.5.0",
   "scipy>=1.7.0",
   "pytest>=7.0.0",
