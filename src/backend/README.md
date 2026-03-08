@@ -1,4 +1,20 @@
-# DAG Orchestration (Prefect 2)
+# Backend: API, DAG Orchestrator, Hybrid Compute Dispatcher
+
+## Hybrid Compute Dispatcher
+
+When the WUI submits a DAG, the **Hybrid Compute Dispatcher** (`dispatcher.py`) parses each node, determines the required compute resource, and routes the job:
+
+| Compute resource   | Use case | Executor |
+|--------------------|----------|----------|
+| `classical_sim`    | QKD, quantum illumination, quantum radar, protocol simulation | Local (Python/NumPy) |
+| `fdtf` (FDTD-style)| Routing, inverse design, HEaC, thermal, manifest→GDS | Local (engineering scripts) |
+| `quantum_backend`  | IBM QPU (protocol teleport, routing --hardware) | IBM Quantum |
+| `eks`              | Future Kubernetes-backed workers | (Not yet implemented) |
+
+- **`task_registry.py`** defines task types with optional `compute_resource`; the dispatcher uses it for routing and the API exposes it for the FBP palette.
+- **`executor.py`** runs the DAG in topological order and calls `dispatcher.dispatch()` for each node (local, IBM, or EKS).
+
+## DAG Orchestration (Prefect 2)
 
 Pipeline and calibration runs are available as **Prefect 2** flows so you can:
 
@@ -32,14 +48,14 @@ The metasurface pipeline is implemented as flow `qasic-pipeline` with tasks:
 From **repo root**:
 
 ```bash
-python engineering/run_pipeline.py --use-orchestrator -o my_result --heac --thermal
+python src/core_compute/engineering/run_pipeline.py --use-orchestrator -o my_result --heac --thermal
 ```
 
 Or set the env and use the script as usual:
 
 ```bash
 export PREFECT_ORCHESTRATOR=1
-python engineering/run_pipeline.py -o my_result
+python src/core_compute/engineering/run_pipeline.py -o my_result
 ```
 
 ### Option 2: Prefect CLI (with server)

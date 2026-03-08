@@ -122,10 +122,11 @@ def pipeline_flow(params: PipelineParams | None = None) -> dict[str, Any]:
     Run the full pipeline as a DAG. Each step is a Prefect task with retries.
     Pass PipelineParams; if None, uses defaults with script_dir/repo_root from this file.
     """
-    # orchestration/ is at repo root; pipeline scripts live in engineering/
-    orchestration_dir = os.path.dirname(os.path.abspath(__file__))
-    repo_root = os.path.dirname(orchestration_dir)
-    script_dir = os.path.join(repo_root, "engineering")
+    # backend is at src/backend/; pipeline scripts live in src/core_compute/engineering/
+    _backend_dir = os.path.dirname(os.path.abspath(__file__))
+    _src_dir = os.path.dirname(_backend_dir)
+    repo_root = os.path.dirname(_src_dir)
+    script_dir = os.path.join(repo_root, "src", "core_compute", "engineering")
     if params is None:
         params = _default_params(script_dir, repo_root)
     else:

@@ -15,12 +15,8 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from src.backend.dag_validate import is_acyclic
-from src.backend.task_registry import (
-    BACKEND_LOCAL,
-    BACKEND_IBM_QPU,
-    BACKEND_AWS_EKS,
-    get_task_type,
-)
+from src.backend.task_registry import get_task_type
+from src.backend.dispatcher import dispatch as dispatcher_dispatch
 
 
 def _topological_order(nodes: list[dict], edges: list[dict]) -> list[str]:
@@ -308,21 +304,12 @@ def run_dag(run_id: int, celery_task_id: str | None = None) -> dict[str, Any]:
                 upsert_dag_run_node(run_id, node_id, status="failed", error_message=f"Unknown task_type: {task_type}")
                 continue
 
-            backend = config.get("backend", BACKEND_LOCAL)
             inputs = _get_inputs_for_node(node_id, nodes, edges, node_outputs)
 
             upsert_dag_run_node(run_id, node_id, status="running", started_at=now)
 
-            if backend == BACKEND_LOCAL:
-                outputs, err = _execute_local(task_type, config, inputs, work_dir)
-            elif backend == BACKEND_IBM_QPU:
-                outputs, err = _execute_ibm(task_type, config, inputs)
-            elif backend == BACKEND_AWS_EKS:
-                err = "EKS backend not configured"
-                outputs = {}
-            else:
-                err = f"Unknown backend: {backend}"
-                outputs = {}
+            # Hybrid Compute Dispatcher: route by task_type + backend to local/IBM/EKS
+            outputs, err = dispatcher_dispatch(task_type, config, inputs, work_dir)
 
             if err:
                 upsert_dag_run_node(
