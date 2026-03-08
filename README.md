@@ -32,6 +32,10 @@ docker compose up -d --build
 
 Open the frontend at **http://localhost** (port 80). API docs: **http://localhost:8000/docs**.
 
+**If you see ERR_CONNECTION_REFUSED on http://localhost:**  
+- Ensure Docker is running and the stack is up: `docker compose ps` (all services should be “Up”). If not, run `docker compose up -d --build` from the repo root and wait ~30s for the API healthcheck to pass.  
+- If port 80 is in use or blocked, change the frontend port in `docker-compose.yml` (e.g. `"8080:8080"`) and use **http://localhost:8080**.
+
 - **Full stack** (core + InfluxDB, MLflow, Grafana): `docker compose -f docker-compose.full.yml up -d --build` or `make run-local`.
 - **Jupyter**: `docker compose --profile jupyter run --service-ports jupyter`.
 
@@ -60,7 +64,7 @@ python demos/demo_commitment.py
 python demos/demo_asic.py
 ```
 
-**Web app** (backend + frontend):
+**Web app** (backend + frontend, no Docker):
 
 ```bash
 pip install -e ".[app]"
@@ -69,7 +73,7 @@ uvicorn src.backend.main:app --reload
 cd src/frontend && npm install && npm run dev
 ```
 
-See [src/frontend/README.md](src/frontend/README.md) for frontend details.
+Then open **http://localhost:5173** (Vite dev server). The API is at **http://localhost:8000**. See [src/frontend/README.md](src/frontend/README.md) for frontend details.
 
 **Optional extras:**
 

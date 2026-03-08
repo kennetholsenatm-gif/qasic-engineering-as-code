@@ -24,7 +24,7 @@ spec:
         - name: celery-worker
           image: "{{ .Values.image.registry }}{{ .Values.image.api.repository }}:{{ .Values.image.api.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          command: ["celery", "-A", "app.celery_app", "worker", "-l", {{ .Values.celeryWorker.logLevel | quote }}]
+          command: ["celery", "-A", "src.backend.celery_app", "worker", "-l", {{ .Values.celeryWorker.logLevel | quote }}]
           env:
             - name: CELERY_BROKER_URL
               value: "{{ include "qasic.celery.broker" . }}"
