@@ -2,7 +2,7 @@
 
 **Repository:** [github.com/kennetholsenatm-gif/qasic-engineering-as-code](https://github.com/kennetholsenatm-gif/qasic-engineering-as-code)
 
-**Quantum ASIC and Engineering-as-Code (EaC):** protocols, routing, inverse design, quantum illumination, and CV quantum radar—with a **web app** for flow-based workflows, deployment, and hybrid compute.
+**Quantum ASIC and Engineering-as-Code (EaC):** protocols, routing, inverse design, quantum illumination, and CV quantum radar—with a **web app** for flow-based workflows, deployment, and hybrid compute. **Alpha** focuses on a single golden path (3-qubit linear chain → routing → inverse design → HEaC → GDS) for the internal hardware team; broader protocols and applications remain in the repo but are parked for Alpha. See [docs/app/ALPHA_SCOPE.md](docs/app/ALPHA_SCOPE.md) and [docs/app/ALPHA_CUSTOMER.md](docs/app/ALPHA_CUSTOMER.md) for scope and customer.
 
 ---
 
@@ -12,10 +12,10 @@ The main way to use the stack is the **QASIC web app**: FastAPI backend, React f
 
 | Feature | Description |
 |--------|--------------|
-| **Flow-based workflow (FBP)** | **Workflows** page: drag-and-drop task types from the Task Registry onto a canvas, connect edges to form a DAG, then **Deploy / Run**. Task types (protocols, routing, inverse design, etc.) show a compute badge (Sim, FDTD, QPU, EKS). |
+| **Run Pipeline** (Alpha focus) | **Primary path:** Fixed metasurface pipeline (routing → inverse design → HEaC → GDS → DRC/LVS). A **project and circuit are required**—no default project or circuit. Run from the app (Run Pipeline: project + circuit, full pipeline with HEaC) or CLI. See [docs/app/ALPHA_SCOPE.md](docs/app/ALPHA_SCOPE.md). |
+| **Flow-based workflow (FBP)** | **Workflows** page: drag-and-drop task types from the Task Registry onto a canvas, connect edges to form a DAG, then **Deploy / Run**. Task types show a compute badge (Sim, FDTD, QPU, EKS). *Out of Alpha scope (parked until core pipeline is stable).* |
 | **Hybrid DAG orchestrator** | Backend parses each node, resolves compute resource via `dispatcher.py`, and routes jobs to local executor, IBM Quantum, or (future) EKS. See [src/backend/README.md](src/backend/README.md). |
-| **Deploy** | **Deploy** page: pick a target (Local, VM, AWS, GCP, Azure, OpenNebula) and get generated commands (Docker Compose, OpenTofu, Helm). For full infra DAG control, use the **IaC Orchestrator** under `platform/iac-orchestrator/`. |
-| **Run Pipeline** | Fixed metasurface pipeline (routing → inverse design → HEaC → GDS → DRC/LVS) as a read-only DAG view; run from the app or CLI. |
+| **Deploy** | **Deploy** page: pick a target (Local, VM, AWS, GCP, Azure, OpenNebula) and get generated commands (Docker Compose, OpenTofu, Helm). For full infra DAG control, use the **IaC Orchestrator** under `platform/iac-orchestrator/`. *Out of Alpha scope (parked).* |
 
 ---
 
@@ -32,7 +32,7 @@ cd qasic-engineering-as-code
 docker compose up -d --build
 ```
 
-- **What you get:** Web UI (frontend), API, Celery worker, Redis, and Postgres. This is the full WUI experience: Run Pipeline, Workflows, Projects, async task streaming, and Results. The API image is built with `.[app,engineering]`, so **OpenQASM 3.0** (via `qiskit-qasm3-import`), routing, and HEaC are included—no extra install for circuit-to-ASIC in the app.
+- **What you get:** Web UI (frontend), API, Celery worker, Redis, and Postgres. This is the full WUI experience: Run Pipeline, Workflows, Projects, async task streaming, and Results. The stack uses a **two-image setup**: the API is a slim control-plane image (FastAPI, Celery client only; no Qiskit/PyTorch in the API process). The Celery worker uses a separate image with the full engineering stack (`.[app,engineering]`). Pipeline and protocol runs execute in workers; the API enqueues tasks and returns results. BuildKit and a pip cache mount speed up rebuilds; see [Dockerfile.api](Dockerfile.api) and [Dockerfile.worker](Dockerfile.worker).
 - **Environment:** The core stack sets `DATABASE_URL`, `CELERY_BROKER_URL`, and Postgres inside `docker-compose.yml`; you do not need to edit `.env` for a basic run. Copying `.env.example` to `.env` is only so the file exists. Optionally set `IBM_QUANTUM_TOKEN` in `.env` if you use IBM Quantum from the app.
 
 Open the frontend at **http://localhost** (port 80). API docs: **http://localhost:8000/docs**.
@@ -112,6 +112,8 @@ Entry points: `qasic-dashboard`, `qasic-pulse` (pulse compile CLI). Build artifa
 | **Deploy** | Where the stack runs: Local (Docker Compose), VM, or cloud (AWS, GCP, Azure, OpenNebula). Deploy page in the app or [platform/deploy/README.md](platform/deploy/README.md). | [platform/deploy/](platform/deploy/) |
 | **IaC Orchestrator** | Advanced infra DAG: Tofu init → plan → approval → apply, custom scripts. For power users. | [platform/iac-orchestrator/README.md](platform/iac-orchestrator/README.md) |
 
+For Alpha, the focus is the fixed pipeline (routing → inverse → HEaC → GDS) and **Run Pipeline** in the app; Workflows and IaC Orchestrator are parked. See [docs/app/ALPHA_SCOPE.md](docs/app/ALPHA_SCOPE.md).
+
 ---
 
 ## Project layout
@@ -141,7 +143,7 @@ qasic-engineering-as-code/
 └── QRNG.PY                   # Shared quantum RNG (e.g. apps/qrnc)
 ```
 
-Full-stack diagram: [docs/app/architecture_overview.md](docs/app/architecture_overview.md).
+**BQTC**, **qrnc**, and the **IaC Orchestrator** are in the repo but **parked for Alpha** per [docs/app/ALPHA_SCOPE.md](docs/app/ALPHA_SCOPE.md). Full-stack diagram: [docs/app/architecture_overview.md](docs/app/architecture_overview.md).
 
 ---
 
@@ -177,7 +179,7 @@ See [src/core_compute/engineering/README.md](src/core_compute/engineering/README
 
 ## Applications
 
-**BQTC** (Bayesian-Quantum Traffic Controller) and **qrnc** (quantum-backed tokens, BitCommit-style exchange) live under [apps/](apps/); they use the shared **QRNG.PY** at repo root. See [apps/README.md](apps/README.md) and [docs/app/APPLICATIONS.md](docs/app/APPLICATIONS.md).
+**BQTC** (Bayesian-Quantum Traffic Controller) and **qrnc** (quantum-backed tokens, BitCommit-style exchange) live under [apps/](apps/); they use the shared **QRNG.PY** at repo root. They are **out of Alpha scope** (parked until the core pipeline is stable); see [docs/app/ALPHA_SCOPE.md](docs/app/ALPHA_SCOPE.md). See also [apps/README.md](apps/README.md) and [docs/app/APPLICATIONS.md](docs/app/APPLICATIONS.md).
 
 **Pulse control:** `src/core_compute/pulse/` compiles ASIC gate circuits to pulse schedules. Run `qasic-pulse --circuit teleport -o schedule.json`; see [docs/app/PULSE_CONTROL.md](docs/app/PULSE_CONTROL.md).
 
@@ -200,6 +202,9 @@ Optional: install `.[engineering]` for routing and inverse-design tests. Hardwar
 
 | If you want… | Read… |
 |--------------|--------|
+| **Alpha scope and customer** | [docs/app/ALPHA_SCOPE.md](docs/app/ALPHA_SCOPE.md), [docs/app/ALPHA_CUSTOMER.md](docs/app/ALPHA_CUSTOMER.md) |
+| **Program action items and roadmap** | [docs/app/PROGRAM_ACTION_ITEMS.md](docs/app/PROGRAM_ACTION_ITEMS.md), [docs/app/ROADMAP_SCHEDULE.md](docs/app/ROADMAP_SCHEDULE.md) |
+| **Control plane vs data plane** | [docs/app/ARCHITECTURE_CONTROL_VS_DATA_PLANE.md](docs/app/ARCHITECTURE_CONTROL_VS_DATA_PLANE.md) |
 | **Vision, protocols, roadmap** | [docs/research/WHITEPAPER_Holographic_Metasurfaces_Quantum_SATCOM.md](docs/research/WHITEPAPER_Holographic_Metasurfaces_Quantum_SATCOM.md) |
 | **Infrastructure-aware architecture (IAA)** | [docs/research/Whitepaper_Infrastructure_Aware_Application.md](docs/research/Whitepaper_Infrastructure_Aware_Application.md) |
 | **Full document index** | [docs/app/README.md](docs/app/README.md) |
