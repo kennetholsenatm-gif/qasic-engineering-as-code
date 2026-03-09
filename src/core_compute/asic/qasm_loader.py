@@ -6,6 +6,9 @@ Also provides interaction graph extraction for Algorithm-to-ASIC pipeline.
 OpenQASM 2.0: parsed via regex or qiskit.qasm2 when available.
 OpenQASM 3.0: parsed via qiskit.qasm3.loads/load when qiskit-qasm3-import is installed.
 Version is detected from the first declaration line (OPENQASM 2.0; vs OPENQASM 3.0;).
+
+Barrier: OpenQASM 2/3 barrier statements are supported and ignored when building the op list
+(they are a directive with no logical effect on the ASIC circuit).
 """
 from __future__ import annotations
 
@@ -197,10 +200,12 @@ def load_qasm(path: str, *, decompose_to_asic: bool = False) -> list[Op]:
 
 
 def _quantum_circuit_to_ops(circuit: Any) -> list[Op]:
-    """Convert Qiskit QuantumCircuit to list of Op (H, X, Z, CNOT, Rx)."""
+    """Convert Qiskit QuantumCircuit to list of Op (H, X, Z, CNOT, Rx). Skips barrier (OpenQASM 2/3 directive)."""
     ops: list[Op] = []
     for inst in circuit.data:
         name = inst.operation.name.lower()
+        if name == "barrier":
+            continue  # OpenQASM 2/3 directive; no-op for ASIC op list
         qubits = [circuit.find_bit(q).index for q in inst.qubits]
         param = None
         if hasattr(inst.operation, "params") and inst.operation.params:

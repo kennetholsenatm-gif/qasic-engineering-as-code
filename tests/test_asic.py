@@ -63,6 +63,18 @@ def test_qasm_loader_string():
     assert ops[3].gate == "Z" and ops[3].targets == [0]
 
 
+def test_qasm_loader_barrier_openqasm2():
+    """OpenQASM 2: barrier statements are skipped (no op emitted)."""
+    from src.core_compute.asic.qasm_loader import load_qasm_string, interaction_graph_from_qasm_string
+    qasm = "OPENQASM 2.0;\nqreg q[2];\nh q[0];\nbarrier q[0], q[1];\ncx q[0], q[1];\nbarrier q;"
+    ops = load_qasm_string(qasm)
+    assert len(ops) == 2  # h, cx only
+    assert ops[0].gate == "H" and ops[0].targets == [0]
+    assert ops[1].gate == "CNOT" and ops[1].targets == [0, 1]
+    G = interaction_graph_from_qasm_string(qasm)
+    assert G.number_of_nodes() == 2 and G.has_edge(0, 1)
+
+
 def test_detect_qasm_version():
     """Version detection: OPENQASM 2.0 vs 3.0 from first declaration."""
     from src.core_compute.asic.qasm_loader import _detect_qasm_version, QasmParseError
@@ -94,6 +106,26 @@ z q[0];
     G = interaction_graph_from_qasm_string(qasm3)
     assert G.number_of_nodes() >= 2
     assert G.has_edge(0, 1)
+
+
+@pytest.mark.skipif(not HAVE_QASM3, reason="qiskit-qasm3-import not installed")
+def test_qasm_loader_barrier_openqasm3():
+    """OpenQASM 3.0: barrier instructions are skipped when converting to ops."""
+    from src.core_compute.asic.qasm_loader import load_qasm_string, interaction_graph_from_qasm_string
+    qasm3 = """OPENQASM 3.0;
+include "stdgates.inc";
+qubit[2] q;
+h q[0];
+barrier q[0], q[1];
+cx q[0], q[1];
+barrier q;
+"""
+    ops = load_qasm_string(qasm3)
+    assert len(ops) == 2  # h, cx only; barriers skipped
+    assert ops[0].gate == "H" and ops[0].targets == [0]
+    assert ops[1].gate == "CNOT" and ops[1].targets == [0, 1]
+    G = interaction_graph_from_qasm_string(qasm3)
+    assert G.number_of_nodes() == 2 and G.has_edge(0, 1)
 
 
 @pytest.mark.skipif(not HAVE_QASM3, reason="qiskit-qasm3-import not installed")
