@@ -1,6 +1,6 @@
 # Infrastructure-Aware Feature Flags
 
-The FastAPI backend can enable optional API modules based on environment variables. This allows OpenTofu (or Helm) to inject feature flags and configuration when provisioning infrastructure, so the same application image behaves differently per environment without code changes.
+The FastAPI backend can enable optional API modules based on environment variables. This allows OpenTofu (or Helm) to inject feature flags and configuration when provisioning infrastructure, so the same application image behaves differently per environment without code changes. For the full architectural rationale, security and performance trade-offs, and cross-ecosystem comparison, see the [Infrastructure-Aware Application (IAA) whitepaper](../research/Whitepaper_Infrastructure_Aware_Application.md).
 
 ## Environment variable convention
 

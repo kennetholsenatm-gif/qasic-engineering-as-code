@@ -201,6 +201,7 @@ Optional: install `.[engineering]` for routing and inverse-design tests. Hardwar
 | If you want… | Read… |
 |--------------|--------|
 | **Vision, protocols, roadmap** | [docs/research/WHITEPAPER_Holographic_Metasurfaces_Quantum_SATCOM.md](docs/research/WHITEPAPER_Holographic_Metasurfaces_Quantum_SATCOM.md) |
+| **Infrastructure-aware architecture (IAA)** | [docs/research/Whitepaper_Infrastructure_Aware_Application.md](docs/research/Whitepaper_Infrastructure_Aware_Application.md) |
 | **Full document index** | [docs/app/README.md](docs/app/README.md) |
 | **Pulse control** | [docs/app/PULSE_CONTROL.md](docs/app/PULSE_CONTROL.md) |
 | **HEaC, DRC/LVS** | [docs/app/HEaC_opensource_Meep.md](docs/app/HEaC_opensource_Meep.md) |
