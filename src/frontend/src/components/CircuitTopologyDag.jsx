@@ -109,7 +109,7 @@ export default function CircuitTopologyDag({ apiBase, qasmString, isValid = fals
   if (!isValid) {
     return (
       <div className={`rounded-xl border border-slate-700 bg-slate-800/90 backdrop-blur-sm p-6 text-slate-400 ${className}`}>
-        Fix validation errors above to see the circuit topology.
+        Cannot generate topology: Fix validation errors in QASM source.
       </div>
     )
   }

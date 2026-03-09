@@ -390,7 +390,7 @@ export default function RunPipeline({ apiBase }) {
               onClick={() => setDagTab('pipeline')}
               className={`rounded-md px-3 py-1 text-sm ${dagTab === 'pipeline' ? 'bg-slate-600 text-slate-100' : 'text-slate-400 hover:text-slate-200'}`}
             >
-              Pipeline (DevOps)
+              Pipeline progress
             </button>
             <button
               type="button"
@@ -401,7 +401,19 @@ export default function RunPipeline({ apiBase }) {
             </button>
           </div>
         </div>
-        {dagTab === 'pipeline' && <PipelineDag apiBase={apiBase} activeStep={activeStep} nodeStatuses={nodeStatuses} />}
+        {dagTab === 'pipeline' && (
+          <>
+            <p className="mb-2 text-xs text-slate-500">
+              Shows run progress when a pipeline is running. Configure run options in the form below.
+            </p>
+            <PipelineDag
+              apiBase={apiBase}
+              activeStep={activeStep}
+              nodeStatuses={nodeStatuses}
+              syncRunInProgress={loading && !taskId}
+            />
+          </>
+        )}
         {dagTab === 'topology' && (
           <CircuitTopologyDag apiBase={apiBase} qasmString={qasmString} isValid={isQasmValid} decomposeToAsic={decomposeToAsic} />
         )}

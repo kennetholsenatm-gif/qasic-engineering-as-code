@@ -113,7 +113,7 @@ function fetchDag(apiBase) {
   })
 }
 
-export default function PipelineDag({ apiBase, activeStep = null, nodeStatuses = {}, className = '' }) {
+export default function PipelineDag({ apiBase, activeStep = null, nodeStatuses = {}, syncRunInProgress = false, className = '' }) {
   const { data, error, isLoading } = useQuery({
     queryKey: ['pipeline-dag', apiBase],
     queryFn: () => fetchDag(apiBase),
@@ -181,7 +181,19 @@ export default function PipelineDag({ apiBase, activeStep = null, nodeStatuses =
       className={`resize-y min-h-[400px] h-[560px] max-h-[800px] rounded-xl border border-slate-700 bg-slate-900 overflow-hidden flex flex-col ${className}`}
       style={{ resize: 'vertical' }}
     >
-      <div className="flex-1 min-h-0 relative">
+      <div className={`flex-1 min-h-0 relative ${syncRunInProgress ? 'opacity-60' : ''}`}>
+        {syncRunInProgress && (
+          <div
+            className="absolute inset-0 z-10 flex items-center justify-center bg-slate-900/80 rounded-xl"
+            role="status"
+            aria-live="polite"
+          >
+            <div className="rounded-xl border border-amber-500/60 bg-amber-950/40 px-6 py-4 text-center max-w-md">
+              <p className="text-sm font-medium text-amber-200">Synchronous run in progress.</p>
+              <p className="mt-1 text-xs text-slate-400">Step-by-step status is not available.</p>
+            </div>
+          </div>
+        )}
         <ReactFlowProvider>
           <ReactFlow
             nodes={nodes.length ? nodes : initialNodes}
