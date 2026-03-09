@@ -23,20 +23,30 @@ The main way to use the stack is the **QASIC web app**: FastAPI backend, React f
 
 ### Docker (recommended)
 
-From **repo root**:
+**Quick start** (clone, configure, run):
 
 ```bash
-# If .env is missing: copy .env.example .env (Windows) or cp .env.example .env (Mac/Linux)
+git clone https://github.com/kennetholsenatm-gif/qasic-engineering-as-code.git
+cd qasic-engineering-as-code
+# Create .env from example (Windows: copy .env.example .env | Mac/Linux: cp .env.example .env)
 docker compose up -d --build
 ```
 
+- **What you get:** Web UI (frontend), API, Celery worker, Redis, and Postgres. This is the full WUI experience: Run Pipeline, Workflows, Projects, async task streaming, and Results. The API image is built with `.[app,engineering]`, so **OpenQASM 3.0** (via `qiskit-qasm3-import`), routing, and HEaC are included—no extra install for circuit-to-ASIC in the app.
+- **Environment:** The core stack sets `DATABASE_URL`, `CELERY_BROKER_URL`, and Postgres inside `docker-compose.yml`; you do not need to edit `.env` for a basic run. Copying `.env.example` to `.env` is only so the file exists. Optionally set `IBM_QUANTUM_TOKEN` in `.env` if you use IBM Quantum from the app.
+
 Open the frontend at **http://localhost** (port 80). API docs: **http://localhost:8000/docs**.
+
+**Port 80 in use or blocked?** (common on Windows with IIS or macOS with Apache)  
+- Edit `docker-compose.yml`: under the `frontend` service, change `ports` from `"80:8080"` to `"8080:8080"`.  
+- Run `docker compose up -d --build` again, then open **http://localhost:8080**.
 
 **If you see ERR_CONNECTION_REFUSED on http://localhost:**  
 - Ensure Docker is running and the stack is up: `docker compose ps` (all services should be “Up”). If not, run `docker compose up -d --build` from the repo root and wait ~30s for the API healthcheck to pass.  
-- If port 80 is in use or blocked, change the frontend port in `docker-compose.yml` (e.g. `"8080:8080"`) and use **http://localhost:8080**.
+- If port 80 is in use, use the port change above and **http://localhost:8080**.
 
-- **Full stack** (core + InfluxDB, MLflow, Grafana): `docker compose -f docker-compose.full.yml up -d --build` or `make run-local`.
+**More services (dashboards, MLflow):**  
+- **Full stack** (core + InfluxDB, MLflow, Grafana): `docker compose -f docker-compose.full.yml up -d --build` or `make run-local`. Use this if you want experiment tracking and Grafana dashboards in addition to the Web UI.  
 - **Jupyter**: `docker compose --profile jupyter run --service-ports jupyter`.
 
 ### Platform: Helm and OpenTofu
@@ -47,7 +57,9 @@ For production, use **Kubernetes** and the Helm chart under [platform/deploy/](p
 
 ## Installation and quick start (dev)
 
-Run from **repo root** (use `py` or `python` as on your system):
+**Prerequisites:** Python 3.10+ (use `py` or `python` as on your system). For the web app frontend you also need **Node.js 18+** and **npm**.
+
+Run from **repo root**:
 
 ```bash
 git clone https://github.com/kennetholsenatm-gif/qasic-engineering-as-code.git
@@ -68,12 +80,15 @@ python demos/demo_asic.py
 
 ```bash
 pip install -e ".[app]"
+# Terminal 1 – backend:
 uvicorn src.backend.main:app --reload
-# In another terminal:
+# Terminal 2 – frontend (requires Node.js and npm):
 cd src/frontend && npm install && npm run dev
 ```
 
 Then open **http://localhost:5173** (Vite dev server). The API is at **http://localhost:8000**. See [src/frontend/README.md](src/frontend/README.md) for frontend details.
+
+**Note:** This path does not start Celery, Redis, or Postgres. The UI will load, but pipeline runs use the **synchronous** API (no live task log or Stop button), and project workspaces / MLflow integration are unavailable. For the full WUI (async runs, projects, task streaming), use Docker above.
 
 **Optional extras:**
 
