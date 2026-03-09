@@ -76,6 +76,36 @@ except ImportError:
     limit_heavy = lambda f: f  # no-op
 
 
+# --- Feature Flags & Dynamic Modules (Infrastructure-aware) ---
+def _is_feature_enabled(feature_name: str) -> bool:
+    """Check if a feature flag is enabled via environment variables (FEATURE_<NAME>_ENABLED)."""
+    key = f"FEATURE_{feature_name.upper()}_ENABLED"
+    val = os.environ.get(key, "false").strip().lower()
+    return val in ("1", "true", "yes", "on")
+
+
+def _load_feature_modules() -> None:
+    """Conditionally mount API routers from src.backend.modules based on FEATURE_*_ENABLED."""
+    features = [
+        ("keycloak", "auth_keycloak", "keycloak_router", "/api/auth/keycloak", "Keycloak"),
+    ]
+    for name, module_name, router_attr, prefix, tag in features:
+        if not _is_feature_enabled(name):
+            continue
+        try:
+            mod = __import__(f"src.backend.modules.{module_name}", fromlist=[router_attr])
+            router = getattr(mod, router_attr)
+            app.include_router(router, prefix=prefix, tags=[tag])
+            if log:
+                log.info("Feature module enabled: %s (prefix=%s)", name, prefix)
+        except ImportError as e:
+            if log:
+                log.warning("Failed to load feature module %s: %s", name, e)
+
+
+_load_feature_modules()
+
+
 def _run(cmd: list[str], cwd: Path | None = None) -> tuple[int, str]:
     """Run command; return (exit_code, stderr_or_stdout)."""
     r = subprocess.run(
@@ -1729,8 +1759,13 @@ def _openqasm_3_available() -> bool:
 
 @app.get("/api/capabilities")
 def get_capabilities():
-    """Return backend capabilities for the WUI (e.g. OpenQASM 3.0 support)."""
-    return {"openqasm_3_available": _openqasm_3_available()}
+    """Return backend capabilities for the WUI (e.g. OpenQASM 3.0, infrastructure features)."""
+    return {
+        "openqasm_3_available": _openqasm_3_available(),
+        "features": {
+            "keycloak": _is_feature_enabled("keycloak"),
+        },
+    }
 
 
 @app.get("/health")

@@ -47,7 +47,9 @@ This Helm chart packages the QASIC Engineering-as-Code stack for **Kubernetes**.
    ```
    `api.shortServiceName=true` creates a Service named `api` so the frontend (nginx `proxy_pass http://api:8000`) can reach the API in-cluster. Use one release per namespace.
 
-3. (Optional) Use external Redis/Postgres (e.g. ElastiCache, RDS):
+3. **Infrastructure-aware features:** To enable optional backend modules (e.g. Keycloak auth), set `api.env` with `FEATURE_<NAME>_ENABLED` and any module-specific vars. See [Infrastructure features (docs/app/INFRASTRUCTURE_FEATURES.md)](../../../docs/app/INFRASTRUCTURE_FEATURES.md) for the convention and examples.
+
+4. (Optional) Use external Redis/Postgres (e.g. ElastiCache, RDS):
    ```bash
    --set redis.enabled=false \
    --set redis.externalHost=my-redis.example.com:6379 \
@@ -118,6 +120,7 @@ Do not put production passwords in `values.yaml`; use ESO and Tofu-generated sec
 
 | Value | Description |
 |-------|-------------|
+| `api.env` | List of `{ name, value }` env vars for the API container (e.g. `FEATURE_KEYCLOAK_ENABLED`, `KEYCLOAK_URL`). See [INFRASTRUCTURE_FEATURES.md](../../../docs/app/INFRASTRUCTURE_FEATURES.md). |
 | `redis.enabled` | Deploy in-cluster Redis (default: true). If false, set `redis.externalHost` or broker URL via env. |
 | `postgres.enabled` | Deploy in-cluster Postgres (default: true). If false, set `postgres.externalUrl`. |
 | `postgres.useExternalSecret` | When true, use ESO to sync Postgres password from AWS Secrets Manager; do not create inline Secret. |
