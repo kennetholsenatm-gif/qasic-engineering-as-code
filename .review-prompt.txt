@@ -1,0 +1,23 @@
+You are a senior software engineer doing a concise code review. Review this project and respond with a short, structured review (no fluff).
+
+PROJECT: QASIC Engineering-as-Code (Quantum ASIC and Engineering-as-Code)
+Path: C:\Users\kenne\OneDrive\Documents\GitHub\qasic-engineering-as-code
+
+PURPOSE (from README):
+- Quantum ASIC tooling: protocols (teleportation, QKD, quantum illumination, bit commitment), routing, inverse design, metasurface pipeline (routing → inverse design → HEaC → GDS → DRC/LVS).
+- Web app: FastAPI backend, React (Vite) frontend, Hybrid Compute Dispatcher for DAGs (classical sim, FDTD, IBM QPU, future EKS).
+- Alpha focus: 3-qubit linear chain → routing → inverse design → HEaC → GDS.
+
+KEY FILES:
+- pyproject.toml: Python 3.10+, deps: numpy, networkx, qutip, FastAPI, Celery, Redis, qiskit, torch, optional extras (app, engineering, test).
+- src/backend/main.py: FastAPI app, CORS from config, rate limiting (slowapi), REPO_ROOT path hack, feature flags, pipeline/protocol/deploy endpoints.
+- src/backend/dispatcher.py: resolve_compute_resource(task_type_id, backend) → CLASSICAL_SIM | FDTD | QUANTUM_BACKEND | EKS; dispatch() to adapters.
+
+STRUCTURE: config/, src/{frontend,backend,core_compute}, platform/{deploy,infra,iac-orchestrator}, demos/, tests/, docker-compose.yml.
+
+Provide:
+1. What's done well (architecture, clarity, tooling).
+2. 2–4 concrete suggestions (security, maintainability, performance, or structure).
+3. One sentence summary.
+
+Keep the reply under 400 words.
