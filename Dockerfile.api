@@ -1,10 +1,7 @@
-# QASIC Engineering-as-Code: FastAPI backend + Celery worker (core compute with qiskit, torch, scipy)
+# QASIC Engineering-as-Code: Control plane (slim API image).
+# FastAPI + uvicorn + Celery client only; no Qiskit/PyTorch/engineering in this image.
+# Heavy compute runs in workers; see Dockerfile.worker for the data-plane image.
 FROM python:3.11-slim
-
-# System deps for torch/scipy (OpenMP and optional native builds)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libgomp1 \
-    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -18,11 +15,8 @@ COPY storage/ storage/
 COPY dashboard/ dashboard/
 COPY apps/ apps/
 
-# Install project with API and engineering extras (fastapi, celery, qiskit, torch, scipy)
-RUN pip install --no-cache-dir .[app,engineering]
-
-# Writable dirs for pipeline/circuit output (Celery tasks write here)
-RUN mkdir -p /app/src/core_compute/engineering/circuit_runs
+# Install only app extras (FastAPI, uvicorn, Celery client, Redis). No engineering stack.
+RUN pip install --no-cache-dir .[app]
 
 # Run as unprivileged user (DevSecOps: no root in container)
 RUN adduser --disabled-password --gecos "" appuser && chown -R appuser:appuser /app

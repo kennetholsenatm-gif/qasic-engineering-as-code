@@ -746,6 +746,11 @@ def validate_qasm_api(body: ValidateQasmRequest = Body(...)):
         from src.core_compute.asic.qasm_loader import interaction_graph_from_qasm_string
         interaction_graph_from_qasm_string(qasm_string, decompose_to_asic=body.decompose_to_asic)
         return {"valid": True}
+    except ImportError:
+        raise HTTPException(
+            status_code=503,
+            detail="QASM validation is performed by the compute worker. Use async pipeline or ensure the worker is running (control-plane-only mode).",
+        )
     except Exception as e:
         line = getattr(e, "line", None)
         try:
@@ -1018,11 +1023,17 @@ def apps_bqtc_run_cycle(req: BQTCRunCycleRequest):
 @app.post("/api/run/qkd")
 def run_qkd(req: RunQKDRequest):
     """Run pedagogical QKD (BB84 or E91) in simulation."""
-    if req.protocol == "bb84":
-        result = _run_bb84(n_bits=req.n_bits, seed=req.seed)
-    else:
-        result = _run_e91(n_trials=req.n_trials, seed=req.seed)
-    return result
+    try:
+        if req.protocol == "bb84":
+            result = _run_bb84(n_bits=req.n_bits, seed=req.seed)
+        else:
+            result = _run_e91(n_trials=req.n_trials, seed=req.seed)
+        return result
+    except ImportError:
+        raise HTTPException(
+            status_code=503,
+            detail="QKD requires the engineering (worker) environment. Control-plane-only mode cannot run this feature.",
+        )
 
 
 def _run_bb84(n_bits: int, seed: int | None) -> dict:
@@ -1040,6 +1051,37 @@ def _run_e91(n_trials: int, seed: int | None) -> dict:
 def run_protocol(request: Request, req: RunProtocolRequest):
     """Run ASIC protocol on sim (blocking) or IBM hardware (returns job_id for WebSocket polling)."""
     use_hardware = req.backend == "hardware"
+    # When engineering stack not in this process (slim API), run protocol via Celery task
+    if not _engineering_available():
+        if not _celery_available():
+            raise HTTPException(
+                status_code=503,
+                detail="Celery/Redis required for protocol execution when running in control-plane-only mode (set CELERY_BROKER_URL).",
+            )
+        from src.backend.tasks import run_protocol_task
+        task = run_protocol_task.delay(
+            protocol=req.protocol,
+            backend=req.backend,
+            use_circuit_function=req.use_circuit_function,
+            shots=1024,
+        )
+        try:
+            result = task.get(timeout=120)
+        except Exception as e:
+            raise HTTPException(status_code=504, detail=_sanitize_detail(e, "Protocol task timed out or failed."))
+        if result.get("error"):
+            raise HTTPException(status_code=503, detail=_sanitize_detail(RuntimeError(result["error"]), "Protocol run failed."))
+        if result.get("mode") == "hardware":
+            from src.backend.job_store import set_job
+            set_job(
+                result["job_id"],
+                ibm_job_id=result.get("ibm_job_id"),
+                backend=result.get("backend_name", ""),
+                protocol=req.protocol,
+                job=None,
+            )
+            return {"job_id": result["job_id"], "status": "submitted", "backend": result.get("backend_name")}
+        return result.get("result", {})
     if use_hardware:
         from src.core_compute.engineering.run_protocol_on_ibm import (
             submit_protocol_job,
@@ -1099,7 +1141,15 @@ async def websocket_job_status(websocket: WebSocket, job_id: str):
         await websocket.send_json({"status": "ERROR", "error": "Unknown job_id"})
         await websocket.close()
         return
-    from src.core_compute.engineering.run_protocol_on_ibm import get_job_status_and_result, get_job_status_and_result_by_ibm_job_id
+    try:
+        from src.core_compute.engineering.run_protocol_on_ibm import get_job_status_and_result, get_job_status_and_result_by_ibm_job_id
+    except ImportError:
+        await websocket.send_json({
+            "status": "ERROR",
+            "error": "Job status polling requires the engineering (worker) environment. Use a deployment with the full stack for WebSocket status.",
+        })
+        await websocket.close()
+        return
     try:
         while True:
             if "job" in entry:
@@ -1123,6 +1173,11 @@ async def websocket_job_status(websocket: WebSocket, job_id: str):
 @limit_heavy
 def run_routing(request: Request, req: RunRoutingRequest):
     """Run QUBO routing (QAOA or RL) on sim or IBM hardware."""
+    if not _engineering_available():
+        raise HTTPException(
+            status_code=503,
+            detail="Routing requires the engineering (worker) environment. Use control plane with workers or run routing via pipeline task.",
+        )
     use_hardware = req.backend == "hardware"
     use_rl = (req.routing_method or "qaoa") == "rl"
     with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
@@ -1180,8 +1235,17 @@ def _celery_available() -> bool:
         return False
 
 
+def _engineering_available() -> bool:
+    """True if the engineering stack (e.g. qiskit, qasm_to_asic) is installed in this process (data-plane / fat image)."""
+    try:
+        import qiskit  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
 def _validate_qasm_string(qasm_string: str, *, decompose_to_asic: bool = False) -> None:
-    """Raise HTTPException if qasm_string is invalid (length or parse)."""
+    """Raise HTTPException if qasm_string is invalid (length or parse). No-op on ImportError when qasm_loader not available (slim API); worker validates when task runs."""
     if len(qasm_string) > QASM_STRING_MAX_LENGTH:
         raise HTTPException(
             status_code=400,
@@ -1190,6 +1254,8 @@ def _validate_qasm_string(qasm_string: str, *, decompose_to_asic: bool = False) 
     try:
         from src.core_compute.asic.qasm_loader import interaction_graph_from_qasm_string
         interaction_graph_from_qasm_string(qasm_string, decompose_to_asic=decompose_to_asic)
+    except ImportError:
+        pass  # slim API: skip validation; worker will validate when pipeline task runs
     except Exception as e:
         raise HTTPException(status_code=400, detail=_sanitize_detail(e, "Invalid QASM: parse failed"))
 
@@ -1348,6 +1414,10 @@ def cancel_task_api(task_id: str):
     return {"task_id": task_id, "message": "Cancel requested"}
 
 
+# Sync pipeline timeout when API enqueues and waits (slim/control-plane mode)
+_PIPELINE_SYNC_WAIT_TIMEOUT = 3600
+
+
 @app.post("/api/run/pipeline")
 @limit_heavy
 def run_pipeline(request: Request, req: RunPipelineRequest):
@@ -1357,6 +1427,49 @@ def run_pipeline(request: Request, req: RunPipelineRequest):
     _validate_qasm_string(qasm, decompose_to_asic=req.decompose_to_asic)
     if _celery_available() and os.environ.get("FORCE_ASYNC_HEAVY", "").strip().lower() in ("1", "true", "yes"):
         raise HTTPException(status_code=400, detail="Use POST /api/run/pipeline/async for circuit/pipeline runs (Celery worker required).")
+    # When engineering stack not in this process (slim API), route through Celery and wait
+    if not _engineering_available():
+        if not _celery_available():
+            raise HTTPException(
+                status_code=503,
+                detail="Celery/Redis required for pipeline execution when running in control-plane-only mode (set CELERY_BROKER_URL).",
+            )
+        from src.backend.tasks import circuit_to_asic_task, run_pipeline_with_circuit_task
+        if req.full_pipeline_with_circuit:
+            task = run_pipeline_with_circuit_task.delay(
+                qasm_string=qasm,
+                circuit_name=req.circuit_name or "circuit",
+                output_base=PIPELINE_BASE,
+                fast=req.fast,
+                routing_method=req.routing_method or "qaoa",
+                model=req.model or "mlp",
+                heac=req.heac,
+                hardware=req.backend.lower() == "hardware",
+                decompose_to_asic=req.decompose_to_asic,
+            )
+            try:
+                result = task.get(timeout=_PIPELINE_SYNC_WAIT_TIMEOUT)
+                if isinstance(result, dict) and result.get("success") is False:
+                    raise HTTPException(status_code=503, detail=result.get("error", "Pipeline task failed."))
+                return result
+            except Exception as e:
+                if isinstance(e, HTTPException):
+                    raise
+                raise HTTPException(status_code=504, detail=_sanitize_detail(e, "Pipeline task timed out or failed."))
+        task = circuit_to_asic_task.delay(
+            qasm_string=qasm,
+            circuit_name=req.circuit_name,
+            decompose_to_asic=req.decompose_to_asic,
+        )
+        try:
+            result = task.get(timeout=_PIPELINE_SYNC_WAIT_TIMEOUT)
+            if isinstance(result, dict) and result.get("success") is False:
+                raise HTTPException(status_code=503, detail=result.get("error", "Circuit-to-ASIC task failed."))
+            return result
+        except Exception as e:
+            if isinstance(e, HTTPException):
+                raise
+            raise HTTPException(status_code=504, detail=_sanitize_detail(e, "Circuit-to-ASIC task timed out or failed."))
     if req.full_pipeline_with_circuit:
         result = _run_pipeline_with_circuit_sync(req)
         return result
@@ -1385,6 +1498,11 @@ def run_inverse_async(request: Request, req: RunInverseRequest):
 @limit_heavy
 def run_inverse(request: Request, req: RunInverseRequest):
     """Run inverse design (topology -> phase profile). Blocking; use /api/run/inverse/async for offload to worker."""
+    if not _engineering_available():
+        raise HTTPException(
+            status_code=503,
+            detail="Inverse design requires the engineering (worker) environment. Use /api/run/inverse/async when running in control-plane-only mode.",
+        )
     if os.environ.get("FORCE_ASYNC_HEAVY", "").strip().lower() in ("1", "true", "yes") and _celery_available():
         raise HTTPException(status_code=400, detail="Use POST /api/run/inverse/async for inverse design (Celery worker required).")
     with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
@@ -1429,6 +1547,11 @@ def run_quantum_illumination(req: QuantumIlluminationRequest):
     """Run DV quantum illumination comparison (entangled vs unentangled probe) for given eta."""
     try:
         ent_fn, unent_fn = _quantum_illumination()
+    except ImportError:
+        raise HTTPException(
+            status_code=503,
+            detail="Quantum illumination requires the engineering (worker) environment. Control-plane-only mode cannot run this feature.",
+        )
     except Exception as e:
         raise HTTPException(status_code=503, detail=_sanitize_detail(e, "Import failed."))
     eta = max(0.0, min(1.0, req.eta))
@@ -1458,6 +1581,11 @@ def run_quantum_radar_api(req: QuantumRadarRequest):
     """Run CV quantum radar (TMSV + lossy thermal BS) single point."""
     try:
         run_fn, _, _ = _quantum_radar()
+    except ImportError:
+        raise HTTPException(
+            status_code=503,
+            detail="Quantum radar requires the engineering (worker) environment. Control-plane-only mode cannot run this feature.",
+        )
     except Exception as e:
         raise HTTPException(status_code=503, detail=_sanitize_detail(e, "Import failed."))
     try:
@@ -1474,6 +1602,11 @@ def run_quantum_radar_sweep(req: QuantumRadarSweepRequest):
         raise HTTPException(status_code=400, detail="param must be eta, n_b, or r")
     try:
         _, sweep_fn, _ = _quantum_radar()
+    except ImportError:
+        raise HTTPException(
+            status_code=503,
+            detail="Quantum radar requires the engineering (worker) environment. Control-plane-only mode cannot run this feature.",
+        )
     except Exception as e:
         raise HTTPException(status_code=503, detail=_sanitize_detail(e, "Import failed."))
     defaults = {"eta": (0.01, 0.5), "n_b": (0.1, 50.0), "r": (0.1, 1.5)}
@@ -1496,6 +1629,11 @@ def run_quantum_radar_optimize(req: QuantumRadarOptimizeRequest):
         raise HTTPException(status_code=400, detail="maximize must be mutual_info or snr")
     try:
         _, _, opt_fn = _quantum_radar()
+    except ImportError:
+        raise HTTPException(
+            status_code=503,
+            detail="Quantum radar requires the engineering (worker) environment. Control-plane-only mode cannot run this feature.",
+        )
     except Exception as e:
         raise HTTPException(status_code=503, detail=_sanitize_detail(e, "Import failed."))
     defaults = {"eta": (0.01, 0.99), "n_b": (0.0, 100.0), "r": (0.05, 2.0)}

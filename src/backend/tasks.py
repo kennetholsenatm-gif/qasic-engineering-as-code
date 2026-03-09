@@ -375,6 +375,77 @@ def run_dag_task(self, run_id: int):
         raise
 
 
+@app.task(bind=True, name="qasic.run_protocol")
+def run_protocol_task(
+    self,
+    protocol: str,
+    backend: str = "sim",
+    use_circuit_function: bool = False,
+    shots: int = 1024,
+):
+    """
+    Run ASIC protocol on sim (blocking) or submit to IBM hardware (returns job_id for polling).
+    Used when API is slim (control-plane-only); worker has full engineering stack.
+    Returns: for hardware -> {mode: "hardware", job_id, ibm_job_id, backend_name};
+             for sim -> {mode: "sim", result: <JSON dict returned to client>}.
+    """
+    use_hardware = (backend or "").lower() == "hardware"
+    if use_hardware:
+        try:
+            from src.core_compute.engineering.run_protocol_on_ibm import (
+                submit_protocol_job,
+                submit_protocol_job_via_circuit_function,
+                get_ibm_job_id,
+            )
+        except ImportError:
+            return {"mode": "hardware", "error": "Protocol submission not available (missing engineering deps)"}
+        try:
+            if use_circuit_function:
+                try:
+                    job_id, job, backend_name = submit_protocol_job_via_circuit_function(
+                        protocol, shots=shots
+                    )
+                except (ImportError, RuntimeError, Exception):
+                    job_id, job, backend_name = submit_protocol_job(protocol, shots=shots)
+            else:
+                job_id, job, backend_name = submit_protocol_job(protocol, shots=shots)
+            ibm_job_id = get_ibm_job_id(job)
+            return {
+                "mode": "hardware",
+                "job_id": job_id,
+                "ibm_job_id": ibm_job_id,
+                "backend_name": backend_name or "",
+            }
+        except Exception as e:
+            return {"mode": "hardware", "error": str(e)}
+    # Sim: run script and return JSON result (same shape as API sync response)
+    out_path = os.path.join(tempfile.gettempdir(), f"qasic_protocol_sim_{os.getpid()}_{id(self)}.json")
+    try:
+        cmd = [
+            sys.executable,
+            str(ENGINEERING_DIR / "run_protocol_on_ibm.py"),
+            "--protocol", protocol,
+            "-o", out_path,
+            "--shots", str(shots),
+        ]
+        code, _out, err = _run_cmd(cmd, cwd=REPO_ROOT, timeout=120)
+        if code != 0:
+            return {"mode": "sim", "error": err or "Protocol sim failed"}
+        if not os.path.isfile(out_path):
+            return {"mode": "sim", "error": "No output file from protocol script"}
+        with open(out_path, encoding="utf-8") as f:
+            data = json.load(f)
+        return {"mode": "sim", "result": data}
+    except Exception as e:
+        return {"mode": "sim", "error": str(e)}
+    finally:
+        if os.path.isfile(out_path):
+            try:
+                os.unlink(out_path)
+            except OSError:
+                pass
+
+
 @app.task(bind=True, name="qasic.run_dag_node")
 def run_dag_node_task(self, a, b, c=None):
     """

@@ -34,7 +34,7 @@ services:
   celery-worker:
     build:
       context: .
-      dockerfile: Dockerfile.api
+      dockerfile: Dockerfile.worker
     command: celery -A src.backend.celery_app worker -l info
     volumes:
       # Mount local repo so worker uses your code (no rebuild for code changes)
