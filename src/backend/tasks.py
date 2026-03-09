@@ -177,16 +177,17 @@ def circuit_to_asic_task(self, qasm_string: str, circuit_name: str | None = None
         return {"success": False, "error": str(e)}
 
 
+# QAOA/NumPy eigensolver hit "too many qubits to convert to a matrix" above ~6–8 circuit qubits (QUBO has n² vars).
+# Use RL-style routing (swap-based local search) for larger circuits to avoid OOM and matrix limits.
+QAOA_ROUTING_MAX_QUBITS = 6
+
+
 def _routing_from_circuit_graph(graph, fast: bool = False, hardware: bool = False) -> dict:
-    """Run routing QUBO in-process using circuit-derived interaction graph. Returns routing result dict (mapping, solver, etc.)."""
+    """Run routing in-process using circuit-derived interaction graph. For small n uses QAOA; for large n uses RL-style local search to avoid matrix/statevector limits."""
     import numpy as np
-    from src.core_compute.asic.topology_builder import edges_to_interaction_matrix
-    from src.core_compute.engineering.routing_qubo_qaoa import (
-        build_routing_qubo,
-        solve_routing,
-        interpret_routing,
-    )
     from datetime import datetime, timezone
+    from src.core_compute.asic.topology_builder import edges_to_interaction_matrix
+
     nodes = sorted(graph.nodes())
     n = len(nodes)
     if n == 0:
@@ -194,6 +195,33 @@ def _routing_from_circuit_graph(graph, fast: bool = False, hardware: bool = Fals
     node_to_idx = {q: i for i, q in enumerate(nodes)}
     edges = [(node_to_idx[u], node_to_idx[v]) for u, v in graph.edges()]
     interaction_matrix = edges_to_interaction_matrix(edges, n)
+
+    if n > QAOA_ROUTING_MAX_QUBITS:
+        # RL-style routing: scalable, no Qiskit matrix/statevector
+        from src.core_compute.engineering.routing_rl import improve_routing
+        steps = 200 if fast else 500
+        mapping, cost = improve_routing(
+            n, n, interaction_matrix,
+            steps=steps,
+            seed=42,
+        )
+        return {
+            "num_logical_qubits": n,
+            "num_physical_nodes": n,
+            "topology": "custom",
+            "solver": "routing_rl",
+            "objective_value": float(cost),
+            "backend": None,
+            "mapping": [{"logical": a, "physical": b} for a, b in mapping],
+            "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        }
+
+    # QAOA path for small circuits
+    from src.core_compute.engineering.routing_qubo_qaoa import (
+        build_routing_qubo,
+        solve_routing,
+        interpret_routing,
+    )
     qp = build_routing_qubo(num_logical_qubits=n, num_physical_nodes=n, interaction_matrix=interaction_matrix)
     maxiter = 20 if fast else 100
     reps = 1 if fast else 2

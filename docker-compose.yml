@@ -9,6 +9,9 @@ services:
       dockerfile: Dockerfile.api
     ports:
       - "8000:8000"
+    volumes:
+      # Mount local repo so container uses your code (no rebuild for code changes)
+      - .:/app
     environment:
       - IBM_QUANTUM_TOKEN=${IBM_QUANTUM_TOKEN:-}
       - CELERY_BROKER_URL=redis://redis:6379/0
@@ -33,6 +36,9 @@ services:
       context: .
       dockerfile: Dockerfile.api
     command: celery -A src.backend.celery_app worker -l info
+    volumes:
+      # Mount local repo so worker uses your code (no rebuild for code changes)
+      - .:/app
     environment:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
