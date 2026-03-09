@@ -1,0 +1,38 @@
+# syntax=docker/dockerfile:1
+# QASIC Engineering-as-Code: Data plane (Celery worker with full engineering stack).
+# Same layout as API image but installs .[app,engineering] so workers can run
+# pipeline, routing, inverse design, HEaC, protocol-on-IBM, etc.
+FROM python:3.11-slim
+
+# System deps for torch/scipy (OpenMP and optional native builds)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Dependency and package metadata first (maximize layer cache: only reinstall when these change)
+COPY pyproject.toml README.md MANIFEST.in ./
+
+# Package directories required by setuptools (pyproject.toml [tool.setuptools.packages.find])
+COPY src/ src/
+COPY config/ config/
+COPY storage/ storage/
+COPY dashboard/ dashboard/
+COPY apps/ apps/
+
+# Use BuildKit cache mount so pip reuses downloaded wheels across builds (no full re-download on every code change).
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install .[app,engineering]
+
+# Writable dirs for pipeline/circuit output (Celery tasks write here)
+RUN mkdir -p /app/src/core_compute/engineering/circuit_runs
+
+# Run as unprivileged user (DevSecOps: no root in container)
+RUN adduser --disabled-password --gecos "" appuser && chown -R appuser:appuser /app
+USER appuser
+
+ENV PYTHONPATH=/app
+
+# Default CMD; override in docker-compose to run Celery worker
+CMD ["celery", "-A", "src.backend.celery_app", "worker", "-l", "info"]

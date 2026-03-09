@@ -1,0 +1,167 @@
+{
+  "nodes": [
+    {
+      "gamma1": 157079632679.48965,
+      "gamma2": 157079632679.48965,
+      "L_kinetic_nH": 0.0
+    },
+    {
+      "gamma1": 157079632679.48965,
+      "gamma2": 157079632679.48965,
+      "L_kinetic_nH": 1e-06
+    },
+    {
+      "gamma1": 157079632679.48965,
+      "gamma2": 157079632679.48965,
+      "L_kinetic_nH": 1e-06
+    },
+    {
+      "gamma1": 157079632679.48965,
+      "gamma2": 157079632679.48965,
+      "L_kinetic_nH": 1e-06
+    },
+    {
+      "gamma1": 157079632679.48965,
+      "gamma2": 157079632679.48965,
+      "L_kinetic_nH": 1e-06
+    },
+    {
+      "gamma1": 157079632679.48965,
+      "gamma2": 157079632679.48965,
+      "L_kinetic_nH": 1e-06
+    },
+    {
+      "gamma1": 157079632679.48965,
+      "gamma2": 157079632679.48965,
+      "L_kinetic_nH": 1e-06
+    },
+    {
+      "gamma1": 157079632679.48965,
+      "gamma2": 157079632679.48965,
+      "L_kinetic_nH": 1e-06
+    },
+    {
+      "gamma1": 157079632679.48965,
+      "gamma2": 157079632679.48965,
+      "L_kinetic_nH": 1e-06
+    },
+    {
+      "gamma1": 157079632679.48965,
+      "gamma2": 157079632679.48965,
+      "L_kinetic_nH": 1e-06
+    },
+    {
+      "gamma1": 157079632679.48965,
+      "gamma2": 157079632679.48965,
+      "L_kinetic_nH": 1e-06
+    },
+    {
+      "gamma1": 157079632679.48965,
+      "gamma2": 157079632679.48965,
+      "L_kinetic_nH": 1e-06
+    },
+    {
+      "gamma1": 157079632679.48965,
+      "gamma2": 157079632679.48965,
+      "L_kinetic_nH": 1e-06
+    },
+    {
+      "gamma1": 157079632679.48965,
+      "gamma2": 157079632679.48965,
+      "L_kinetic_nH": 1e-06
+    },
+    {
+      "gamma1": 157079632679.48965,
+      "gamma2": 157079632679.48965,
+      "L_kinetic_nH": 1e-06
+    },
+    {
+      "gamma1": 157079632679.48965,
+      "gamma2": 157079632679.48965,
+      "L_kinetic_nH": 0.0
+    }
+  ],
+  "num_physical_nodes": null,
+  "edges": [
+    {
+      "i": 0,
+      "j": 1,
+      "L_kinetic_nH": 1e-06
+    },
+    {
+      "i": 1,
+      "j": 2,
+      "L_kinetic_nH": 1e-06
+    },
+    {
+      "i": 2,
+      "j": 3,
+      "L_kinetic_nH": 1e-06
+    },
+    {
+      "i": 3,
+      "j": 4,
+      "L_kinetic_nH": 1e-06
+    },
+    {
+      "i": 4,
+      "j": 5,
+      "L_kinetic_nH": 1e-06
+    },
+    {
+      "i": 5,
+      "j": 6,
+      "L_kinetic_nH": 1e-06
+    },
+    {
+      "i": 6,
+      "j": 7,
+      "L_kinetic_nH": 1e-06
+    },
+    {
+      "i": 7,
+      "j": 8,
+      "L_kinetic_nH": 1e-06
+    },
+    {
+      "i": 8,
+      "j": 9,
+      "L_kinetic_nH": 1e-06
+    },
+    {
+      "i": 9,
+      "j": 10,
+      "L_kinetic_nH": 1e-06
+    },
+    {
+      "i": 10,
+      "j": 11,
+      "L_kinetic_nH": 1e-06
+    },
+    {
+      "i": 11,
+      "j": 12,
+      "L_kinetic_nH": 1e-06
+    },
+    {
+      "i": 12,
+      "j": 13,
+      "L_kinetic_nH": 1e-06
+    },
+    {
+      "i": 13,
+      "j": 14,
+      "L_kinetic_nH": 1e-06
+    },
+    {
+      "i": 14,
+      "j": 15,
+      "L_kinetic_nH": 1e-06
+    }
+  ],
+  "jj": [],
+  "source": "superconducting_extraction",
+  "manifest_ref": "/app/src/core_compute/engineering/circuit_runs/5b12b9e2-a3d3-41a2-91ef-0562e04c6176/circuit_geometry_manifest.json",
+  "L_per_um_nH": 1e-06,
+  "Ic_ua": 1.0
+}
