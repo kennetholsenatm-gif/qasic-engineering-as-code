@@ -9,6 +9,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -18,6 +19,19 @@ if str(REPO_ROOT) not in sys.path:
 ENGINEERING_DIR = REPO_ROOT / "src" / "core_compute" / "engineering"
 
 TASK_LOG_CHANNEL_PREFIX = "qasic:task:"
+
+
+def _writable_output_dir(task_id: str | None, subdir: str = "circuit_runs") -> str:
+    """Return a writable directory for circuit/pipeline output. Prefer ENGINEERING_DIR/subdir/task_id; on PermissionError use /tmp."""
+    preferred = ENGINEERING_DIR / subdir / (task_id or "sync")
+    try:
+        os.makedirs(preferred, exist_ok=True)
+        return str(preferred)
+    except PermissionError:
+        base = Path(tempfile.gettempdir()) / "qasic_circuit_runs"
+        fallback = base / (task_id or "sync")
+        os.makedirs(fallback, exist_ok=True)
+        return str(fallback)
 
 
 def _run_cmd(cmd: list[str], cwd: Path | None = None, timeout: int = 3600) -> tuple[int, str, str]:
@@ -148,8 +162,7 @@ def circuit_to_asic_task(self, qasm_string: str, circuit_name: str | None = None
     except ImportError:
         _publish_progress(task_id, "Import error: qasm_to_asic not available", step="circuit_to_asic", done=True)
         return {"success": False, "error": "qasm_to_asic pipeline not available"}
-    output_dir = output_subdir or str(ENGINEERING_DIR / "circuit_runs" / (task_id or "sync"))
-    os.makedirs(output_dir, exist_ok=True)
+    output_dir = output_subdir or _writable_output_dir(task_id)
     try:
         raw = run_qasm_to_asic(
             qasm_string=qasm_string,
@@ -232,8 +245,7 @@ def run_pipeline_with_circuit_task(
     except ImportError:
         _publish_progress(task_id, "qasm_to_asic not available", step="pipeline", done=True)
         return {"success": False, "error": "qasm_to_asic pipeline not available"}
-    output_dir = str(ENGINEERING_DIR / "circuit_runs" / (task_id or "sync"))
-    os.makedirs(output_dir, exist_ok=True)
+    output_dir = _writable_output_dir(task_id)
     try:
         raw = run_qasm_to_asic(
             qasm_string=qasm_string,

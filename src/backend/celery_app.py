@@ -40,3 +40,7 @@ def get_celery_app():
             },
         )
     return _celery_app
+
+
+# Expose for CLI: celery -A src.backend.celery_app worker
+app = get_celery_app()

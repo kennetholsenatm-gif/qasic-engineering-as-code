@@ -21,6 +21,9 @@ COPY apps/ apps/
 # Install project with API and engineering extras (fastapi, celery, qiskit, torch, scipy)
 RUN pip install --no-cache-dir .[app,engineering]
 
+# Writable dirs for pipeline/circuit output (Celery tasks write here)
+RUN mkdir -p /app/src/core_compute/engineering/circuit_runs
+
 # Run as unprivileged user (DevSecOps: no root in container)
 RUN adduser --disabled-password --gecos "" appuser && chown -R appuser:appuser /app
 USER appuser
