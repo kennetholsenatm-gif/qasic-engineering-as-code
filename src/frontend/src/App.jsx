@@ -19,6 +19,9 @@ import Docs from './pages/Docs'
 import PhaseViewer3D from './pages/PhaseViewer3D'
 import Applications from './pages/Applications'
 import Projects from './pages/Projects'
+import ProjectWorkspace from './pages/ProjectWorkspace'
+import AssetLibrary from './pages/AssetLibrary'
+import Compute from './pages/Compute'
 import ConfigForm from './pages/ConfigForm'
 import Workflows from './pages/Workflows'
 import Deploy from './pages/Deploy'
@@ -38,6 +41,9 @@ export default function App() {
         <Route path="/" element={<Layout />}>
           <Route index element={<Home apiBase={API_BASE} />} />
           <Route path="projects" element={<Projects apiBase={API_BASE} />} />
+          <Route path="projects/:projectId/workspace" element={<ProjectWorkspace apiBase={API_BASE} />} />
+          <Route path="asset-library" element={<AssetLibrary />} />
+          <Route path="compute" element={<Compute />} />
           <Route path="run/protocol" element={<RunProtocol apiBase={API_BASE} />} />
           <Route path="run/routing" element={<RunRouting apiBase={API_BASE} />} />
           <Route path="run/quantum-illumination" element={<RunQuantumIllumination apiBase={API_BASE} />} />

@@ -334,6 +334,108 @@ def list_project_runs_api(project_id: int, limit: int = 50):
         raise HTTPException(status_code=500, detail=_sanitize_detail(e, "Failed to list runs."))
 
 
+@app.get("/api/projects/{project_id}/runs/{run_id}/artifacts")
+def list_run_artifacts_api(project_id: int, run_id: int):
+    """List artifact descriptors for a pipeline run (download URLs and types)."""
+    try:
+        from storage.db import get_pipeline_run, get_project, is_enabled
+        if not is_enabled():
+            return {"artifacts": []}
+        proj = get_project(project_id)
+        if not proj:
+            raise HTTPException(status_code=404, detail="Project not found.")
+        run = get_pipeline_run(run_id)
+        if not run or run.get("project_id") != project_id:
+            raise HTTPException(status_code=404, detail="Run not found.")
+        artifacts = []
+        if run.get("routing_path") and os.path.isfile(run["routing_path"]):
+            artifacts.append({"name": "routing_result.json", "type": "application/json", "url": f"/api/runs/{run_id}/artifacts/routing_result.json"})
+        if run.get("inverse_path") and os.path.isfile(run["inverse_path"]):
+            artifacts.append({"name": "inverse_result.json", "type": "application/json", "url": f"/api/runs/{run_id}/artifacts/inverse_result.json"})
+        if run.get("gds_path") and os.path.isfile(run["gds_path"]):
+            artifacts.append({"name": "output.gds", "type": "application/octet-stream", "url": f"/api/runs/{run_id}/artifacts/gds"})
+        return {"artifacts": artifacts}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=_sanitize_detail(e, "Failed to list artifacts."))
+
+
+@app.get("/api/runs/{run_id}/artifacts/{artifact_name:path}")
+def download_run_artifact_api(run_id: int, artifact_name: str):
+    """Download an artifact file for a pipeline run (routing_result.json, inverse_result.json, gds)."""
+    try:
+        from storage.db import get_pipeline_run, is_enabled
+        if not is_enabled():
+            raise HTTPException(status_code=503, detail="Database not configured.")
+        run = get_pipeline_run(run_id)
+        if not run:
+            raise HTTPException(status_code=404, detail="Run not found.")
+        name = artifact_name.strip().lower().rstrip("/")
+        path = None
+        filename = None
+        if name in ("routing_result.json", "routing"):
+            path = run.get("routing_path")
+            filename = "routing_result.json"
+        elif name in ("inverse_result.json", "inverse"):
+            path = run.get("inverse_path")
+            filename = "inverse_result.json"
+        elif name in ("gds", "output.gds"):
+            path = run.get("gds_path")
+            filename = "output.gds"
+        if not path or not os.path.isfile(path):
+            raise HTTPException(status_code=404, detail="Artifact not found.")
+        return FileResponse(path, filename=filename or os.path.basename(path))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=_sanitize_detail(e, "Failed to download artifact."))
+
+
+@app.get("/api/runs/compare")
+def compare_runs_api(run_id_a: int, run_id_b: int):
+    """Return config and key metrics for two pipeline runs (for side-by-side comparison)."""
+    try:
+        from storage.db import get_pipeline_run, is_enabled
+        if not is_enabled():
+            raise HTTPException(status_code=503, detail="Database not configured.")
+        run_a = get_pipeline_run(run_id_a)
+        run_b = get_pipeline_run(run_id_b)
+        if not run_a:
+            raise HTTPException(status_code=404, detail=f"Run {run_id_a} not found.")
+        if not run_b:
+            raise HTTPException(status_code=404, detail=f"Run {run_id_b} not found.")
+        def _summary(run):
+            out = {"id": run["id"], "status": run.get("status"), "started_at": run.get("started_at"), "finished_at": run.get("finished_at"), "config": run.get("config")}
+            routing, inverse = None, None
+            if run.get("routing_path") and os.path.isfile(run["routing_path"]):
+                try:
+                    with open(run["routing_path"], encoding="utf-8") as f:
+                        routing = json.load(f)
+                except Exception:
+                    pass
+            if run.get("inverse_path") and os.path.isfile(run["inverse_path"]):
+                try:
+                    with open(run["inverse_path"], encoding="utf-8") as f:
+                        inverse = json.load(f)
+                except Exception:
+                    pass
+            if routing and isinstance(routing, dict):
+                out["routing_cost"] = routing.get("cost") or routing.get("energy")
+                out["topology"] = routing.get("topology") or routing.get("topology_name")
+            if inverse and isinstance(inverse, dict):
+                out["phase_min"] = inverse.get("phase_min")
+                out["phase_max"] = inverse.get("phase_max")
+                out["phase_mean"] = inverse.get("phase_mean")
+                out["num_meta_atoms"] = inverse.get("num_meta_atoms")
+            return out
+        return {"run_a": _summary(run_a), "run_b": _summary(run_b)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=_sanitize_detail(e, "Failed to compare runs."))
+
+
 # --- DAG orchestrator (task types, CRUD, validate) ---
 
 class DAGCreateRequest(BaseModel):
@@ -359,6 +461,7 @@ class RunDagRequest(BaseModel):
     circuit_name: str | None = None
     run_mode: Literal["dag", "circuit_pipeline"] = "dag"
     decompose_to_asic: bool = False
+    project_id: int | None = None
 
 
 # --- Settings: credentials vault (no raw secrets in response) ---

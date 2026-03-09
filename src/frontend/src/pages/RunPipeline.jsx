@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Loader2, Terminal, CheckCircle, AlertCircle, Square, Trash2, FileUp, Download, ExternalLink } from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
 import Editor from '@monaco-editor/react'
 import PipelineDag from '../components/PipelineDag'
 import CircuitTopologyDag from '../components/CircuitTopologyDag'
+import { useWorkspaceCanvas } from '../contexts/WorkspaceCanvasContext'
 
 const POLL_INTERVAL_MS = 2000
 
@@ -33,13 +34,16 @@ function fetchCapabilities(apiBase) {
   })
 }
 
-export default function RunPipeline({ apiBase }) {
+export default function RunPipeline({ apiBase, initialProjectId }) {
+  const [searchParams] = useSearchParams()
+  const urlProjectId = searchParams.get('project_id')
+  const resolvedInitial = initialProjectId ?? (urlProjectId ? Number(urlProjectId) : null)
   const [backend, setBackend] = useState('sim')
   const [fast, setFast] = useState(false)
   const [result, setResult] = useState(null)
   const [error, setError] = useState(null)
   const [taskId, setTaskId] = useState(null)
-  const [projectId, setProjectId] = useState(null)
+  const [projectId, setProjectId] = useState(resolvedInitial ?? null)
   const [logLines, setLogLines] = useState([])
   const logEndRef = useRef(null)
   const eventSourceRef = useRef(null)
@@ -61,6 +65,17 @@ export default function RunPipeline({ apiBase }) {
   const monacoRef = useRef(null)
   const validationTimeoutRef = useRef(null)
   const hasSuggestedCircuitDrivenRef = useRef(false)
+
+  useEffect(() => {
+    if (resolvedInitial != null) setProjectId(resolvedInitial)
+  }, [resolvedInitial])
+
+  const workspaceCanvas = useWorkspaceCanvas()
+
+  useEffect(() => {
+    if (!workspaceCanvas) return
+    workspaceCanvas.setQasm(qasmString, validationResult?.valid === true)
+  }, [workspaceCanvas, qasmString, validationResult?.valid])
 
   const { data: capabilitiesData } = useQuery({
     queryKey: ['capabilities', apiBase],
@@ -101,6 +116,8 @@ export default function RunPipeline({ apiBase }) {
       if (data.taskId) {
         setTaskId(data.taskId)
         setLogLines([])
+        workspaceCanvas?.setTaskId?.(data.taskId)
+        workspaceCanvas?.clearLog?.()
       }
       if (data.result) setResult(data.result)
     },
@@ -129,12 +146,14 @@ export default function RunPipeline({ apiBase }) {
         setResult(taskData.result)
       }
       setTaskId(null)
+      workspaceCanvas?.setTaskId?.(null)
     }
     if (taskData.status === 'FAILURE') {
       setError(taskData.error || 'Pipeline failed')
       setTaskId(null)
+      workspaceCanvas?.setTaskId?.(null)
     }
-  }, [taskId, taskData])
+  }, [taskId, taskData, workspaceCanvas])
 
   useEffect(() => {
     if (!taskId || !apiBase) return
@@ -147,6 +166,7 @@ export default function RunPipeline({ apiBase }) {
         const payload = JSON.parse(ev.data)
         const msg = payload.message || ev.data
         setLogLines((prev) => [...prev, msg])
+        workspaceCanvas?.appendLog?.(typeof msg === 'string' ? msg : ev.data)
         const step = payload.step
         const done = !!payload.done
         if (step) {
@@ -167,6 +187,7 @@ export default function RunPipeline({ apiBase }) {
         if (done) es.close()
       } catch {
         setLogLines((prev) => [...prev, ev.data])
+        workspaceCanvas?.appendLog?.(ev.data)
       }
     }
     es.onerror = () => es.close()
@@ -174,7 +195,7 @@ export default function RunPipeline({ apiBase }) {
       es.close()
       eventSourceRef.current = null
     }
-  }, [taskId, apiBase])
+  }, [taskId, apiBase, workspaceCanvas])
 
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -294,9 +315,11 @@ export default function RunPipeline({ apiBase }) {
 
   function handleSubmit(e) {
     e.preventDefault()
+    workspaceCanvas?.setDirty(false)
     setResult(null)
     setError(null)
     setTaskId(null)
+    workspaceCanvas?.setTaskId?.(null)
     setRunMode(null)
     const base = { backend, fast, project_id: projectId || undefined, heac, routing_method: routingMethod, decompose_to_asic: decomposeToAsic }
     const body = qasmString.trim()
@@ -318,6 +341,7 @@ export default function RunPipeline({ apiBase }) {
       if (typeof reader.result === 'string') {
         setQasmString(reader.result)
         setLoadedFileName(file.name)
+        workspaceCanvas?.setDirty(true)
       }
     }
     reader.readAsText(file)
@@ -333,6 +357,7 @@ export default function RunPipeline({ apiBase }) {
     },
     onSuccess: () => {
       setTaskId(null)
+      workspaceCanvas?.setTaskId?.(null)
       setNodeStatuses({})
     },
   })
@@ -442,7 +467,10 @@ export default function RunPipeline({ apiBase }) {
               height="200px"
               defaultLanguage="openqasm"
               value={qasmString}
-              onChange={(v) => setQasmString(v ?? '')}
+              onChange={(v) => {
+                setQasmString(v ?? '')
+                workspaceCanvas?.setDirty(true)
+              }}
               onMount={onEditorMount}
               theme="vs-dark"
               options={{
@@ -515,7 +543,7 @@ export default function RunPipeline({ apiBase }) {
                 type="checkbox"
                 id="decompose-to-asic"
                 checked={decomposeToAsic}
-                onChange={(e) => setDecomposeToAsic(e.target.checked)}
+                onChange={(e) => { setDecomposeToAsic(e.target.checked); workspaceCanvas?.setDirty(true) }}
                 className="h-4 w-4 rounded border-slate-600 bg-slate-800 text-sky-500 focus:ring-sky-500"
               />
               <label htmlFor="decompose-to-asic" className="text-sm text-slate-300">
@@ -555,7 +583,7 @@ export default function RunPipeline({ apiBase }) {
                   type="checkbox"
                   id="heac"
                   checked={heac}
-                  onChange={(e) => setHeac(e.target.checked)}
+                  onChange={(e) => { setHeac(e.target.checked); workspaceCanvas?.setDirty(true) }}
                   className="h-4 w-4 rounded border-slate-600 bg-slate-800 text-sky-500 focus:ring-sky-500"
                 />
                 <label htmlFor="heac" className="text-sm text-slate-200">
@@ -567,7 +595,7 @@ export default function RunPipeline({ apiBase }) {
                 <select
                   id="routing-method"
                   value={routingMethod}
-                  onChange={(e) => setRoutingMethod(e.target.value)}
+                  onChange={(e) => { setRoutingMethod(e.target.value); workspaceCanvas?.setDirty(true) }}
                   className="rounded-lg border border-slate-600 bg-slate-800 px-3 py-1.5 text-sm text-slate-100 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
                 >
                   <option value="qaoa">QAOA</option>
@@ -605,7 +633,7 @@ export default function RunPipeline({ apiBase }) {
           <select
             id="backend"
             value={backend}
-            onChange={(e) => setBackend(e.target.value)}
+            onChange={(e) => { setBackend(e.target.value); workspaceCanvas?.setDirty(true) }}
             className="w-full max-w-xs rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-slate-100 shadow-sm focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500 disabled:opacity-60"
           >
             <option value="sim">Simulation</option>
@@ -617,7 +645,7 @@ export default function RunPipeline({ apiBase }) {
             type="checkbox"
             id="fast"
             checked={fast}
-            onChange={(e) => setFast(e.target.checked)}
+            onChange={(e) => { setFast(e.target.checked); workspaceCanvas?.setDirty(true) }}
             className="h-4 w-4 rounded border-slate-600 bg-slate-800 text-sky-500 focus:ring-sky-500"
           />
           <label htmlFor="fast" className="text-sm text-slate-300">

@@ -93,17 +93,65 @@ export default function Home({ apiBase = '' }) {
     <>
       <h1 className="text-2xl font-semibold text-slate-100">QASIC Engineering-as-Code</h1>
       <p className="mt-1 text-slate-400">
-        Run protocols, routing, pipeline, and inverse design from the cards below.
+        Open a project to run pipelines, view executions, and manage artifacts.
       </p>
       <div className="mt-4 rounded-xl border border-sky-500/40 bg-sky-950/30 px-4 py-3 text-sm text-slate-200">
         <strong>Converting OpenQASM to a Quantum ASIC?</strong> Paste your circuit on{' '}
         <Link to="/run/pipeline" className="text-sky-400 font-medium hover:underline">Run full pipeline</Link>
-        {' '}and click Run.
+        {' '}or open a project and use the Canvas tab.
       </div>
-      <section className="mt-8">
+
+      {/* Primary CTA: Projects */}
+      {apiBase && (
+        <section className="mt-8">
+          <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-500">
+            Your projects
+          </h2>
+          {isLoading ? (
+            <div className="flex items-center gap-2 text-slate-500">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span className="text-sm">Loading…</span>
+            </div>
+          ) : projects.length === 0 ? (
+            <p className="text-sm text-slate-500">
+              No projects yet.{' '}
+              <Link to="/projects" className="text-sky-400 hover:underline">Create one</Link> to get started.
+            </p>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {projects.map((p) => (
+                <Link
+                  key={p.id}
+                  to={`/projects/${p.id}/workspace`}
+                  className="flex items-center gap-3 rounded-xl border border-slate-700 bg-slate-800/60 px-4 py-3 text-left transition-colors hover:border-sky-500/40 hover:bg-slate-700/40"
+                >
+                  <FolderOpen className="h-5 w-5 shrink-0 text-sky-400" />
+                  <div className="min-w-0 flex-1">
+                    <span className="font-medium text-slate-100">{p.name}</span>
+                    {p.updated_at && (
+                      <p className="text-xs text-slate-500 mt-0.5">Updated {formatDate(p.updated_at)}</p>
+                    )}
+                  </div>
+                  <span className="text-xs text-slate-500 shrink-0">Open →</span>
+                </Link>
+              ))}
+            </div>
+          )}
+          <p className="mt-3">
+            <Link to="/projects" className="text-sm text-sky-400 hover:underline">
+              {projects.length > 0 ? 'View all / create project' : 'Go to Projects'}
+            </Link>
+          </p>
+        </section>
+      )}
+
+      <section className="mt-10">
         <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-500">
-          Actions
+          Quick run
         </h2>
+        <p className="mb-3 text-sm text-slate-500">
+          Run without opening a project, or use the Run section in the sidebar.
+        </p>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {actions.map(({ to, title, description, icon: Icon }) => (
             <Link
@@ -120,49 +168,6 @@ export default function Home({ apiBase = '' }) {
           ))}
         </div>
       </section>
-
-      {apiBase && (
-        <section className="mt-10">
-          <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-500">
-            Recent projects
-          </h2>
-          {isLoading ? (
-            <div className="flex items-center gap-2 text-slate-500">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              <span className="text-sm">Loading…</span>
-            </div>
-          ) : recentProjects.length === 0 ? (
-            <p className="text-sm text-slate-500">
-              No projects yet.{' '}
-              <Link to="/projects" className="text-sky-400 hover:underline">Create one</Link> to scope pipeline runs.
-            </p>
-          ) : (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {recentProjects.map((p) => (
-                <Link
-                  key={p.id}
-                  to={`/results?project_id=${p.id}`}
-                  className="flex items-center gap-3 rounded-xl border border-slate-700 bg-slate-800/60 px-4 py-3 text-left transition-colors hover:border-sky-500/40 hover:bg-slate-700/40"
-                >
-                  <FolderOpen className="h-5 w-5 shrink-0 text-sky-400" />
-                  <div className="min-w-0 flex-1">
-                    <span className="font-medium text-slate-100">{p.name}</span>
-                    {p.updated_at && (
-                      <p className="text-xs text-slate-500 mt-0.5">Updated {formatDate(p.updated_at)}</p>
-                    )}
-                  </div>
-                  <span className="text-xs text-slate-500 shrink-0">View →</span>
-                </Link>
-              ))}
-            </div>
-          )}
-          {projects.length > 3 && (
-            <p className="mt-3">
-              <Link to="/projects" className="text-sm text-sky-400 hover:underline">View all projects</Link>
-            </p>
-          )}
-        </section>
-      )}
     </>
   )
 }

@@ -14,7 +14,8 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import TaskNode from '../components/TaskNode'
-import { Save, Play, CheckCircle, Loader2, GitBranch, Key, FileCode } from 'lucide-react'
+import ConfigDrawer from '../components/ConfigDrawer'
+import { Save, Play, CheckCircle, Loader2, GitBranch, Key, FileCode, LayoutTemplate } from 'lucide-react'
 
 const nodeTypes = { taskNode: TaskNode }
 
@@ -194,14 +195,12 @@ function WorkflowsInner({ apiBase }) {
   const onNodeClick = useCallback((_ev, node) => setSelectedNodeId(node.id), [])
   const onPaneClick = useCallback(() => setSelectedNodeId(null), [])
 
-  const setSelectedNodeBackend = useCallback(
-    (backend) => {
+  const setSelectedNodeConfig = useCallback(
+    (config) => {
       if (!selectedNodeId) return
       setNodes((nds) =>
         nds.map((n) =>
-          n.id === selectedNodeId
-            ? { ...n, data: { ...n.data, config: { ...(n.data?.config || {}), backend } } }
-            : n
+          n.id === selectedNodeId ? { ...n, data: { ...n.data, config } } : n
         )
       )
     },
@@ -252,10 +251,11 @@ function WorkflowsInner({ apiBase }) {
   const runMutation = useMutation({
     mutationFn: async () => {
       if (!dagId) throw new Error('Save the workflow first.')
-      const body =
+      const baseBody =
         runMode === 'circuit_pipeline' && qasmString.trim()
           ? { qasm_string: qasmString.trim(), circuit_name: circuitName.trim() || 'circuit', run_mode: 'circuit_pipeline' }
           : { run_mode: 'dag' }
+      const body = { ...baseBody, project_id: projectId ?? undefined }
       const res = await fetch(`${apiBase}/api/dag/${dagId}/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -343,6 +343,43 @@ function WorkflowsInner({ apiBase }) {
     if (selectedDag.name) setDagName(selectedDag.name)
   }, [dagId, selectedDag, taskTypes])
 
+  const fixedPipelineTaskIds = ['routing', 'inverse_design', 'heac_phases_to_geometry', 'manifest_to_gds']
+  const loadFixedPipelineTemplate = useCallback(() => {
+    const templateTypes = fixedPipelineTaskIds
+      .map((id) => taskTypes.find((t) => t.id === id))
+      .filter(Boolean)
+    if (templateTypes.length === 0) return
+    const step = 220
+    const newNodes = templateTypes.map((tt, i) => {
+      const nodeId = `node_fixed_${tt.id}_${Date.now()}_${i}`
+      return {
+        id: nodeId,
+        type: 'taskNode',
+        data: {
+          label: tt.label,
+          task_type: tt.id,
+          config: { ...(tt.default_config || {}), backend: tt.default_config?.backend || 'local' },
+          compute_resource: tt.compute_resource,
+        },
+        position: { x: i * step, y: 80 },
+      }
+    })
+    const newEdges = []
+    for (let i = 0; i < newNodes.length - 1; i++) {
+      newEdges.push({
+        id: `e_${newNodes[i].id}_${newNodes[i + 1].id}`,
+        source: newNodes[i].id,
+        target: newNodes[i + 1].id,
+        type: 'smoothstep',
+        markerEnd: { type: MarkerType.ArrowClosed },
+      })
+    }
+    setNodes(newNodes)
+    setEdges(newEdges)
+    setDagName('Fixed metasurface pipeline')
+    setSelectedNodeId(null)
+  }, [taskTypes, setNodes, setEdges])
+
   return (
     <div className="flex h-[calc(100vh-8rem)] gap-4">
       <aside className="w-56 shrink-0 rounded-xl border border-slate-700 bg-slate-800/80 p-3 overflow-y-auto">
@@ -369,6 +406,18 @@ function WorkflowsInner({ apiBase }) {
             </li>
           ))}
         </ul>
+        <div className="mt-4 pt-3 border-t border-slate-700">
+          <button
+            type="button"
+            onClick={loadFixedPipelineTemplate}
+            disabled={taskTypes.length === 0}
+            className="w-full inline-flex items-center gap-1.5 rounded-lg border border-sky-600/60 bg-sky-500/10 px-2 py-2 text-sm text-sky-300 hover:bg-sky-500/20 disabled:opacity-50"
+          >
+            <LayoutTemplate className="h-4 w-4" />
+            Load fixed pipeline
+          </button>
+          <p className="text-xs text-slate-500 mt-1">Routing → Inverse → HEaC → GDS</p>
+        </div>
         <div className="mt-4">
           <label className="block text-xs text-slate-500 mb-1">Load DAG</label>
           <select
@@ -468,24 +517,7 @@ function WorkflowsInner({ apiBase }) {
           </details>
         )}
 
-        {selectedNode && (
-          <div className="mb-2 rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 flex items-center gap-4">
-            <span className="text-sm text-slate-400">Node: {selectedNode.data?.label}</span>
-            <label className="text-sm text-slate-400 flex items-center gap-2">
-              Backend
-              <select
-                value={selectedNode.data?.config?.backend || 'local'}
-                onChange={(e) => setSelectedNodeBackend(e.target.value)}
-                className="rounded border border-slate-600 bg-slate-700 text-slate-200 text-sm px-2 py-1"
-              >
-                {supportedBackends.map((b) => (
-                  <option key={b} value={b}>{b === 'aws_eks' ? 'EKS (cloud)' : b === 'ibm_qpu' ? 'IBM QPU' : 'Local'}</option>
-                ))}
-              </select>
-            </label>
-          </div>
-        )}
-
+        <div className="flex flex-1 min-h-0 gap-0">
         <div className="flex-1 rounded-xl border border-slate-700 bg-slate-900 min-h-[400px] relative">
           {nodes.length === 0 && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
@@ -517,6 +549,18 @@ function WorkflowsInner({ apiBase }) {
             <Controls className="!bg-slate-800 !border-slate-600 !rounded-lg" />
             <MiniMap nodeColor="#0f172a" maskColor="rgba(15,23,42,0.8)" className="!bg-slate-800 !rounded-lg" />
           </ReactFlow>
+        </div>
+        {selectedNode && (
+          <div className="w-72 shrink-0 flex flex-col rounded-r-xl border border-slate-700 border-l-0 bg-slate-800/95">
+            <ConfigDrawer
+              node={selectedNode}
+              taskType={selectedTaskType}
+              supportedBackends={supportedBackends}
+              onConfigChange={setSelectedNodeConfig}
+              onClose={() => setSelectedNodeId(null)}
+            />
+          </div>
+        )}
         </div>
       </main>
 

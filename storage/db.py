@@ -443,6 +443,25 @@ def update_project_mlflow_experiment(project_id: int, mlflow_experiment_id: str)
         return False
 
 
+def get_pipeline_run(run_id: int) -> dict[str, Any] | None:
+    """Return a single pipeline run by id, or None."""
+    engine = get_engine()
+    if engine is None:
+        return None
+    try:
+        from sqlalchemy import text
+        q = """SELECT id, output_base, status, started_at, finished_at, config, routing_path, inverse_path, task_id, error_message, gds_path, project_id
+               FROM pipeline_runs WHERE id = :rid"""
+        with engine.connect() as conn:
+            r = conn.execute(text(q), {"rid": run_id})
+            row = r.fetchone()
+        if not row:
+            return None
+        return _row_to_run(row)
+    except Exception:
+        return None
+
+
 def list_pipeline_runs(project_id: int | None = None, limit: int = 50) -> list[dict[str, Any]]:
     """List pipeline runs, optionally filtered by project_id. Most recent first."""
     engine = get_engine()

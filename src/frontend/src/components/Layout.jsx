@@ -26,20 +26,27 @@ import {
   Ruler,
   Globe,
   Cpu,
+  Package,
+  ArrowLeft,
 } from 'lucide-react'
+
+// Level 1: project-centric top-level nav (Projects, Asset Library, Compute, Settings)
+const primaryNavItems = [
+  { to: '/', label: 'Home', icon: Home },
+  { to: '/projects', label: 'Projects', icon: FolderOpen },
+  { to: '/asset-library', label: 'Asset Library', icon: Package },
+  { to: '/compute', label: 'Compute', icon: Server },
+  { to: '/config', label: 'Settings', icon: Settings },
+]
 
 const navGroups = [
   {
-    label: 'Dashboards',
+    label: 'Primary',
     icon: LayoutDashboard,
-    items: [
-      { to: '/', label: 'Home', icon: Home },
-      { to: '/projects', label: 'Projects', icon: FolderOpen },
-      { to: '/results', label: 'Results', icon: FileBarChart },
-    ],
+    items: primaryNavItems,
   },
   {
-    label: 'Run simulations',
+    label: 'Quick run (legacy)',
     icon: Play,
     items: [
       { to: '/run/pipeline', label: 'Pipeline', icon: Route },
@@ -47,6 +54,7 @@ const navGroups = [
       { to: '/run/inverse', label: 'Inverse design', icon: Sparkles },
       { to: '/config', label: 'Config forms', icon: Settings },
       { to: '/workflows', label: 'Workflows (DAG)', icon: GitBranch },
+      { to: '/results', label: 'Results', icon: FileBarChart },
     ],
   },
   {
@@ -87,6 +95,12 @@ const navGroups = [
       { to: '/deploy', label: 'Deploy', icon: Server },
     ],
   },
+]
+
+// Level 2: minimal sidebar when inside a project workspace
+const workspaceNavItems = [
+  { to: '/projects', label: 'Back to Projects', icon: ArrowLeft },
+  { to: '/projects', label: 'All projects', icon: FolderOpen },
 ]
 
 function NavLink({ to, label, icon: Icon, isActive }) {
@@ -140,10 +154,13 @@ function NavGroup({ group, location, isOpen, onToggle }) {
   )
 }
 
+const WORKSPACE_PATH_REGEX = /^\/projects\/[^/]+\/workspace(\/)?$/
+
 export default function Layout() {
   const location = useLocation()
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [groupOpen, setGroupOpen] = useState({})
+  const [groupOpen, setGroupOpen] = useState({ 'Quick run (legacy)': false })
+  const isWorkspace = WORKSPACE_PATH_REGEX.test(location.pathname)
 
   const toggleGroup = (label) => {
     setGroupOpen((prev) => ({ ...prev, [label]: prev[label] === false }))
@@ -161,7 +178,7 @@ export default function Layout() {
         />
       )}
 
-      {/* Sidebar */}
+      {/* Sidebar: Level 2 (workspace) = minimal; otherwise Level 1 = full nav */}
       <aside
         className={`fixed inset-y-0 left-0 z-50 w-64 transform border-r border-slate-700/60 bg-slate-800/95 shadow-xl transition-transform duration-200 ease-out lg:static lg:translate-x-0 ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
@@ -179,15 +196,29 @@ export default function Layout() {
           </button>
         </div>
         <nav className="overflow-y-auto p-3" aria-label="Main">
-          {navGroups.map((group) => (
-            <NavGroup
-              key={group.label}
-              group={group}
-              location={location}
-              isOpen={groupOpen[group.label] !== false}
-              onToggle={() => toggleGroup(group.label)}
-            />
-          ))}
+          {isWorkspace ? (
+            <div className="space-y-0.5">
+              {workspaceNavItems.map((item) => (
+                <NavLink
+                  key={item.to + item.label}
+                  to={item.to}
+                  label={item.label}
+                  icon={item.icon}
+                  isActive={location.pathname === item.to}
+                />
+              ))}
+            </div>
+          ) : (
+            navGroups.map((group) => (
+              <NavGroup
+                key={group.label}
+                group={group}
+                location={location}
+                isOpen={groupOpen[group.label] !== false}
+                onToggle={() => toggleGroup(group.label)}
+              />
+            ))
+          )}
         </nav>
       </aside>
 

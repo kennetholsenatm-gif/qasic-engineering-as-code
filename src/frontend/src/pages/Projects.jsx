@@ -245,7 +245,7 @@ export default function Projects({ apiBase }) {
               ) : (
                 <>
                   <Link
-                    to={`/results?project_id=${p.id}`}
+                    to={`/projects/${p.id}/workspace`}
                     className="block p-4 transition-colors hover:bg-slate-700/40"
                   >
                     <div className="flex items-start gap-3">
@@ -260,7 +260,7 @@ export default function Projects({ apiBase }) {
                           <span>{p.active_runs != null ? `${p.active_runs} active run${p.active_runs !== 1 ? 's' : ''}` : '—'}</span>
                         </div>
                       </div>
-                      <span className="text-xs text-slate-500 shrink-0">View results →</span>
+                      <span className="text-xs text-slate-500 shrink-0">Open workspace →</span>
                     </div>
                   </Link>
                   <div className="flex items-center justify-end gap-1 border-t border-slate-700 px-4 py-2">
