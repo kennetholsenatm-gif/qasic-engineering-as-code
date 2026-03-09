@@ -357,7 +357,7 @@ export default function RunPipeline({ apiBase }) {
       <section className="mt-6">
         <h2 className="mb-2 text-sm font-medium text-slate-400">Quantum circuit (optional)</h2>
         <p className="mb-2 text-xs text-slate-500">
-          Paste OpenQASM 2 or drop a .qasm file to run the Algorithm-to-ASIC pipeline. Leave empty to run the default pipeline only.
+          Paste OpenQASM 2 or 3 (or drop a .qasm file) to run the Algorithm-to-ASIC pipeline. Leave empty to run the default pipeline only.
         </p>
         <div className="space-y-2">
           <div
