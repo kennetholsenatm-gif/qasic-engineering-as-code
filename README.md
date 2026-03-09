@@ -171,7 +171,7 @@ python src/core_compute/engineering/run_pipeline.py -o pipeline_result
 # With Prefect: --use-orchestrator
 ```
 
-See [src/core_compute/engineering/README.md](src/core_compute/engineering/README.md) for IBM Quantum and options. HEaC, thermal, parasitics, calibration: [docs/app/HEaC_opensource_Meep.md](docs/app/HEaC_opensource_Meep.md), [docs/app/THERMAL_AND_PARASITICS.md](docs/app/THERMAL_AND_PARASITICS.md), [docs/app/CALIBRATION_DIGITAL_TWIN.md](docs/app/CALIBRATION_DIGITAL_TWIN.md).
+See [src/core_compute/engineering/README.md](src/core_compute/engineering/README.md) for IBM Quantum and options. To extend **Run on IBM** with error mitigation and workload summaries, see [Qiskit Functions](https://www.ibm.com/quantum/blog/functions-2026) and [docs/app/QISKIT_FUNCTIONS_IBM.md](docs/app/QISKIT_FUNCTIONS_IBM.md). HEaC, thermal, parasitics, calibration: [docs/app/HEaC_opensource_Meep.md](docs/app/HEaC_opensource_Meep.md), [docs/app/THERMAL_AND_PARASITICS.md](docs/app/THERMAL_AND_PARASITICS.md), [docs/app/CALIBRATION_DIGITAL_TWIN.md](docs/app/CALIBRATION_DIGITAL_TWIN.md).
 
 ---
 

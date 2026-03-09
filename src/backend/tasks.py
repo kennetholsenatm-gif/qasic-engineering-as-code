@@ -86,6 +86,7 @@ def run_pipeline_task(self, output_base: str = "pipeline_result", fast: bool = F
         cmd.extend(["--model", model])
     if heac:
         cmd.append("--heac")
+        cmd.append("--gds")
     if skip_routing:
         cmd.append("--skip-routing")
     if skip_inverse:
@@ -308,6 +309,7 @@ def run_pipeline_with_circuit_task(
         cmd.extend(["--model", model])
     if heac:
         cmd.append("--heac")
+        cmd.append("--gds")
     if hardware:
         cmd.append("--hardware")
     code, out, err = _run_cmd(cmd, timeout=1800)

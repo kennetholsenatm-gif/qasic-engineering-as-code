@@ -93,6 +93,38 @@ def _extract_counts(pub_result) -> dict:
     return dict(getattr(data, "counts", {}) or {})
 
 
+def submit_protocol_job_via_circuit_function(
+    protocol: str,
+    backend_name: str | None = None,
+    shots: int = 1024,
+    ibm_token: str | None = None,
+    circuit_function_id: str | None = None,
+) -> tuple[str, object, str | None]:
+    """
+    Submit protocol circuit via Qiskit Functions Catalog (circuit function) when available.
+    Returns (job_id, job, backend_name). Use when use_circuit_function=True for error
+    mitigation and resource_usage. Raises ImportError if qiskit-ibm-catalog not installed,
+    or RuntimeError on submission failure (caller should fall back to submit_protocol_job).
+    """
+    import uuid
+    try:
+        from qiskit_ibm_catalog import QiskitFunctionsCatalog
+    except ImportError as e:
+        raise ImportError("qiskit-ibm-catalog required for circuit function; pip install qiskit-ibm-catalog") from e
+    token = ibm_token or os.environ.get(IBM_QUANTUM_TOKEN_ENV)
+    if not token:
+        raise RuntimeError("IBM token required for Qiskit Functions")
+    func_id = circuit_function_id or os.environ.get("QISKIT_CIRCUIT_FUNCTION_ID", "ibm/circuit-function")
+    ops = get_protocol_ops(protocol)
+    qc = asic_ops_to_qiskit_circuit(ops)
+    catalog = QiskitFunctionsCatalog(channel="ibm_quantum_platform", token=token)
+    circuit_fn = catalog.load(func_id)
+    backend_str = backend_name or "ibm_pittsburgh"
+    job = circuit_fn.run(circuit=qc, backend_name=backend_str, shots=shots)
+    job_id = str(uuid.uuid4())
+    return job_id, job, backend_str
+
+
 def submit_protocol_job(
     protocol: str,
     backend_name: str | None = None,
@@ -129,7 +161,19 @@ def get_job_status_and_result(job: object) -> tuple[str, dict | None]:
             result = job.result()
             pub_result = result[0] if result else None
             counts = _extract_counts(pub_result) if pub_result else {}
-            return "DONE", {"counts": {k: int(v) for k, v in counts.items()}}
+            result_dict = {"counts": {k: int(v) for k, v in counts.items()}}
+            # Expose workload summary when present (e.g. from Qiskit Functions: CPU/QPU time per stage)
+            try:
+                metadata = getattr(result, "metadata", None)
+                if metadata is None and isinstance(result, dict):
+                    metadata = result.get("metadata")
+                if metadata and isinstance(metadata, dict):
+                    ru = metadata.get("resource_usage")
+                    if isinstance(ru, dict):
+                        result_dict["resource_usage"] = ru
+            except Exception:
+                pass
+            return "DONE", result_dict
         if "ERROR" in status_str or "FAILED" in status_str:
             return "ERROR", {"error": str(getattr(status, "value", status))}
     except Exception as e:

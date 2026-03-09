@@ -140,6 +140,7 @@ DeviceKind = Literal["auto", "cpu", "cuda", "mps"]
 class RunProtocolRequest(BaseModel):
     protocol: ProtocolKind = "teleport"
     backend: BackendKind = "sim"
+    use_circuit_function: bool = False
 
 
 class RunRoutingRequest(BaseModel):
@@ -1040,10 +1041,22 @@ def run_protocol(request: Request, req: RunProtocolRequest):
     """Run ASIC protocol on sim (blocking) or IBM hardware (returns job_id for WebSocket polling)."""
     use_hardware = req.backend == "hardware"
     if use_hardware:
+        from src.core_compute.engineering.run_protocol_on_ibm import (
+            submit_protocol_job,
+            submit_protocol_job_via_circuit_function,
+            get_ibm_job_id,
+        )
+        from src.backend.job_store import set_job
         try:
-            from src.core_compute.engineering.run_protocol_on_ibm import submit_protocol_job, get_ibm_job_id
-            from src.backend.job_store import set_job
-            job_id, job, backend_name = submit_protocol_job(req.protocol, shots=1024)
+            if req.use_circuit_function:
+                try:
+                    job_id, job, backend_name = submit_protocol_job_via_circuit_function(
+                        req.protocol, shots=1024
+                    )
+                except (ImportError, RuntimeError, Exception):
+                    job_id, job, backend_name = submit_protocol_job(req.protocol, shots=1024)
+            else:
+                job_id, job, backend_name = submit_protocol_job(req.protocol, shots=1024)
             ibm_job_id = get_ibm_job_id(job)
             set_job(job_id, ibm_job_id=ibm_job_id, backend=backend_name or "", protocol=req.protocol, job=job)
             return {"job_id": job_id, "status": "submitted", "backend": backend_name}
@@ -1220,6 +1233,7 @@ def _run_pipeline_with_circuit_sync(req: RunPipelineRequest) -> dict:
         cmd.extend(["--model", req.model])
     if req.heac:
         cmd.append("--heac")
+        cmd.append("--gds")
     if req.backend == "hardware":
         cmd.append("--hardware")
     code, err = _run(cmd)

@@ -20,6 +20,7 @@ Documentation and whitepapers for **QASIC Engineering-as-Code** ([GitHub](https:
 | [QKD.md](QKD.md) | **QKD:** Pedagogical BB84 and E91 (basis angles, CHSH); code and API |
 | [QUANTUM_ASIC.md](QUANTUM_ASIC.md) | Quantum ASIC spec: minimal topology (0–1–2), gate set (H, X, Z, CNOT), protocol mapping |
 | [OPENQASM_TO_ASIC_PIPELINE.md](OPENQASM_TO_ASIC_PIPELINE.md) | **OpenQASM 2/3 → ASIC:** Pipeline stages (parse → gate set → topology → geometry → extraction → manifest → routing → HEaC → GDS), file paths, pain points; 2.0 supported, 3.0 when qiskit-qasm3-import installed |
+| [QISKIT_FUNCTIONS_IBM.md](QISKIT_FUNCTIONS_IBM.md) | **Run on IBM and Qiskit Functions:** Extending Run on IBM with Qiskit Functions for error mitigation and workload summaries; link to IBM blog and catalog |
 | [OPENQASM_TO_ASIC_WUI_WALKTHROUGH.md](OPENQASM_TO_ASIC_WUI_WALKTHROUGH.md) | **OpenQASM 3.0 → ASIC (WUI only):** Step-by-step web UI walkthrough and pain points for taking an OpenQASM file to Quantum ASIC |
 | [WHITEPAPER_Holographic_Metasurfaces_Quantum_SATCOM.md](WHITEPAPER_Holographic_Metasurfaces_Quantum_SATCOM.md) | Main whitepaper (Markdown): vision, protocol layer, roadmap, §10 supporting code |
 | [WHITEPAPER_Holographic_Metasurfaces_Quantum_SATCOM.tex](WHITEPAPER_Holographic_Metasurfaces_Quantum_SATCOM.tex) | Short LaTeX paper + math appendix (QAOA, DNN phase synthesis) |

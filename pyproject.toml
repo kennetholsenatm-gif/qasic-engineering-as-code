@@ -59,6 +59,9 @@ engineering = [
   "matplotlib>=3.5.0",
   "scipy>=1.7.0",
 ]
+ibm-functions = [
+  "qiskit-ibm-catalog>=0.4",
+]
 test = [
   "pytest>=7.0.0",
   "torch>=1.13.0",
