@@ -1,23 +1,75 @@
 {
-  "num_logical_qubits": 3,
-  "num_physical_nodes": 3,
-  "topology": "linear_chain",
+  "num_logical_qubits": 16,
+  "num_physical_nodes": 16,
+  "topology": "custom",
   "solver": "routing_rl",
-  "objective_value": 4.0,
+  "objective_value": 0.0,
   "backend": null,
   "mapping": [
     {
       "logical": 0,
-      "physical": 2
+      "physical": 6
     },
     {
       "logical": 1,
-      "physical": 1
+      "physical": 15
     },
     {
       "logical": 2,
+      "physical": 11
+    },
+    {
+      "logical": 3,
+      "physical": 10
+    },
+    {
+      "logical": 4,
+      "physical": 9
+    },
+    {
+      "logical": 5,
+      "physical": 3
+    },
+    {
+      "logical": 6,
       "physical": 0
+    },
+    {
+      "logical": 7,
+      "physical": 7
+    },
+    {
+      "logical": 8,
+      "physical": 12
+    },
+    {
+      "logical": 9,
+      "physical": 5
+    },
+    {
+      "logical": 10,
+      "physical": 2
+    },
+    {
+      "logical": 11,
+      "physical": 4
+    },
+    {
+      "logical": 12,
+      "physical": 14
+    },
+    {
+      "logical": 13,
+      "physical": 1
+    },
+    {
+      "logical": 14,
+      "physical": 13
+    },
+    {
+      "logical": 15,
+      "physical": 8
     }
   ],
-  "timestamp": "2026-03-07T23:45:48.255529Z"
+  "timestamp": "2026-03-09T12:05:52.411561Z"
 }

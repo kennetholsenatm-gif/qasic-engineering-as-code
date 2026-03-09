@@ -39,6 +39,17 @@ Documentation and whitepapers for **QASIC Engineering-as-Code** ([GitHub](https:
 | [CV_QUANTUM_RADAR.md](CV_QUANTUM_RADAR.md) | Toy CV simulator: TMSV, covariance matrices, quantum radar |
 | [TOPOLOGY_BUILDER.md](TOPOLOGY_BUILDER.md) | Named topologies (linear, star, repeater), viz_topology, get_topology API |
 | [ROADMAP_STATUS.md](ROADMAP_STATUS.md) | Roadmap implementation status (done vs scaffold vs future) |
+| **Program and roadmap** | |
+| [ALPHA_SCOPE.md](ALPHA_SCOPE.md) | **Alpha scope:** In/out for Alpha; single golden path (3-qubit → routing → inverse → HEaC → GDS); parked items |
+| [ALPHA_CUSTOMER.md](ALPHA_CUSTOMER.md) | **Alpha customer:** Primary user for Alpha (internal vs external vs hybrid); implications for prioritization |
+| [ROADMAP_SCHEDULE.md](ROADMAP_SCHEDULE.md) | **Roadmap schedule:** Phases 3–4 timeline, dependencies, owners (TBD until workshop) |
+| [PROGRAM_ACTION_ITEMS.md](PROGRAM_ACTION_ITEMS.md) | **Program action items:** TPM feedback index → deliverables and 45-min kickoff next steps |
+| **Architecture and risk** | |
+| [ARCHITECTURE_CONTROL_VS_DATA_PLANE.md](ARCHITECTURE_CONTROL_VS_DATA_PLANE.md) | **Control vs data plane:** Proposal to split slim API (control) and heavy workers (data); current state and benefits |
+| [ARCHITECTURE_MODULARIZATION_PROPOSAL.md](ARCHITECTURE_MODULARIZATION_PROPOSAL.md) | **Modularization:** Proposal for qasic-ui, qasic-orchestrator, qasic-compute-workers; deploy boundaries and migration path |
+| [SIMULATION_VALIDATION_STRATEGY.md](SIMULATION_VALIDATION_STRATEGY.md) | **Sim–fab validation:** How FDTD and thermal-to-decoherence will be validated against real data; first silicon plan |
+| [COMPUTE_COST_ASSESSMENT.md](COMPUTE_COST_ASSESSMENT.md) | **Compute cost:** Cost and margin for DAGs (local, IBM, EKS); budget guardrail; placeholder cost table |
+| [PIPELINE_METRICS.md](PIPELINE_METRICS.md) | **Pipeline metrics:** Metrics to track (GDS success rate, latency, failure rate); bi-weekly review template |
 | [DATA_PERSISTENCE.md](DATA_PERSISTENCE.md) | Data persistence (MLflow, InfluxDB, Postgres) for pipeline and app |
 | [ORCHESTRATION.md](ORCHESTRATION.md) | Prefect 2 DAG for pipeline and calibration; retries and server |
 | [superscreen_integration.md](superscreen_integration.md) | SuperScreen 2D London equation / Meissner screening integration |
