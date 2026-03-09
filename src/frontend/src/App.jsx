@@ -38,7 +38,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Layout />}>
+        <Route path="/" element={<Layout apiBase={API_BASE} />}>
           <Route index element={<Home apiBase={API_BASE} />} />
           <Route path="projects" element={<Projects apiBase={API_BASE} />} />
           <Route path="projects/:projectId/workspace" element={<ProjectWorkspace apiBase={API_BASE} />} />

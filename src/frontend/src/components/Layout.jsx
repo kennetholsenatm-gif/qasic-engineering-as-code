@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link, useLocation, Outlet } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import {
   LayoutDashboard,
   Home,
@@ -28,6 +29,7 @@ import {
   Cpu,
   Package,
   ArrowLeft,
+  LogIn,
 } from 'lucide-react'
 
 // Level 1: project-centric top-level nav (Projects, Asset Library, Compute, Settings)
@@ -156,11 +158,30 @@ function NavGroup({ group, location, isOpen, onToggle }) {
 
 const WORKSPACE_PATH_REGEX = /^\/projects\/[^/]+\/workspace(\/)?$/
 
-export default function Layout() {
+function fetchCapabilities(apiBase) {
+  return fetch(`${apiBase}/api/capabilities`).then((r) => (r.ok ? r.json() : {}))
+}
+
+export default function Layout({ apiBase = '' }) {
   const location = useLocation()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [groupOpen, setGroupOpen] = useState({ 'Quick run (legacy)': false })
   const isWorkspace = WORKSPACE_PATH_REGEX.test(location.pathname)
+
+  const { data: capabilities } = useQuery({
+    queryKey: ['capabilities', apiBase],
+    queryFn: () => fetchCapabilities(apiBase),
+    staleTime: 60_000,
+  })
+
+  const effectivePrimaryItems =
+    capabilities?.database !== false
+      ? primaryNavItems
+      : primaryNavItems.filter((item) => item.to !== '/projects')
+  const effectiveNavGroups = [
+    { ...navGroups[0], items: effectivePrimaryItems },
+    ...navGroups.slice(1),
+  ]
 
   const toggleGroup = (label) => {
     setGroupOpen((prev) => ({ ...prev, [label]: prev[label] === false }))
@@ -209,7 +230,7 @@ export default function Layout() {
               ))}
             </div>
           ) : (
-            navGroups.map((group) => (
+            effectiveNavGroups.map((group) => (
               <NavGroup
                 key={group.label}
                 group={group}
@@ -236,6 +257,17 @@ export default function Layout() {
           <span className="ml-2 text-sm text-slate-500 lg:ml-0">
             Engineering-as-Code
           </span>
+          {capabilities?.features?.keycloak && (
+            <a
+              href={`${apiBase}/api/auth/keycloak/config`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="ml-auto flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm text-sky-300 hover:bg-slate-700 hover:text-sky-200"
+            >
+              <LogIn className="h-4 w-4" aria-hidden />
+              Sign in with Keycloak
+            </a>
+          )}
         </header>
         <div className="max-w-4xl px-4 py-6 lg:px-8">
           <Outlet />

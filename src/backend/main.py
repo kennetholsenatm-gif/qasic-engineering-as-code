@@ -88,6 +88,7 @@ def _load_feature_modules() -> None:
     """Conditionally mount API routers from src.backend.modules based on FEATURE_*_ENABLED."""
     features = [
         ("keycloak", "auth_keycloak", "keycloak_router", "/api/auth/keycloak", "Keycloak"),
+        ("elasticache", "advanced_cache", "cache_router", "/api/cache", "Advanced Cache"),
     ]
     for name, module_name, router_attr, prefix, tag in features:
         if not _is_feature_enabled(name):
@@ -1240,59 +1241,66 @@ def _run_pipeline_with_circuit_sync(req: RunPipelineRequest) -> dict:
     return result
 
 
+def _require_project_and_circuit(req: RunPipelineRequest) -> None:
+    """Require project_id and qasm_string (circuit). No defaults. Raises HTTPException 400 if missing."""
+    if req.project_id is None:
+        raise HTTPException(status_code=400, detail="project and circuit are required. Provide project_id.")
+    qasm = (req.qasm_string or "").strip()
+    if not qasm:
+        raise HTTPException(status_code=400, detail="project and circuit are required. Provide a circuit (qasm_string) from the canvas.")
+
+
 @app.post("/api/run/pipeline/async")
 @limit_heavy
 def run_pipeline_async(request: Request, req: RunPipelineRequest):
-    """Enqueue pipeline run as Celery task. Returns task_id; poll GET /api/tasks/{task_id} for status. Requires CELERY_BROKER_URL (e.g. redis). When qasm_string is provided, enqueues circuit-to-ASIC (and optionally full pipeline with circuit)."""
+    """Enqueue pipeline run as Celery task. Requires project_id and circuit (qasm_string). No default project or circuit."""
+    _require_project_and_circuit(req)
     if not _celery_available():
         raise HTTPException(status_code=503, detail="Celery/Redis not configured (set CELERY_BROKER_URL)")
-    if req.qasm_string:
-        _validate_qasm_string(req.qasm_string, decompose_to_asic=req.decompose_to_asic)
-        from src.backend.tasks import circuit_to_asic_task, run_pipeline_with_circuit_task
-        if req.full_pipeline_with_circuit:
-            task = run_pipeline_with_circuit_task.delay(
-                qasm_string=req.qasm_string,
-                circuit_name=req.circuit_name or "circuit",
-                output_base=PIPELINE_BASE,
-                fast=req.fast,
-                routing_method=req.routing_method or "qaoa",
-                model=req.model or "mlp",
-                heac=req.heac,
-                hardware=req.backend.lower() == "hardware",
-                decompose_to_asic=req.decompose_to_asic,
-            )
-            return {"task_id": task.id, "status": "PENDING", "message": "Pipeline with circuit enqueued"}
-        task = circuit_to_asic_task.delay(
-            qasm_string=req.qasm_string,
-            circuit_name=req.circuit_name,
+    qasm = (req.qasm_string or "").strip()
+    _validate_qasm_string(qasm, decompose_to_asic=req.decompose_to_asic)
+    from src.backend.tasks import circuit_to_asic_task, run_pipeline_with_circuit_task
+    if req.full_pipeline_with_circuit:
+        task = run_pipeline_with_circuit_task.delay(
+            qasm_string=qasm,
+            circuit_name=req.circuit_name or "circuit",
+            output_base=PIPELINE_BASE,
+            fast=req.fast,
+            routing_method=req.routing_method or "qaoa",
+            model=req.model or "mlp",
+            heac=req.heac,
+            hardware=req.backend.lower() == "hardware",
             decompose_to_asic=req.decompose_to_asic,
         )
-        return {"task_id": task.id, "status": "PENDING", "message": "Circuit-to-ASIC task enqueued"}
-    if log:
-        log.info("Enqueueing pipeline task", fast=req.fast, routing_method=req.routing_method or "qaoa", model=req.model or "mlp", heac=req.heac)
-    from src.backend.tasks import run_pipeline_task
-    task = run_pipeline_task.delay(
-        output_base=PIPELINE_BASE,
-        fast=req.fast,
-        routing_method=req.routing_method or "qaoa",
-        model=req.model or "mlp",
-        heac=req.heac,
-        skip_routing=req.skip_routing,
-        skip_inverse=req.skip_inverse,
-        hardware=req.backend.lower() == "hardware",
+        try:
+            from storage.db import record_pipeline_run, is_enabled as db_enabled
+            if db_enabled():
+                record_pipeline_run(
+                    PIPELINE_BASE,
+                    config={"backend": req.backend, "fast": req.fast, "full_pipeline_with_circuit": True},
+                    task_id=task.id,
+                    project_id=req.project_id,
+                )
+        except Exception:
+            pass
+        return {"task_id": task.id, "status": "PENDING", "message": "Pipeline with circuit enqueued"}
+    task = circuit_to_asic_task.delay(
+        qasm_string=qasm,
+        circuit_name=req.circuit_name,
+        decompose_to_asic=req.decompose_to_asic,
     )
     try:
         from storage.db import record_pipeline_run, is_enabled as db_enabled
         if db_enabled():
             record_pipeline_run(
                 PIPELINE_BASE,
-                config={"backend": req.backend, "fast": req.fast, "routing_method": req.routing_method, "model": req.model, "heac": req.heac},
+                config={"backend": req.backend, "fast": req.fast, "circuit": True},
                 task_id=task.id,
                 project_id=req.project_id,
             )
     except Exception:
         pass
-    return {"task_id": task.id, "status": "PENDING", "message": "Pipeline task enqueued"}
+    return {"task_id": task.id, "status": "PENDING", "message": "Circuit-to-ASIC task enqueued"}
 
 
 @app.get("/api/tasks/{task_id}")
@@ -1329,78 +1337,16 @@ def cancel_task_api(task_id: str):
 @app.post("/api/run/pipeline")
 @limit_heavy
 def run_pipeline(request: Request, req: RunPipelineRequest):
-    """Run full pipeline: routing then inverse design. Optional: routing_method, model, heac. When qasm_string is provided, runs circuit-to-ASIC (Phase 1) or full pipeline with circuit (Phase 2). Use /async when Celery available."""
-    if req.qasm_string:
-        _validate_qasm_string(req.qasm_string, decompose_to_asic=req.decompose_to_asic)
-        if _celery_available() and os.environ.get("FORCE_ASYNC_HEAVY", "").strip().lower() in ("1", "true", "yes"):
-            raise HTTPException(status_code=400, detail="Use POST /api/run/pipeline/async for circuit/pipeline runs (Celery worker required).")
-        if req.full_pipeline_with_circuit:
-            result = _run_pipeline_with_circuit_sync(req)
-            return result
-        return _run_circuit_to_asic_sync(req.qasm_string, req.circuit_name, decompose_to_asic=req.decompose_to_asic)
-    if os.environ.get("FORCE_ASYNC_HEAVY", "").strip().lower() in ("1", "true", "yes") and _celery_available():
-        raise HTTPException(status_code=400, detail="Use POST /api/run/pipeline/async for pipeline runs (Celery worker required).")
-    run_id = None
-    try:
-        from storage.db import record_pipeline_run, update_pipeline_run, is_enabled as db_enabled
-        if db_enabled():
-            run_id = record_pipeline_run(
-                PIPELINE_BASE,
-                config={"backend": req.backend, "fast": req.fast, "routing_method": req.routing_method, "model": req.model, "heac": req.heac},
-                project_id=req.project_id,
-            )
-    except Exception:
-        pass
-    cmd = [sys.executable, str(ENGINEERING_DIR / "run_pipeline.py")]
-    if req.backend == "hardware":
-        cmd.append("--hardware")
-    if req.fast:
-        cmd.append("--fast")
-    if req.routing_method:
-        cmd.extend(["--routing-method", req.routing_method])
-    if req.model:
-        cmd.extend(["--model", req.model])
-    if req.heac:
-        cmd.append("--heac")
-    if req.skip_routing:
-        cmd.append("--skip-routing")
-    if req.skip_inverse:
-        cmd.append("--skip-inverse")
-    code, err = _run(cmd)
-    if code != 0:
-        if run_id is not None:
-            try:
-                from storage.db import update_pipeline_run
-                update_pipeline_run(run_id=run_id, status="failed", error_message=err or "Pipeline run failed")
-            except Exception:
-                pass
-        raise HTTPException(status_code=503, detail=_sanitize_detail(RuntimeError(err or "Pipeline run failed"), "Pipeline run failed."))
-    try:
-        from storage.db import update_pipeline_run
-        gds_path_str = str(ENGINEERING_DIR / f"{PIPELINE_BASE}.gds") if (ENGINEERING_DIR / f"{PIPELINE_BASE}.gds").exists() else None
-        update_pipeline_run(
-            run_id=run_id,
-            status="success",
-            routing_path=str(ROUTING_JSON) if ROUTING_JSON.exists() else None,
-            inverse_path=str(INVERSE_JSON) if INVERSE_JSON.exists() else None,
-            gds_path=gds_path_str,
-        )
-    except Exception:
-        pass
-    result = {"message": "Pipeline completed", "routing_json": str(ROUTING_JSON), "inverse_json": str(INVERSE_JSON)}
-    if ROUTING_JSON.exists():
-        try:
-            with open(ROUTING_JSON, encoding="utf-8") as f:
-                result["routing"] = json.load(f)
-        except (OSError, json.JSONDecodeError):
-            pass
-    if INVERSE_JSON.exists():
-        try:
-            with open(INVERSE_JSON, encoding="utf-8") as f:
-                result["inverse"] = json.load(f)
-        except (OSError, json.JSONDecodeError):
-            pass
-    return result
+    """Run full pipeline. Requires project_id and circuit (qasm_string). No default project or circuit. Use /async when Celery available."""
+    _require_project_and_circuit(req)
+    qasm = (req.qasm_string or "").strip()
+    _validate_qasm_string(qasm, decompose_to_asic=req.decompose_to_asic)
+    if _celery_available() and os.environ.get("FORCE_ASYNC_HEAVY", "").strip().lower() in ("1", "true", "yes"):
+        raise HTTPException(status_code=400, detail="Use POST /api/run/pipeline/async for circuit/pipeline runs (Celery worker required).")
+    if req.full_pipeline_with_circuit:
+        result = _run_pipeline_with_circuit_sync(req)
+        return result
+    return _run_circuit_to_asic_sync(qasm, req.circuit_name, decompose_to_asic=req.decompose_to_asic)
 
 
 @app.post("/api/run/inverse/async")
@@ -1762,10 +1708,26 @@ def _openqasm_3_available() -> bool:
 @app.get("/api/capabilities")
 def get_capabilities():
     """Return backend capabilities for the WUI (e.g. OpenQASM 3.0, infrastructure features)."""
+    database = False
+    try:
+        from storage.db import is_enabled as db_enabled
+        database = db_enabled()
+    except ImportError:
+        pass
+    mlflow = False
+    try:
+        from storage.artifacts_mlflow import is_enabled as mlflow_enabled
+        mlflow = mlflow_enabled()
+    except ImportError:
+        pass
     return {
         "openqasm_3_available": _openqasm_3_available(),
+        "database": database,
+        "celery": _celery_available(),
+        "mlflow": mlflow,
         "features": {
             "keycloak": _is_feature_enabled("keycloak"),
+            "elasticache": _is_feature_enabled("elasticache"),
         },
     }
 

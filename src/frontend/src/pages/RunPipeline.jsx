@@ -315,21 +315,31 @@ export default function RunPipeline({ apiBase, initialProjectId }) {
 
   function handleSubmit(e) {
     e.preventDefault()
+    if (!projectId) {
+      setError('Project and circuit are required. Select a project.')
+      return
+    }
+    if (!qasmString.trim()) {
+      setError('Project and circuit are required. Add a circuit in the canvas (OpenQASM) to run the pipeline to Quantum ASIC.')
+      return
+    }
     workspaceCanvas?.setDirty(false)
     setResult(null)
     setError(null)
     setTaskId(null)
     workspaceCanvas?.setTaskId?.(null)
     setRunMode(null)
-    const base = { backend, fast, project_id: projectId || undefined, heac, routing_method: routingMethod, decompose_to_asic: decomposeToAsic }
-    const body = qasmString.trim()
-      ? {
-          ...base,
-          qasm_string: qasmString.trim(),
-          circuit_name: circuitName.trim() || undefined,
-          full_pipeline_with_circuit: fullPipelineWithCircuit,
-        }
-      : base
+    const body = {
+      backend,
+      fast,
+      project_id: projectId,
+      heac,
+      routing_method: routingMethod,
+      decompose_to_asic: decomposeToAsic,
+      qasm_string: qasmString.trim(),
+      circuit_name: circuitName.trim() || undefined,
+      full_pipeline_with_circuit: fullPipelineWithCircuit,
+    }
     submitMutation.mutate(body)
   }
 
@@ -445,9 +455,9 @@ export default function RunPipeline({ apiBase, initialProjectId }) {
       </section>
 
       <section className="mt-6">
-        <h2 className="mb-2 text-sm font-medium text-slate-400">Quantum circuit (optional)</h2>
+        <h2 className="mb-2 text-sm font-medium text-slate-400">Quantum circuit (required)</h2>
         <p className="mb-1 text-xs text-slate-500">
-          Paste OpenQASM 2 or 3 (or drop a .qasm file) to run the Algorithm-to-ASIC pipeline. Leave empty to run the default pipeline only.
+          The circuit from the canvas becomes the Quantum ASIC. Paste OpenQASM 2 or 3 (or drop a .qasm file). Project and circuit are required; there is no default.
         </p>
         <p className="mb-2 text-xs text-slate-500">
           Version is detected from the first line (e.g. <code className="rounded bg-slate-700 px-1 py-0.5 text-slate-300">OPENQASM 3.0;</code>). Max 100,000 characters.
@@ -608,7 +618,7 @@ export default function RunPipeline({ apiBase, initialProjectId }) {
         <div>
           <div className="mb-1.5 flex items-center gap-2">
             <label htmlFor="project" className="text-sm font-medium text-slate-300">
-              Project (optional)
+              Project (required)
             </label>
             <Link to="/projects" className="text-xs text-sky-400 hover:underline">Create project</Link>
           </div>
@@ -617,8 +627,9 @@ export default function RunPipeline({ apiBase, initialProjectId }) {
             value={projectId ?? ''}
             onChange={(e) => setProjectId(e.target.value ? Number(e.target.value) : null)}
             className="w-full max-w-xs rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-slate-100 shadow-sm focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+            required
           >
-            <option value="">— None —</option>
+            <option value="">— Select project —</option>
             {projects.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
@@ -655,7 +666,7 @@ export default function RunPipeline({ apiBase, initialProjectId }) {
         <div className="flex items-center gap-3">
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || !projectId || !qasmString.trim()}
             className="inline-flex items-center gap-2 rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 focus:ring-offset-slate-900 disabled:opacity-60 disabled:hover:bg-sky-600"
           >
             {loading ? (

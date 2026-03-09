@@ -158,4 +158,4 @@ While the implementation of IAA requires careful navigation of AppSec vulnerabil
 
 ---
 
-*This whitepaper aligns with the QASIC Engineering-as-Code implementation of infrastructure-aware feature flags, dynamic module loading in the FastAPI backend, and capabilities-driven presentation as documented in [INFRASTRUCTURE_FEATURES.md](../app/INFRASTRUCTURE_FEATURES.md).*
+*This whitepaper aligns with the QASIC Engineering-as-Code implementation of infrastructure-aware feature flags, dynamic module loading in the FastAPI backend, and capabilities-driven presentation as documented in [INFRASTRUCTURE_FEATURES.md](../app/INFRASTRUCTURE_FEATURES.md). The project maintains an [infrastructure taxonomy](../app/INFRASTRUCTURE_FEATURES.md#infrastructure-taxonomy-iaa-aware-categories) (seven IAA-aware categories and a current implementation map) in that document for operators and developers.*

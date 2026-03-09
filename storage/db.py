@@ -1,6 +1,7 @@
 """
-Optional PostgreSQL persistence for pipeline runs and latest results.
+Optional PostgreSQL (or SQLite fallback) persistence for pipeline runs and latest results.
 Set DATABASE_URL (e.g. postgresql://user:pass@localhost:5432/qasic) to enable.
+When DATABASE_URL is unset, set USE_SQLITE_WHEN_NO_DATABASE_URL=true to use an in-memory SQLite store (IAA fallback).
 Project-based workspace: projects table is parent; pipeline_runs belong to a project (or default).
 """
 from __future__ import annotations
@@ -10,6 +11,12 @@ from datetime import datetime, timezone
 from typing import Any
 
 _engine = None
+_engine_dialect: str | None = None
+
+
+def _use_sqlite_fallback() -> bool:
+    val = os.environ.get("USE_SQLITE_WHEN_NO_DATABASE_URL", "").strip().lower()
+    return val in ("1", "true", "yes", "on")
 
 
 def _database_url() -> str | None:
@@ -18,9 +25,21 @@ def _database_url() -> str | None:
         return url
     try:
         from config import get_storage_config
-        return get_storage_config().database.url or None
+        url = get_storage_config().database.url or None
+        if url:
+            return url
     except Exception:
-        return None
+        pass
+    if _use_sqlite_fallback():
+        return "sqlite:///:memory:"
+    return None
+
+
+def _json_cast(param_name: str) -> str:
+    """Return SQL fragment for binding a JSON value (jsonb for Postgres, plain param for SQLite)."""
+    if _engine_dialect == "sqlite":
+        return f":{param_name}"
+    return f"CAST(:{param_name} AS jsonb)"
 
 
 def is_enabled() -> bool:
@@ -28,8 +47,8 @@ def is_enabled() -> bool:
 
 
 def get_engine():
-    """Get SQLAlchemy engine; create projects and pipeline_runs tables if needed. Returns None if DATABASE_URL not set."""
-    global _engine
+    """Get SQLAlchemy engine; create projects and pipeline_runs tables if needed. Returns None if no DB URL/fallback."""
+    global _engine, _engine_dialect
     url = _database_url()
     if not url:
         return None
@@ -37,10 +56,77 @@ def get_engine():
         return _engine
     try:
         from sqlalchemy import create_engine, text
-        _engine = create_engine(url, pool_pre_ping=True)
+        _engine = create_engine(url, pool_pre_ping=(not url.startswith("sqlite")))
+        _engine_dialect = _engine.dialect.name
         with _engine.connect() as conn:
-            conn.execute(text("""
-                CREATE TABLE IF NOT EXISTS projects (
+            if _engine_dialect == "sqlite":
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS projects (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        name VARCHAR(256) NOT NULL UNIQUE,
+                        description TEXT,
+                        config TEXT DEFAULT '{}',
+                        mlflow_experiment_id VARCHAR(256),
+                        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+                    )
+                """))
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS pipeline_runs (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL,
+                        output_base VARCHAR(256) NOT NULL,
+                        status VARCHAR(32) NOT NULL,
+                        started_at TEXT NOT NULL,
+                        finished_at TEXT,
+                        config TEXT,
+                        routing_path TEXT,
+                        inverse_path TEXT,
+                        gds_path TEXT,
+                        task_id VARCHAR(256),
+                        error_message TEXT
+                    )
+                """))
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS dag_definitions (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL,
+                        name VARCHAR(256) NOT NULL,
+                        nodes TEXT NOT NULL DEFAULT '[]',
+                        edges TEXT NOT NULL DEFAULT '[]',
+                        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+                    )
+                """))
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS dag_runs (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        dag_id INTEGER REFERENCES dag_definitions(id) ON DELETE SET NULL,
+                        status VARCHAR(32) NOT NULL,
+                        started_at TEXT NOT NULL,
+                        finished_at TEXT,
+                        celery_task_id VARCHAR(256),
+                        error_message TEXT,
+                        nodes_snapshot TEXT,
+                        edges_snapshot TEXT
+                    )
+                """))
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS dag_run_nodes (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        run_id INTEGER NOT NULL REFERENCES dag_runs(id) ON DELETE CASCADE,
+                        node_id VARCHAR(128) NOT NULL,
+                        status VARCHAR(32) NOT NULL,
+                        started_at TEXT,
+                        finished_at TEXT,
+                        outputs TEXT,
+                        error_message TEXT,
+                        UNIQUE(run_id, node_id)
+                    )
+                """))
+            else:
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS projects (
                     id SERIAL PRIMARY KEY,
                     name VARCHAR(256) NOT NULL UNIQUE,
                     description TEXT,
@@ -104,17 +190,18 @@ def get_engine():
                 )
             """))
             conn.commit()
-            # Add project_id and gds_path if table already existed (migration-friendly)
-            try:
-                conn.execute(text("ALTER TABLE pipeline_runs ADD COLUMN IF NOT EXISTS project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL"))
-                conn.execute(text("ALTER TABLE pipeline_runs ADD COLUMN IF NOT EXISTS gds_path TEXT"))
-                conn.execute(text("ALTER TABLE dag_runs ADD COLUMN IF NOT EXISTS last_heartbeat TIMESTAMP WITH TIME ZONE"))
-                conn.commit()
-            except Exception:
-                pass
+            if _engine_dialect != "sqlite":
+                try:
+                    conn.execute(text("ALTER TABLE pipeline_runs ADD COLUMN IF NOT EXISTS project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL"))
+                    conn.execute(text("ALTER TABLE pipeline_runs ADD COLUMN IF NOT EXISTS gds_path TEXT"))
+                    conn.execute(text("ALTER TABLE dag_runs ADD COLUMN IF NOT EXISTS last_heartbeat TIMESTAMP WITH TIME ZONE"))
+                    conn.commit()
+                except Exception:
+                    pass
         return _engine
     except Exception:
         _engine = None
+        _engine_dialect = None
         return None
 
 
@@ -135,7 +222,7 @@ def record_pipeline_run(
             r = conn.execute(
                 text(
                     "INSERT INTO pipeline_runs (output_base, status, started_at, config, task_id, project_id) "
-                    "VALUES (:ob, 'running', :now, CAST(:config AS jsonb), :tid, :pid) RETURNING id"
+                    f"VALUES (:ob, 'running', :now, {_json_cast('config')}, :tid, :pid) RETURNING id"
                 ),
                 {
                     "ob": output_base,
@@ -289,9 +376,9 @@ def create_project(name: str, description: str | None = None, config: dict[str, 
         import json
         with engine.connect() as conn:
             r = conn.execute(
-                text("""
+                text(f"""
                     INSERT INTO projects (name, description, config, updated_at)
-                    VALUES (:name, :desc, CAST(:config AS jsonb), :now) RETURNING id
+                    VALUES (:name, :desc, {_json_cast('config')}, :now) RETURNING id
                 """),
                 {
                     "name": name,
@@ -504,9 +591,9 @@ def create_dag(name: str, nodes: list, edges: list, project_id: int | None = Non
         now = datetime.now(timezone.utc)
         with engine.connect() as conn:
             r = conn.execute(
-                text("""
+                text(f"""
                     INSERT INTO dag_definitions (name, project_id, nodes, edges, created_at, updated_at)
-                    VALUES (:name, :pid, CAST(:nodes AS jsonb), CAST(:edges AS jsonb), :now, :now) RETURNING id
+                    VALUES (:name, :pid, {_json_cast('nodes')}, {_json_cast('edges')}, :now, :now) RETURNING id
                 """),
                 {"name": name, "pid": project_id, "nodes": json.dumps(nodes), "edges": json.dumps(edges), "now": now},
             )
@@ -592,10 +679,10 @@ def update_dag(dag_id: int, name: str | None = None, nodes: list | None = None, 
             updates.append("name = :name")
             params["name"] = name
         if nodes is not None:
-            updates.append("nodes = CAST(:nodes AS jsonb)")
+            updates.append(f"nodes = {_json_cast('nodes')}")
             params["nodes"] = json.dumps(nodes)
         if edges is not None:
-            updates.append("edges = CAST(:edges AS jsonb)")
+            updates.append(f"edges = {_json_cast('edges')}")
             params["edges"] = json.dumps(edges)
         with engine.connect() as conn:
             conn.execute(text(f"UPDATE dag_definitions SET {', '.join(updates)} WHERE id = :id"), params)
@@ -616,9 +703,9 @@ def create_dag_run(dag_id: int | None, status: str, nodes_snapshot: list, edges_
         now = datetime.now(timezone.utc)
         with engine.connect() as conn:
             r = conn.execute(
-                text("""
+                text(f"""
                     INSERT INTO dag_runs (dag_id, status, started_at, nodes_snapshot, edges_snapshot, celery_task_id)
-                    VALUES (:dag_id, :status, :now, CAST(:nodes AS jsonb), CAST(:edges AS jsonb), :tid) RETURNING id
+                    VALUES (:dag_id, :status, :now, {_json_cast('nodes')}, {_json_cast('edges')}, :tid) RETURNING id
                 """),
                 {"dag_id": dag_id, "status": status, "now": now, "nodes": json.dumps(nodes_snapshot), "edges": json.dumps(edges_snapshot), "tid": celery_task_id},
             )
@@ -713,9 +800,10 @@ def sweep_stale_dag_runs(interval_seconds: int = 60) -> int:
     """
     Mark runs as failed where status='running' and last_heartbeat is older than interval_seconds.
     Returns the number of runs updated. Run as cron or Celery beat task.
+    No-op for SQLite (no last_heartbeat column).
     """
     engine = get_engine()
-    if engine is None:
+    if engine is None or _engine_dialect == "sqlite":
         return 0
     try:
         from sqlalchemy import text
@@ -747,9 +835,9 @@ def upsert_dag_run_node(run_id: int, node_id: str, status: str, started_at: date
         import json
         with engine.connect() as conn:
             conn.execute(
-                text("""
+                text(f"""
                     INSERT INTO dag_run_nodes (run_id, node_id, status, started_at, finished_at, outputs, error_message)
-                    VALUES (:run_id, :node_id, :status, :started_at, :finished_at, CAST(:outputs AS jsonb), :err)
+                    VALUES (:run_id, :node_id, :status, :started_at, :finished_at, {_json_cast('outputs')}, :err)
                     ON CONFLICT (run_id, node_id) DO UPDATE SET
                     status = EXCLUDED.status, started_at = COALESCE(EXCLUDED.started_at, dag_run_nodes.started_at),
                     finished_at = EXCLUDED.finished_at, outputs = COALESCE(EXCLUDED.outputs, dag_run_nodes.outputs), error_message = EXCLUDED.error_message

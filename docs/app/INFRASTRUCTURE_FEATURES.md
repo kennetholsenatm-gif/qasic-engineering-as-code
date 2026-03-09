@@ -16,7 +16,8 @@ Examples:
 
 - At startup, the backend checks each known feature flag. If enabled, it imports the corresponding router from `src/backend/modules/` and mounts it under a fixed prefix (e.g. `/api/auth/keycloak`).
 - If the module import fails (e.g. optional dependency not installed), the app logs a warning and continues; the rest of the API remains available.
-- The frontend can discover enabled features via `GET /api/capabilities`, which returns a `features` object (e.g. `{ "keycloak": true }`).
+- The frontend can discover enabled features via `GET /api/capabilities`, which returns a `features` object (e.g. `{ "keycloak": true }`) and infrastructure flags (`database`, `celery`, `mlflow`).
+- When `DATABASE_URL` is unset, set `USE_SQLITE_WHEN_NO_DATABASE_URL=true` to use an in-memory SQLite store (IAA fallback) so projects and runs still work locally.
 
 ## Helm: passing env to the API container
 
@@ -92,5 +93,36 @@ The exact `set` syntax depends on how your Helm chart exposes nested values (e.g
 | Feature name | Env flag | Module-specific env | Mounted at |
 |--------------|----------|---------------------|------------|
 | Keycloak     | `FEATURE_KEYCLOAK_ENABLED` | `KEYCLOAK_URL` (required), `KEYCLOAK_REALM` (default `qasic`), `KEYCLOAK_CLIENT_ID` (default `qasic-frontend`) | `/api/auth/keycloak` |
+| ElastiCache  | `FEATURE_ELASTICACHE_ENABLED` | (none for stub) | `/api/cache` |
 
 When Keycloak is enabled, the frontend can call `GET /api/auth/keycloak/config` to obtain `{ "url", "realm", "client_id" }` and initialize its auth client.
+
+## Infrastructure taxonomy (IAA-aware categories)
+
+This taxonomy defines the infrastructure types the application can be aware of; backend behaviour and `FEATURE_*` / env checks align to these categories.
+
+1. **Hardware accelerators & quantum compute** — GPUs (e.g. NVIDIA H100, AWS EC2 P5, CoreWeave), other AI accelerators (Google TPUs, AWS Trainium), IBM Quantum Processing Units (QPUs) for QAOA and routing protocols. The application can gracefully degrade to CPU-bound models or local stubs when high-performance hardware is absent, or scale up when it detects them.
+
+2. **Databases & persistence** — Enterprise relational databases (e.g. AWS RDS Postgres) and lightweight fallbacks (in-memory SQLite when enterprise DB is not detected). The application routes connection pools dynamically based on what data stores are provisioned.
+
+3. **Caching & message brokers** — Distributed caches (Redis clusters, AWS ElastiCache) and message queues (e.g. GCP Pub/Sub). API routers and listeners are mounted only when the underlying messaging/caching topology is present.
+
+4. **Identity & access management** — Enterprise SSO (e.g. Keycloak; detect `FEATURE_KEYCLOAK_ENABLED` to mount enterprise auth routers instead of local stubs). Frontend rendering and backend auth routing adapt to the presence of authentication providers.
+
+5. **Security & secrets management** — Hardware Security Modules (HSMs), enterprise vault systems (HashiCorp Vault, AWS Secrets Manager, Azure Key Vault). The application can use just-in-time bootstrapping tokens to resolve secrets dynamically and avoid leaking environment variables.
+
+6. **Machine learning & data processing** — Vector stores (e.g. FAISS), ML frameworks (HuggingFace model tensors), distributed computing (Ray actors). Heavy ML initialization can be deferred or bypassed when the infrastructure context (e.g. local Docker Compose) indicates these are unprovisioned.
+
+7. **Cloud orchestration environments** — Local and container environments (lightweight Docker Compose), enterprise Kubernetes (e.g. multi-AZ EKS), scale-to-zero serverless (Knative, KServe, Google Cloud Run, Azure Container Apps). The application can optimize cold starts and memory footprint based on the environment it runs in.
+
+### Current implementation map
+
+| Category | Status | How the app handles it today |
+|----------|--------|------------------------------|
+| Hardware accelerators & quantum | Not implemented | No GPU/TPU/QPU detection; IBM Quantum used via API when configured. |
+| Databases & persistence | Implemented | `DATABASE_URL` → `storage.db.is_enabled()`; project/DAG/pipeline runs; no SQLite fallback in code today. |
+| Caching & message brokers | Implemented | `CELERY_BROKER_URL` → `_celery_available()`; optional `FEATURE_ELASTICACHE_ENABLED` module (stub). |
+| Identity & IAM | Implemented | `FEATURE_KEYCLOAK_ENABLED` → Keycloak router at `/api/auth/keycloak`; config via `KEYCLOAK_*`. |
+| Security & secrets | Not implemented | No vault/JIT bootstrap; config via env only (see whitepaper for hardening). |
+| ML & data processing | Partial | MLflow when configured; no FAISS/HuggingFace/Ray conditional loading. |
+| Orchestration environment | Implicit | Single image; cold start / memory driven by which features are enabled. |
