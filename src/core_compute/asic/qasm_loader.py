@@ -9,6 +9,8 @@ Version is detected from the first declaration line (OPENQASM 2.0; vs OPENQASM 3
 
 Barrier: OpenQASM 2/3 barrier statements are supported and ignored when building the op list
 (they are a directive with no logical effect on the ASIC circuit).
+Measure: OpenQASM 2/3 measure statements are accepted as part of the circuit and skipped when
+building the op list (measurement is classical; the ASIC op list contains only quantum gates).
 """
 from __future__ import annotations
 
@@ -70,7 +72,7 @@ def _strip_line_comment(s: str) -> str:
 def _parse_qasm2_line(line: str) -> tuple[str, list[int], Any] | None:
     """Parse a single gate line (OpenQASM 2 style). Returns (gate, targets, param) or None."""
     line = _strip_line_comment(line.strip())
-    if not line or line.startswith("OPENQASM") or line.startswith("include") or line.startswith("qreg") or line.startswith("creg") or line.startswith("barrier"):
+    if not line or line.startswith("OPENQASM") or line.startswith("include") or line.startswith("qreg") or line.startswith("creg") or line.startswith("barrier") or line.startswith("measure"):
         return None
     # Gate: gate_name q[0], q[1]; or gate_name(angle) q[0];
     m = re.match(r"(\w+)\s*\(\s*([^)]+)\s*\)\s+q\[(\d+)\](?:\s*,\s*q\[(\d+)\])?;?", line, re.IGNORECASE)
@@ -103,11 +105,13 @@ def _qasm2_to_ops(qasm_text: str) -> list[Op]:
             # Skip declaration/header lines; report only truly unrecognized lines
             stripped = _strip_line_comment(line.strip())
             if stripped and (stripped.endswith(";") or "q[" in stripped):
-                if stripped.startswith(("qreg", "creg", "OPENQASM", "include", "barrier", "gate", "opaque")):
+                if stripped.startswith(("qreg", "creg", "OPENQASM", "include", "barrier", "gate", "opaque", "measure")):
                     continue
                 raise QasmParseError("Unrecognized or malformed line", line=line_no)
             continue
         gate, targets, param = parsed
+        if gate == "measure":
+            continue  # Measurement is part of the circuit but does not add a quantum gate to the ASIC op list
         if gate in _SUPPORTED_1Q:
             ops.append(Op(gate=gate.upper(), targets=targets, param=None))
         elif gate in _SUPPORTED_1Q_PARAM and param is not None:
@@ -116,7 +120,7 @@ def _qasm2_to_ops(qasm_text: str) -> list[Op]:
             ops.append(Op(gate="CNOT", targets=targets, param=None))
         else:
             raise QasmParseError(
-                f"Unsupported or malformed gate: {gate} {targets} (ASIC supports H, X, Z, Rx, CNOT)",
+                f"Unsupported or malformed gate: {gate} {targets} (ASIC supports H, X, Z, Rx, CNOT; measure is accepted and skipped for op list)",
                 line=line_no,
             )
     return ops
@@ -200,12 +204,14 @@ def load_qasm(path: str, *, decompose_to_asic: bool = False) -> list[Op]:
 
 
 def _quantum_circuit_to_ops(circuit: Any) -> list[Op]:
-    """Convert Qiskit QuantumCircuit to list of Op (H, X, Z, CNOT, Rx). Skips barrier (OpenQASM 2/3 directive)."""
+    """Convert Qiskit QuantumCircuit to list of Op (H, X, Z, CNOT, Rx). Skips barrier and measure (directives/classical; no quantum gate for ASIC op list)."""
     ops: list[Op] = []
     for inst in circuit.data:
         name = inst.operation.name.lower()
         if name == "barrier":
             continue  # OpenQASM 2/3 directive; no-op for ASIC op list
+        if name == "measure":
+            continue  # Measurement is part of the circuit but does not add a quantum gate to the ASIC op list
         qubits = [circuit.find_bit(q).index for q in inst.qubits]
         param = None
         if hasattr(inst.operation, "params") and inst.operation.params:
