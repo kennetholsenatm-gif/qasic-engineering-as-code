@@ -57,6 +57,7 @@ In the expanded whitepaper (**[WHITEPAPER_Holographic_Metasurfaces_Quantum_SATCO
 
 ## Code
 
+- `asic/qasm_loader.py` – load OpenQASM 2.0 or 3.0 (when `qiskit-qasm3-import` is installed), map to ASIC ops; optional decomposition to H, X, Z, Rx, CNOT. See [OPENQASM_TO_ASIC_PIPELINE.md](OPENQASM_TO_ASIC_PIPELINE.md) for the full QASM → ASIC chain and pain points.
 - `asic/topology.py` – qubit count and edges.
 - `asic/gate_set.py` – allowed gate names (and parametrized Rx).
 - `asic/circuit.py` – `Op` dataclass, `validate_circuit()`, `protocol_*_ops()`.

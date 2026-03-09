@@ -51,6 +51,7 @@ app = [
 ]
 engineering = [
   "qiskit>=2.0",
+  "qiskit-qasm3-import>=0.5.0",
   "qiskit-optimization>=0.7.0",
   "hashable-list>=0.2.0",
   "ordered-set>=4.0.0",
@@ -72,6 +73,7 @@ all = [
   "redis>=4.5.0",
   "slowapi>=0.1.9",
   "qiskit>=2.0",
+  "qiskit-qasm3-import>=0.5.0",
   "qiskit-optimization>=0.7.0",
   "hashable-list>=0.2.0",
   "ordered-set>=4.0.0",

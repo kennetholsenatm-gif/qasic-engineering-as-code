@@ -81,6 +81,23 @@ jobs:
       - name: Run pytest
         run: python -m pytest tests/ -v --ignore=tests/test_engineering_protocol_ibm.py
 
+  qasm-pipeline:
+    name: OpenQASM 2.0 / 3.0 → ASIC pipeline
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install -r src/core_compute/engineering/requirements-engineering.txt
+          pip install -e .
+      - name: Run OpenQASM 2.0 and 3.0 through Algorithm-to-ASIC pipeline
+        run: python -m pytest tests/test_qasm_pipeline_ci.py -v
+
   hardware-verify:
     name: Pipeline + thermodynamic + HEaC
     runs-on: ubuntu-latest

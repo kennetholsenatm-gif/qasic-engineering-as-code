@@ -2,6 +2,10 @@
 Load OpenQASM 2/3 source and map to ASIC op list (Op) for circuit.py and pulse compiler.
 Ref: NEXT_STEPS_ROADMAP.md §4.1 OpenQASM 3.0 / QIR Integration.
 Also provides interaction graph extraction for Algorithm-to-ASIC pipeline.
+
+OpenQASM 2.0: parsed via regex or qiskit.qasm2 when available.
+OpenQASM 3.0: parsed via qiskit.qasm3.loads/load when qiskit-qasm3-import is installed.
+Version is detected from the first declaration line (OPENQASM 2.0; vs OPENQASM 3.0;).
 """
 from __future__ import annotations
 
@@ -13,6 +17,30 @@ import networkx as nx
 
 from .circuit import Op
 from .gate_set import DEFAULT_GATE_SET, GateSet
+
+# OpenQASM version declaration pattern (first line or early in file)
+_OPENQASM_VERSION_RE = re.compile(r"OPENQASM\s+(\d+\.\d+)", re.IGNORECASE)
+
+
+def _detect_qasm_version(qasm_text: str) -> str:
+    """
+    Detect OpenQASM version from source (OPENQASM 2.0; or OPENQASM 3.0;).
+    Returns "2.0" or "3.0". Defaults to "2.0" if no declaration found for backward compatibility.
+    """
+    for line in qasm_text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("//"):
+            continue
+        m = _OPENQASM_VERSION_RE.search(line)
+        if m:
+            ver = m.group(1)
+            if ver.startswith("3"):
+                return "3.0"
+            if ver.startswith("2"):
+                return "2.0"
+            raise QasmParseError(f"Unsupported OPENQASM version: {ver} (supported: 2.0, 3.0)")
+        break
+    return "2.0"
 
 
 class QasmParseError(ValueError):
@@ -69,9 +97,11 @@ def _qasm2_to_ops(qasm_text: str) -> list[Op]:
     for line_no, line in enumerate(qasm_text.splitlines(), start=1):
         parsed = _parse_qasm2_line(line)
         if parsed is None:
-            # Report line number for lines that look like statements but don't parse
+            # Skip declaration/header lines; report only truly unrecognized lines
             stripped = _strip_line_comment(line.strip())
             if stripped and (stripped.endswith(";") or "q[" in stripped):
+                if stripped.startswith(("qreg", "creg", "OPENQASM", "include", "barrier", "gate", "opaque")):
+                    continue
                 raise QasmParseError("Unrecognized or malformed line", line=line_no)
             continue
         gate, targets, param = parsed
@@ -89,20 +119,79 @@ def _qasm2_to_ops(qasm_text: str) -> list[Op]:
     return ops
 
 
-def load_qasm(path: str) -> list[Op]:
+# ASIC basis for Qiskit transpiler (decomposition)
+_ASIC_BASIS_GATES = ["h", "x", "z", "rx", "cx"]
+
+
+def _transpile_to_asic_basis(circuit: Any) -> Any:
+    """
+    Transpile a Qiskit QuantumCircuit to ASIC basis gates (H, X, Z, Rx, CX).
+    Enables decomposition of T, S, Rz, Ry, U2, U3, etc. when decompose_to_asic=True.
+    """
+    from qiskit import transpile
+    return transpile(circuit, basis_gates=_ASIC_BASIS_GATES, optimization_level=1)
+
+
+def _qasm3_to_ops_via_qiskit(qasm_text: str, *, decompose_to_asic: bool = False) -> list[Op]:
+    """
+    Parse OpenQASM 3.0 source via qiskit.qasm3.loads and convert to ASIC Op list.
+    Requires qiskit-qasm3-import. If decompose_to_asic is True, transpiles to H, X, Z, Rx, CX first.
+    """
+    try:
+        from qiskit.qasm3 import loads as qasm3_loads
+    except ImportError as e:
+        raise QasmParseError(
+            "OpenQASM 3.0 parsing requires qiskit-qasm3-import. "
+            "Install with: pip install qiskit-qasm3-import"
+        ) from e
+    try:
+        circuit = qasm3_loads(qasm_text)
+        if decompose_to_asic:
+            circuit = _transpile_to_asic_basis(circuit)
+        return _quantum_circuit_to_ops(circuit)
+    except ValueError as e:
+        raise QasmParseError(str(e)) from e
+
+
+def _qasm3_to_ops_from_path(path: str, *, decompose_to_asic: bool = False) -> list[Op]:
+    """Load OpenQASM 3.0 from file path via qiskit.qasm3.load. Optional decomposition to ASIC basis."""
+    try:
+        from qiskit.qasm3 import load as qasm3_load
+    except ImportError as e:
+        raise QasmParseError(
+            "OpenQASM 3.0 parsing requires qiskit-qasm3-import. "
+            "Install with: pip install qiskit-qasm3-import"
+        ) from e
+    try:
+        circuit = qasm3_load(path)
+        if decompose_to_asic:
+            circuit = _transpile_to_asic_basis(circuit)
+        return _quantum_circuit_to_ops(circuit)
+    except ValueError as e:
+        raise QasmParseError(str(e)) from e
+
+
+def load_qasm(path: str, *, decompose_to_asic: bool = False) -> list[Op]:
     """
     Load .qasm file and return list of Op compatible with asic.circuit.
-    If qiskit.qasm2 is available, uses it; else uses a simple regex parser for OpenQASM 2.
+    Version is auto-detected: OPENQASM 3.0 uses qiskit.qasm3.load (requires qiskit-qasm3-import);
+    OPENQASM 2.0 uses qiskit.qasm2 if available, else the built-in regex parser.
+    When decompose_to_asic is True (and Qiskit is used), T, S, Rz, U3, etc. are decomposed to H, X, Z, Rx, CNOT.
     """
+    text = Path(path).read_text(encoding="utf-8")
+    version = _detect_qasm_version(text)
+    if version == "3.0":
+        return _qasm3_to_ops_from_path(path, decompose_to_asic=decompose_to_asic)
     try:
         from qiskit.qasm2 import load
         circuit = load(path)
+        if decompose_to_asic:
+            circuit = _transpile_to_asic_basis(circuit)
         return _quantum_circuit_to_ops(circuit)
     except ImportError:
         pass
     except Exception:
         pass
-    text = Path(path).read_text(encoding="utf-8")
     lines = [line for line in text.splitlines() if not line.strip().startswith("include")]
     return _qasm2_to_ops("\n".join(lines))
 
@@ -131,8 +220,15 @@ def _quantum_circuit_to_ops(circuit: Any) -> list[Op]:
     return ops
 
 
-def load_qasm_string(qasm_text: str) -> list[Op]:
-    """Load from string (OpenQASM 2 style, no include). Raises QasmParseError with line number on parse error."""
+def load_qasm_string(qasm_text: str, *, decompose_to_asic: bool = False) -> list[Op]:
+    """
+    Load from string. Version is auto-detected (OPENQASM 2.0 vs 3.0).
+    OpenQASM 3.0 requires qiskit-qasm3-import. When decompose_to_asic is True (3.0 only),
+    gates like T, S, Rz, U3 are decomposed to H, X, Z, Rx, CNOT. Raises QasmParseError on parse error.
+    """
+    version = _detect_qasm_version(qasm_text)
+    if version == "3.0":
+        return _qasm3_to_ops_via_qiskit(qasm_text, decompose_to_asic=decompose_to_asic)
     return _qasm2_to_ops(qasm_text)
 
 
@@ -156,13 +252,13 @@ def interaction_graph_from_ops(ops: list[Op], gate_set: GateSet | None = None) -
     return G
 
 
-def interaction_graph_from_qasm_string(qasm_text: str) -> nx.Graph:
-    """Parse QASM string to ops, then build interaction graph."""
-    ops = load_qasm_string(qasm_text)
+def interaction_graph_from_qasm_string(qasm_text: str, *, decompose_to_asic: bool = False) -> nx.Graph:
+    """Parse QASM string to ops, then build interaction graph. Optional decompose_to_asic for 3.0."""
+    ops = load_qasm_string(qasm_text, decompose_to_asic=decompose_to_asic)
     return interaction_graph_from_ops(ops)
 
 
-def interaction_graph_from_qasm_path(path: str) -> nx.Graph:
-    """Load QASM file to ops, then build interaction graph."""
-    ops = load_qasm(path)
+def interaction_graph_from_qasm_path(path: str, *, decompose_to_asic: bool = False) -> nx.Graph:
+    """Load QASM file to ops, then build interaction graph. Optional decompose_to_asic when using Qiskit."""
+    ops = load_qasm(path, decompose_to_asic=decompose_to_asic)
     return interaction_graph_from_ops(ops)

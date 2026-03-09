@@ -1,8 +1,12 @@
 """Tests for asic.circuit (validate_circuit, protocol_*_ops) and asic.executor (run_asic_circuit)."""
 from __future__ import annotations
 
+import importlib.util
+
 import numpy as np
 import pytest
+
+HAVE_QASM3 = importlib.util.find_spec("qiskit.qasm3") is not None
 
 from src.core_compute.state import State, product_state
 from src.core_compute.asic.circuit import (
@@ -57,6 +61,57 @@ def test_qasm_loader_string():
     assert ops[1].gate == "X" and ops[1].targets == [1]
     assert ops[2].gate == "CNOT" and ops[2].targets == [0, 1]
     assert ops[3].gate == "Z" and ops[3].targets == [0]
+
+
+def test_detect_qasm_version():
+    """Version detection: OPENQASM 2.0 vs 3.0 from first declaration."""
+    from src.core_compute.asic.qasm_loader import _detect_qasm_version, QasmParseError
+    assert _detect_qasm_version("OPENQASM 2.0;\ninclude \"qelib1.inc\";") == "2.0"
+    assert _detect_qasm_version("OPENQASM 3.0;\ninclude \"stdgates.inc\";") == "3.0"
+    assert _detect_qasm_version("  OPENQASM 3.0;") == "3.0"
+    assert _detect_qasm_version("// comment\nOPENQASM 2.0;") == "2.0"
+    assert _detect_qasm_version("h q[0];") == "2.0"
+    with pytest.raises(QasmParseError, match="Unsupported OPENQASM version"):
+        _detect_qasm_version("OPENQASM 1.0;")
+
+
+@pytest.mark.skipif(not HAVE_QASM3, reason="qiskit-qasm3-import not installed")
+def test_qasm_loader_string_openqasm3():
+    """OpenQASM 3.0: parse string to Op list when qiskit.qasm3 is available."""
+    from src.core_compute.asic.qasm_loader import load_qasm_string, interaction_graph_from_qasm_string
+    qasm3 = """OPENQASM 3.0;
+include "stdgates.inc";
+qubit[3] q;
+h q[0];
+x q[1];
+cx q[0], q[1];
+z q[0];
+"""
+    ops = load_qasm_string(qasm3)
+    assert len(ops) == 4
+    assert ops[0].gate == "H" and ops[0].targets == [0]
+    assert ops[2].gate == "CNOT" and ops[2].targets == [0, 1]
+    G = interaction_graph_from_qasm_string(qasm3)
+    assert G.number_of_nodes() >= 2
+    assert G.has_edge(0, 1)
+
+
+@pytest.mark.skipif(not HAVE_QASM3, reason="qiskit-qasm3-import not installed")
+def test_qasm_loader_decompose_to_asic():
+    """Optional decomposition: Rz/T/S/U3 etc. decomposed to H, X, Z, Rx, CNOT."""
+    from src.core_compute.asic.qasm_loader import load_qasm_string
+    # Rz is not in ASIC set; with decompose_to_asic=True it should be transpiled to basis
+    qasm3_with_rz = """OPENQASM 3.0;
+include "stdgates.inc";
+qubit[2] q;
+h q[0];
+rz(0.5) q[0];
+cx q[0], q[1];
+"""
+    ops = load_qasm_string(qasm3_with_rz, decompose_to_asic=True)
+    assert len(ops) >= 2
+    gates_used = {op.gate for op in ops}
+    assert gates_used <= {"H", "X", "Z", "Rx", "CNOT"}
 
 
 def test_run_asic_circuit_teleport():
