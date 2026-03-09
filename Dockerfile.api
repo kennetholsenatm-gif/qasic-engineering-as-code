@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # QASIC Engineering-as-Code: Control plane (slim API image).
 # FastAPI + uvicorn + Celery client only; no Qiskit/PyTorch/engineering in this image.
 # Heavy compute runs in workers; see Dockerfile.worker for the data-plane image.
@@ -15,8 +16,9 @@ COPY storage/ storage/
 COPY dashboard/ dashboard/
 COPY apps/ apps/
 
-# Install only app extras (FastAPI, uvicorn, Celery client, Redis). No engineering stack.
-RUN pip install --no-cache-dir .[app]
+# Use BuildKit cache mount so pip reuses downloaded wheels across builds (no full re-download on every code change).
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install .[app]
 
 # Run as unprivileged user (DevSecOps: no root in container)
 RUN adduser --disabled-password --gecos "" appuser && chown -R appuser:appuser /app
