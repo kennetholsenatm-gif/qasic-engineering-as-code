@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { Link } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { Loader2, Terminal, CheckCircle, AlertCircle, Square, Trash2, FileUp } from 'lucide-react'
+import { Loader2, Terminal, CheckCircle, AlertCircle, Square, Trash2, FileUp, Download, ExternalLink } from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
 import Editor from '@monaco-editor/react'
 import PipelineDag from '../components/PipelineDag'
@@ -24,6 +25,14 @@ function fetchProjects(apiBase) {
   })
 }
 
+function fetchCapabilities(apiBase) {
+  return fetch(`${apiBase}/api/capabilities`).then(async (r) => {
+    if (!r.ok) return { openqasm_3_available: true }
+    const d = await r.json()
+    return d
+  })
+}
+
 export default function RunPipeline({ apiBase }) {
   const [backend, setBackend] = useState('sim')
   const [fast, setFast] = useState(false)
@@ -38,6 +47,12 @@ export default function RunPipeline({ apiBase }) {
   const [qasmString, setQasmString] = useState('')
   const [circuitName, setCircuitName] = useState('')
   const [fullPipelineWithCircuit, setFullPipelineWithCircuit] = useState(false)
+  const [heac, setHeac] = useState(false)
+  const [routingMethod, setRoutingMethod] = useState('qaoa')
+  const [decomposeToAsic, setDecomposeToAsic] = useState(false)
+  const [runMode, setRunMode] = useState(null) // 'async' | 'sync' when known
+  const [gdsDownloading, setGdsDownloading] = useState(false)
+  const [gdsError, setGdsError] = useState(null)
   const fileInputRef = useRef(null)
   const [validationResult, setValidationResult] = useState(null) // { valid, error?, line? }
   const [nodeStatuses, setNodeStatuses] = useState({}) // { [stepId]: 'pending' | 'running' | 'success' | 'failed' }
@@ -46,6 +61,13 @@ export default function RunPipeline({ apiBase }) {
   const monacoRef = useRef(null)
   const validationTimeoutRef = useRef(null)
   const hasSuggestedCircuitDrivenRef = useRef(false)
+
+  const { data: capabilitiesData } = useQuery({
+    queryKey: ['capabilities', apiBase],
+    queryFn: () => fetchCapabilities(apiBase),
+    staleTime: 60_000,
+  })
+  const openqasm3Available = capabilitiesData?.openqasm_3_available !== false
 
   const { data: projectsData } = useQuery({
     queryKey: ['projects', apiBase],
@@ -62,7 +84,8 @@ export default function RunPipeline({ apiBase }) {
         body: JSON.stringify(body),
       })
       const asyncData = await asyncRes.json().catch(() => ({}))
-      if (asyncRes.ok && asyncData.task_id) return { taskId: asyncData.task_id }
+      if (asyncRes.ok && asyncData.task_id) return { taskId: asyncData.task_id, runMode: 'async' }
+      if (asyncRes.status === 503) setRunMode('sync')
       const syncRes = await fetch(`${apiBase}/api/run/pipeline`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -70,10 +93,11 @@ export default function RunPipeline({ apiBase }) {
       })
       const syncData = await syncRes.json().catch(() => ({}))
       if (!syncRes.ok) throw new Error(syncData.detail || syncRes.statusText)
-      return { result: syncData }
+      return { result: syncData, runMode: 'sync' }
     },
     onSuccess: (data) => {
       setError(null)
+      if (data.runMode) setRunMode(data.runMode)
       if (data.taskId) {
         setTaskId(data.taskId)
         setLogLines([])
@@ -181,7 +205,7 @@ export default function RunPipeline({ apiBase }) {
       fetch(`${apiBase}/api/validate_qasm`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ qasm_string: s }),
+        body: JSON.stringify({ qasm_string: s, decompose_to_asic: decomposeToAsic }),
       })
         .then((r) => r.json())
         .then((data) => setValidationResult(data))
@@ -190,7 +214,7 @@ export default function RunPipeline({ apiBase }) {
     return () => {
       if (validationTimeoutRef.current) clearTimeout(validationTimeoutRef.current)
     }
-  }, [qasmString, apiBase])
+  }, [qasmString, apiBase, decomposeToAsic])
 
   const decorationIdsRef = useRef([])
   // Monaco decorations for error line
@@ -273,20 +297,16 @@ export default function RunPipeline({ apiBase }) {
     setResult(null)
     setError(null)
     setTaskId(null)
+    setRunMode(null)
+    const base = { backend, fast, project_id: projectId || undefined, heac, routing_method: routingMethod, decompose_to_asic: decomposeToAsic }
     const body = qasmString.trim()
       ? {
+          ...base,
           qasm_string: qasmString.trim(),
           circuit_name: circuitName.trim() || undefined,
           full_pipeline_with_circuit: fullPipelineWithCircuit,
-          backend,
-          fast,
-          project_id: projectId || undefined,
         }
-      : {
-          backend,
-          fast,
-          project_id: projectId || undefined,
-        }
+      : base
     submitMutation.mutate(body)
   }
 
@@ -321,12 +341,45 @@ export default function RunPipeline({ apiBase }) {
   const [dagTab, setDagTab] = useState('pipeline') // 'pipeline' | 'topology'
   const isQasmValid = validationResult?.valid === true
 
+  const resultSuccess = result && result.success !== false && !result.error
+
+  async function handleDownloadGds() {
+    setGdsError(null)
+    setGdsDownloading(true)
+    try {
+      const url = apiBase ? `${apiBase.replace(/\/$/, '')}/api/results/gds` : '/api/results/gds'
+      const r = await fetch(url)
+      if (!r.ok) {
+        if (r.status === 404) setGdsError('No GDS yet. Enable HEaC and run the full pipeline to generate GDS.')
+        else setGdsError(r.statusText || 'Download failed')
+        return
+      }
+      const blob = await r.blob()
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = 'pipeline.gds'
+      a.click()
+      URL.revokeObjectURL(a.href)
+    } catch (e) {
+      setGdsError(e.message || 'Download failed')
+    } finally {
+      setGdsDownloading(false)
+    }
+  }
+
+  const showOpenQasm3Banner = !openqasm3Available && (qasmString.trim().toUpperCase().startsWith('OPENQASM 3.0') || qasmString.trim().toUpperCase().startsWith('OPENQASM 3.0;'))
+
   return (
     <>
       <h1 className="text-2xl font-semibold text-slate-100">Run full pipeline</h1>
       <p className="mt-1 text-sm text-slate-500">
         Pipeline runs on a Celery worker when available (routing + inverse); otherwise runs in the API.
       </p>
+      {showOpenQasm3Banner && (
+        <div className="mt-3 rounded-lg border border-amber-600/60 bg-amber-950/30 px-4 py-3 text-sm text-amber-200" role="alert">
+          OpenQASM 3.0 parsing requires the backend dependency <code className="rounded bg-amber-900/50 px-1 py-0.5 font-mono text-xs">qiskit-qasm3-import</code>. If validation fails, ask your administrator to install it (e.g. <code className="rounded bg-amber-900/50 px-1 py-0.5 font-mono text-xs">pip install qiskit-qasm3-import</code>).
+        </div>
+      )}
 
       <section className="mt-6">
         <div className="mb-2 flex items-center gap-2">
@@ -350,14 +403,22 @@ export default function RunPipeline({ apiBase }) {
         </div>
         {dagTab === 'pipeline' && <PipelineDag apiBase={apiBase} activeStep={activeStep} nodeStatuses={nodeStatuses} />}
         {dagTab === 'topology' && (
-          <CircuitTopologyDag apiBase={apiBase} qasmString={qasmString} isValid={isQasmValid} />
+          <CircuitTopologyDag apiBase={apiBase} qasmString={qasmString} isValid={isQasmValid} decomposeToAsic={decomposeToAsic} />
         )}
       </section>
 
       <section className="mt-6">
         <h2 className="mb-2 text-sm font-medium text-slate-400">Quantum circuit (optional)</h2>
-        <p className="mb-2 text-xs text-slate-500">
+        <p className="mb-1 text-xs text-slate-500">
           Paste OpenQASM 2 or 3 (or drop a .qasm file) to run the Algorithm-to-ASIC pipeline. Leave empty to run the default pipeline only.
+        </p>
+        <p className="mb-2 text-xs text-slate-500">
+          Version is detected from the first line (e.g. <code className="rounded bg-slate-700 px-1 py-0.5 text-slate-300">OPENQASM 3.0;</code>). Max 100,000 characters.
+          {qasmString.length > 80_000 && (
+            <span className="ml-1 text-amber-400">
+              ({qasmString.length.toLocaleString()} characters{qasmString.length > 100_000 ? ' — over limit' : ''})
+            </span>
+          )}
         </p>
         <div className="space-y-2">
           <div
@@ -431,6 +492,25 @@ export default function RunPipeline({ apiBase }) {
               {validationResult.line != null && ` (line ${validationResult.line})`}
             </p>
           )}
+          {validationResult && !validationResult.valid && (
+            <p className="text-xs text-slate-400">
+              Allowed gates: H, X, Z, Rx, CNOT. Other gates may require decomposition (see docs).
+            </p>
+          )}
+          {qasmString.trim() && (
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="decompose-to-asic"
+                checked={decomposeToAsic}
+                onChange={(e) => setDecomposeToAsic(e.target.checked)}
+                className="h-4 w-4 rounded border-slate-600 bg-slate-800 text-sky-500 focus:ring-sky-500"
+              />
+              <label htmlFor="decompose-to-asic" className="text-sm text-slate-300">
+                Decompose unsupported gates to ASIC basis (T, S, Rz, U3 → H, X, Z, Rx, CNOT)
+              </label>
+            </div>
+          )}
         </div>
       </section>
 
@@ -454,26 +534,58 @@ export default function RunPipeline({ apiBase }) {
             </p>
           </div>
         )}
-        {projects.length > 0 && (
-          <div>
-            <label htmlFor="project" className="mb-1.5 block text-sm font-medium text-slate-300">
-              Project (optional)
-            </label>
-            <select
-              id="project"
-              value={projectId ?? ''}
-              onChange={(e) => setProjectId(e.target.value ? Number(e.target.value) : null)}
-              className="w-full max-w-xs rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-slate-100 shadow-sm focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
-            >
-              <option value="">— None —</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
+        {(fullPipelineWithCircuit || !qasmString.trim()) && (
+          <div className="rounded-xl border border-slate-600 bg-slate-800/40 px-4 py-3">
+            <h3 className="text-sm font-medium text-slate-300 mb-3">Pipeline options</h3>
+            <div className="flex flex-wrap items-center gap-6">
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="heac"
+                  checked={heac}
+                  onChange={(e) => setHeac(e.target.checked)}
+                  className="h-4 w-4 rounded border-slate-600 bg-slate-800 text-sky-500 focus:ring-sky-500"
+                />
+                <label htmlFor="heac" className="text-sm text-slate-200">
+                  Enable HEaC (GDS output)
+                </label>
+              </div>
+              <div className="flex items-center gap-2">
+                <label htmlFor="routing-method" className="text-sm text-slate-400">Routing method</label>
+                <select
+                  id="routing-method"
+                  value={routingMethod}
+                  onChange={(e) => setRoutingMethod(e.target.value)}
+                  className="rounded-lg border border-slate-600 bg-slate-800 px-3 py-1.5 text-sm text-slate-100 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                >
+                  <option value="qaoa">QAOA</option>
+                  <option value="rl">RL</option>
+                </select>
+              </div>
+            </div>
           </div>
         )}
+        <div>
+          <div className="mb-1.5 flex items-center gap-2">
+            <label htmlFor="project" className="text-sm font-medium text-slate-300">
+              Project (optional)
+            </label>
+            <Link to="/projects" className="text-xs text-sky-400 hover:underline">Create project</Link>
+          </div>
+          <select
+            id="project"
+            value={projectId ?? ''}
+            onChange={(e) => setProjectId(e.target.value ? Number(e.target.value) : null)}
+            className="w-full max-w-xs rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-slate-100 shadow-sm focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+          >
+            <option value="">— None —</option>
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </div>
         <div>
           <label htmlFor="backend" className="mb-1.5 block text-sm font-medium text-slate-300">
             Backend
@@ -528,6 +640,14 @@ export default function RunPipeline({ apiBase }) {
           )}
         </div>
         {cancelTaskMutation.isError && <p className="text-sm text-red-400">{cancelTaskMutation.error.message}</p>}
+        {runMode === 'sync' && loading && (
+          <div className="rounded-lg border border-amber-600/50 bg-amber-950/20 px-4 py-2 text-sm text-amber-200" role="status">
+            Running in API (no worker). This may take a while and cannot be cancelled.
+          </div>
+        )}
+        {loading && !taskId && (
+          <p className="text-sm text-slate-400">Running in API…</p>
+        )}
       </form>
 
       {taskId && (logLines.length > 0 || !taskData?.result) && (
@@ -567,6 +687,27 @@ export default function RunPipeline({ apiBase }) {
           <pre className="mt-2 overflow-auto rounded-lg bg-slate-900/80 p-4 text-sm text-slate-300">
             {JSON.stringify(result, null, 2)}
           </pre>
+          {resultSuccess && (
+            <div className="mt-4 flex flex-wrap items-center gap-4">
+              <button
+                type="button"
+                onClick={handleDownloadGds}
+                disabled={gdsDownloading}
+                className="inline-flex items-center gap-2 rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-slate-200 hover:bg-slate-600 disabled:opacity-60"
+              >
+                {gdsDownloading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                {gdsDownloading ? 'Downloading…' : 'Download GDS'}
+              </button>
+              <Link
+                to={projectId ? `/results?project_id=${projectId}` : '/results'}
+                className="inline-flex items-center gap-2 text-sm text-sky-400 hover:underline"
+              >
+                <ExternalLink className="h-4 w-4" />
+                View last results
+              </Link>
+              {gdsError && <span className="text-sm text-amber-400">{gdsError}</span>}
+            </div>
+          )}
         </section>
       )}
     </>

@@ -139,7 +139,7 @@ def _circuit_to_asic_result_serializable(raw: dict) -> dict:
 
 
 @app.task(bind=True, name="qasic.circuit_to_asic")
-def circuit_to_asic_task(self, qasm_string: str, circuit_name: str | None = None, output_subdir: str | None = None):
+def circuit_to_asic_task(self, qasm_string: str, circuit_name: str | None = None, output_subdir: str | None = None, decompose_to_asic: bool = False):
     """Run qasm_to_asic (Algorithm-to-ASIC) on QASM string. Returns serializable result for API."""
     task_id = self.request.id if getattr(self.request, "id", None) else None
     _publish_progress(task_id, "Starting circuit-to-ASIC", step="circuit_to_asic", done=False)
@@ -155,6 +155,7 @@ def circuit_to_asic_task(self, qasm_string: str, circuit_name: str | None = None
             qasm_string=qasm_string,
             output_dir=output_dir,
             circuit_name=circuit_name or "circuit",
+            decompose_to_asic=decompose_to_asic,
         )
         _publish_progress(task_id, "Circuit-to-ASIC completed", step="circuit_to_asic", done=True)
         return {"success": True, "circuit_to_asic": _circuit_to_asic_result_serializable(raw)}
@@ -213,6 +214,7 @@ def run_pipeline_with_circuit_task(
     heac: bool = False,
     hardware: bool = False,
     run_id: int | None = None,
+    decompose_to_asic: bool = False,
 ):
     """Run qasm_to_asic then routing (circuit-derived) then run_pipeline.py --skip-routing (inverse + optional HEaC). Loads credentials from vault into env. If run_id is set, updates DAG run status on completion."""
     task_id = self.request.id if getattr(self.request, "id", None) else None
@@ -237,6 +239,7 @@ def run_pipeline_with_circuit_task(
             qasm_string=qasm_string,
             output_dir=output_dir,
             circuit_name=circuit_name,
+            decompose_to_asic=decompose_to_asic,
         )
     except Exception as e:
         _publish_progress(task_id, str(e), step="pipeline", done=True)

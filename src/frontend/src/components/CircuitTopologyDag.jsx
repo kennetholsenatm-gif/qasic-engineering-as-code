@@ -59,22 +59,22 @@ function getLayoutedElements(apiNodes, apiEdges, direction = 'LR') {
   })
 }
 
-function fetchTopology(apiBase, qasmString) {
+function fetchTopology(apiBase, qasmString, decomposeToAsic = false) {
   return fetch(`${apiBase}/api/circuit/topology`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ qasm_string: qasmString }),
+    body: JSON.stringify({ qasm_string: qasmString, decompose_to_asic: decomposeToAsic }),
   }).then((r) => {
     if (!r.ok) return r.json().then((d) => Promise.reject(new Error(d.detail || r.statusText)))
     return r.json()
   })
 }
 
-export default function CircuitTopologyDag({ apiBase, qasmString, isValid = false, className = '' }) {
+export default function CircuitTopologyDag({ apiBase, qasmString, isValid = false, decomposeToAsic = false, className = '' }) {
   const trimmed = (qasmString || '').trim()
   const { data, error, isLoading, isFetching } = useQuery({
-    queryKey: ['circuit-topology', apiBase, trimmed],
-    queryFn: () => fetchTopology(apiBase, trimmed),
+    queryKey: ['circuit-topology', apiBase, trimmed, decomposeToAsic],
+    queryFn: () => fetchTopology(apiBase, trimmed, decomposeToAsic),
     enabled: !!trimmed && !!isValid,
   })
 
@@ -109,7 +109,7 @@ export default function CircuitTopologyDag({ apiBase, qasmString, isValid = fals
   if (!isValid) {
     return (
       <div className={`rounded-xl border border-slate-700 bg-slate-800/90 backdrop-blur-sm p-6 text-slate-400 ${className}`}>
-        Enter valid OpenQASM to see circuit topology.
+        Fix validation errors above to see the circuit topology.
       </div>
     )
   }

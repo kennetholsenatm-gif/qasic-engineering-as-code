@@ -29,11 +29,13 @@ def run_qasm_to_asic(
     output_dir: str | None = None,
     circuit_name: str | None = None,
     pitch_um: float = 1.0,
+    decompose_to_asic: bool = False,
 ) -> dict[str, Any]:
     """
     Run the full pipeline: QASM -> interaction graph -> Topology + geometry manifest
     -> superconducting extraction -> custom ASIC manifest.
     Either qasm_path or qasm_string must be provided.
+    When decompose_to_asic is True, unsupported gates (T, S, Rz, U3, etc.) are transpiled to H, X, Z, Rx, CNOT.
     Returns the extraction result dict (nodes, edges, jj, gamma1, gamma2, L_kinetic_nH, etc.).
     Output file format matches what downstream thermodynamic/FEA simulations expect.
     """
@@ -48,11 +50,11 @@ def run_qasm_to_asic(
     out_path = Path(output_dir)
 
     if qasm_path is not None:
-        graph = interaction_graph_from_qasm_path(qasm_path)
+        graph = interaction_graph_from_qasm_path(qasm_path, decompose_to_asic=decompose_to_asic)
         if circuit_name is None:
             circuit_name = Path(qasm_path).stem or "circuit"
     else:
-        graph = interaction_graph_from_qasm_string(qasm_string)
+        graph = interaction_graph_from_qasm_string(qasm_string, decompose_to_asic=decompose_to_asic)
         if circuit_name is None:
             circuit_name = "circuit"
 

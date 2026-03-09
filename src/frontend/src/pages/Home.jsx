@@ -95,6 +95,11 @@ export default function Home({ apiBase = '' }) {
       <p className="mt-1 text-slate-400">
         Run protocols, routing, pipeline, and inverse design from the cards below.
       </p>
+      <div className="mt-4 rounded-xl border border-sky-500/40 bg-sky-950/30 px-4 py-3 text-sm text-slate-200">
+        <strong>Converting OpenQASM to a Quantum ASIC?</strong> Paste your circuit on{' '}
+        <Link to="/run/pipeline" className="text-sky-400 font-medium hover:underline">Run full pipeline</Link>
+        {' '}and click Run.
+      </div>
       <section className="mt-8">
         <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-500">
           Actions

@@ -138,10 +138,13 @@ class RunPipelineRequest(BaseModel):
     circuit_name: str | None = None
     # Phase 2: when True and qasm_string is set, run full pipeline with circuit-derived routing
     full_pipeline_with_circuit: bool = False
+    # Transpile unsupported gates (T, S, Rz, U3, etc.) to ASIC basis (H, X, Z, Rx, CNOT)
+    decompose_to_asic: bool = False
 
 
 class ValidateQasmRequest(BaseModel):
     qasm_string: str = ""
+    decompose_to_asic: bool = False
 
 
 class RunInverseRequest(BaseModel):
@@ -355,6 +358,7 @@ class RunDagRequest(BaseModel):
     qasm_string: str | None = None
     circuit_name: str | None = None
     run_mode: Literal["dag", "circuit_pipeline"] = "dag"
+    decompose_to_asic: bool = False
 
 
 # --- Settings: credentials vault (no raw secrets in response) ---
@@ -516,7 +520,7 @@ def run_dag_api(request: Request, dag_id: int, body: RunDagRequest | None = Body
         circuit_name = (req.circuit_name or "circuit").strip() or "circuit"
 
         if run_mode == "circuit_pipeline" and qasm_string:
-            _validate_qasm_string(qasm_string)
+            _validate_qasm_string(qasm_string, decompose_to_asic=req.decompose_to_asic)
             if not _celery_available():
                 raise HTTPException(status_code=503, detail="Celery/Redis required for circuit-driven pipeline (set CELERY_BROKER_URL).")
             run_id = create_dag_run(dag_id=dag_id, status="pending", nodes_snapshot=[], edges_snapshot=[])
@@ -533,6 +537,7 @@ def run_dag_api(request: Request, dag_id: int, body: RunDagRequest | None = Body
                 heac=False,
                 hardware=False,
                 run_id=run_id,
+                decompose_to_asic=req.decompose_to_asic,
             )
             update_dag_run(run_id, celery_task_id=task.id)
             return {"run_id": run_id, "task_id": task.id, "status": "pending", "message": "Circuit-driven pipeline enqueued."}
@@ -604,11 +609,17 @@ def validate_qasm_api(body: ValidateQasmRequest = Body(...)):
         }
     try:
         from src.core_compute.asic.qasm_loader import interaction_graph_from_qasm_string
-        interaction_graph_from_qasm_string(qasm_string)
+        interaction_graph_from_qasm_string(qasm_string, decompose_to_asic=body.decompose_to_asic)
         return {"valid": True}
     except Exception as e:
         line = getattr(e, "line", None)
-        msg = str(e) if os.environ.get("QASIC_DEBUG", "").strip().lower() in ("1", "true", "yes") else "Invalid QASM: parse or gate error"
+        try:
+            from src.core_compute.asic.qasm_loader import QasmParseError
+            actionable = isinstance(e, QasmParseError) or "qiskit-qasm3-import" in str(e)
+        except ImportError:
+            actionable = "qiskit-qasm3-import" in str(e)
+        debug = os.environ.get("QASIC_DEBUG", "").strip().lower() in ("1", "true", "yes")
+        msg = str(e) if (actionable or debug) else "Invalid QASM: parse or gate error"
         if log:
             log.exception("QASM validation failed: %s", e)
         return {"valid": False, "error": msg, "line": line}
@@ -627,7 +638,7 @@ def circuit_topology_api(body: ValidateQasmRequest = Body(...)):
         )
     try:
         from src.core_compute.asic.qasm_loader import interaction_graph_from_qasm_string
-        G = interaction_graph_from_qasm_string(qasm_string)
+        G = interaction_graph_from_qasm_string(qasm_string, decompose_to_asic=body.decompose_to_asic)
     except Exception as e:
         line = getattr(e, "line", None)
         msg = _sanitize_detail(e, "Invalid QASM: parse or gate error")
@@ -1022,7 +1033,7 @@ def _celery_available() -> bool:
         return False
 
 
-def _validate_qasm_string(qasm_string: str) -> None:
+def _validate_qasm_string(qasm_string: str, *, decompose_to_asic: bool = False) -> None:
     """Raise HTTPException if qasm_string is invalid (length or parse)."""
     if len(qasm_string) > QASM_STRING_MAX_LENGTH:
         raise HTTPException(
@@ -1031,12 +1042,12 @@ def _validate_qasm_string(qasm_string: str) -> None:
         )
     try:
         from src.core_compute.asic.qasm_loader import interaction_graph_from_qasm_string
-        interaction_graph_from_qasm_string(qasm_string)
+        interaction_graph_from_qasm_string(qasm_string, decompose_to_asic=decompose_to_asic)
     except Exception as e:
         raise HTTPException(status_code=400, detail=_sanitize_detail(e, "Invalid QASM: parse failed"))
 
 
-def _run_circuit_to_asic_sync(qasm_string: str, circuit_name: str | None) -> dict:
+def _run_circuit_to_asic_sync(qasm_string: str, circuit_name: str | None, *, decompose_to_asic: bool = False) -> dict:
     """Run run_qasm_to_asic in process and return JSON-serializable result."""
     from src.backend.tasks import _circuit_to_asic_result_serializable
     from src.core_compute.engineering.qasm_to_asic_pipeline import run_qasm_to_asic
@@ -1045,6 +1056,7 @@ def _run_circuit_to_asic_sync(qasm_string: str, circuit_name: str | None) -> dic
             qasm_string=qasm_string,
             output_dir=tmp,
             circuit_name=circuit_name or "circuit",
+            decompose_to_asic=decompose_to_asic,
         )
         return {"success": True, "circuit_to_asic": _circuit_to_asic_result_serializable(raw)}
 
@@ -1058,6 +1070,7 @@ def _run_pipeline_with_circuit_sync(req: RunPipelineRequest) -> dict:
             qasm_string=req.qasm_string,
             output_dir=tmp,
             circuit_name=req.circuit_name or "circuit",
+            decompose_to_asic=req.decompose_to_asic,
         )
     graph = raw.get("_interaction_graph")
     if graph is None or graph.number_of_nodes() == 0:
@@ -1101,7 +1114,7 @@ def run_pipeline_async(request: Request, req: RunPipelineRequest):
     if not _celery_available():
         raise HTTPException(status_code=503, detail="Celery/Redis not configured (set CELERY_BROKER_URL)")
     if req.qasm_string:
-        _validate_qasm_string(req.qasm_string)
+        _validate_qasm_string(req.qasm_string, decompose_to_asic=req.decompose_to_asic)
         from src.backend.tasks import circuit_to_asic_task, run_pipeline_with_circuit_task
         if req.full_pipeline_with_circuit:
             task = run_pipeline_with_circuit_task.delay(
@@ -1113,11 +1126,13 @@ def run_pipeline_async(request: Request, req: RunPipelineRequest):
                 model=req.model or "mlp",
                 heac=req.heac,
                 hardware=req.backend.lower() == "hardware",
+                decompose_to_asic=req.decompose_to_asic,
             )
             return {"task_id": task.id, "status": "PENDING", "message": "Pipeline with circuit enqueued"}
         task = circuit_to_asic_task.delay(
             qasm_string=req.qasm_string,
             circuit_name=req.circuit_name,
+            decompose_to_asic=req.decompose_to_asic,
         )
         return {"task_id": task.id, "status": "PENDING", "message": "Circuit-to-ASIC task enqueued"}
     if log:
@@ -1183,13 +1198,13 @@ def cancel_task_api(task_id: str):
 def run_pipeline(request: Request, req: RunPipelineRequest):
     """Run full pipeline: routing then inverse design. Optional: routing_method, model, heac. When qasm_string is provided, runs circuit-to-ASIC (Phase 1) or full pipeline with circuit (Phase 2). Use /async when Celery available."""
     if req.qasm_string:
-        _validate_qasm_string(req.qasm_string)
+        _validate_qasm_string(req.qasm_string, decompose_to_asic=req.decompose_to_asic)
         if _celery_available() and os.environ.get("FORCE_ASYNC_HEAVY", "").strip().lower() in ("1", "true", "yes"):
             raise HTTPException(status_code=400, detail="Use POST /api/run/pipeline/async for circuit/pipeline runs (Celery worker required).")
         if req.full_pipeline_with_circuit:
             result = _run_pipeline_with_circuit_sync(req)
             return result
-        return _run_circuit_to_asic_sync(req.qasm_string, req.circuit_name)
+        return _run_circuit_to_asic_sync(req.qasm_string, req.circuit_name, decompose_to_asic=req.decompose_to_asic)
     if os.environ.get("FORCE_ASYNC_HEAVY", "").strip().lower() in ("1", "true", "yes") and _celery_available():
         raise HTTPException(status_code=400, detail="Use POST /api/run/pipeline/async for pipeline runs (Celery worker required).")
     run_id = None
@@ -1598,6 +1613,21 @@ def serve_doc(path: str):
     if not full.is_file():
         raise HTTPException(status_code=404, detail="Doc not found")
     return FileResponse(full, media_type="text/markdown")
+
+
+def _openqasm_3_available() -> bool:
+    """True if qiskit.qasm3 (qiskit-qasm3-import) is importable."""
+    try:
+        import qiskit.qasm3  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
+@app.get("/api/capabilities")
+def get_capabilities():
+    """Return backend capabilities for the WUI (e.g. OpenQASM 3.0 support)."""
+    return {"openqasm_3_available": _openqasm_3_available()}
 
 
 @app.get("/health")
