@@ -12,18 +12,14 @@ from typing import Any
 
 
 def load_circuit_ops(spec: str) -> list:
-    """Load circuit ops from 'teleport'|'commitment'|'thief' or path to JSON."""
-    if spec.lower() == "teleport":
-        from src.core_compute.asic.circuit import protocol_teleport_ops
-        return protocol_teleport_ops()
-    if spec.lower() == "commitment":
-        from src.core_compute.asic.circuit import protocol_commitment_ops
-        return protocol_commitment_ops()
-    if spec.lower() == "thief":
-        from src.core_compute.asic.circuit import protocol_thief_ops
-        return protocol_thief_ops()
+    """Load circuit ops from openQASM (.qasm path), or 'teleport'|'commitment'|'thief', or path to JSON.
+    Prefer openQASM so the circuit is always an openQASM derivative."""
     path = Path(spec)
     if path.exists():
+        suf = path.suffix.lower()
+        if suf in (".qasm", ".qasm2", ".qasm3"):
+            from src.core_compute.asic.qasm_loader import load_qasm
+            return load_qasm(str(path), decompose_to_asic=True)
         with open(path, encoding="utf-8") as f:
             data = json.load(f)
         from dataclasses import dataclass
@@ -34,6 +30,15 @@ def load_circuit_ops(spec: str) -> list:
             param: Any = None
         lst = data if isinstance(data, list) else data.get("ops", data.get("circuit", []))
         return [Op(gate=o["gate"], targets=o["targets"], param=o.get("param")) for o in lst]
+    if spec.lower() == "teleport":
+        from src.core_compute.asic.circuit import protocol_teleport_ops
+        return protocol_teleport_ops()
+    if spec.lower() == "commitment":
+        from src.core_compute.asic.circuit import protocol_commitment_ops
+        return protocol_commitment_ops()
+    if spec.lower() == "thief":
+        from src.core_compute.asic.circuit import protocol_thief_ops
+        return protocol_thief_ops()
     raise FileNotFoundError(f"Circuit spec not found: {spec}")
 
 
@@ -51,7 +56,7 @@ def main() -> int:
     parser.add_argument(
         "--circuit", "-c",
         default="teleport",
-        help="Circuit: teleport, commitment, thief, or path to JSON with ops list.",
+        help="Circuit: path to .qasm/.qasm2/.qasm3 (openQASM, preferred), or teleport|commitment|thief, or path to JSON with ops list.",
     )
     parser.add_argument(
         "--config",

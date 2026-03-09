@@ -1,6 +1,12 @@
 """
 ASIC circuit: list of ops (gate + qubits) that can be validated against topology and gate set.
 Protocols are compiled to this op list so we only use the gates and topology the "chip" has.
+
+Production rule: The Algorithm-to-ASIC pipeline and Run Pipeline use only openQASM-derived
+circuits (via qasm_loader.load_qasm_string / load_qasm). The protocol_*_ops() functions below
+are reference/demo implementations for teleportation, commitment, thief, bit-flip code; they
+are not the source of truth for the ASIC. Prefer loading circuits from OpenQASM 2.0/3.0 where
+possible (e.g. pulse compile_cli --qasm, run_protocol from QASM).
 """
 from __future__ import annotations
 
@@ -88,8 +94,10 @@ def validate_circuit(
 
 def protocol_teleport_ops() -> list[Op]:
     """
-    Teleportation circuit compiled to ASIC ops. Qubits: 0=msg, 1=Alice Bell, 2=Bob Bell.
+    Teleportation circuit compiled to ASIC ops (reference/demo only; not used by pipeline).
+    Qubits: 0=msg, 1=Alice Bell, 2=Bob Bell.
     Bell on (1,2): H(1), CNOT(1,2). Then CNOT(0,1), H(0). Corrections X, Z by Bob are classical.
+    For pipeline and ASIC derivation, use openQASM via qasm_loader.
     """
     return [
         Op("H", [1]),
