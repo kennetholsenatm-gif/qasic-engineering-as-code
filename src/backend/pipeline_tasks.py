@@ -40,17 +40,23 @@ def _ensure_npy_path(params: PipelineParams, inverse_json: str | None) -> str | 
 
 
 def task_routing(params: PipelineParams) -> str:
-    """Run routing (QAOA or RL). Returns path to routing_json."""
+    """Run routing (QAOA or RL). Returns path to routing_json. When not skip_routing, num_qubits is required (circuit-driven runs derive it from OpenQASM)."""
     if params.skip_routing:
         if not os.path.isfile(params.routing_json()):
             raise FileNotFoundError(f"Skip-routing requested but {params.routing_json()} not found.")
         return params.routing_json()
+    if params.num_qubits is None or params.num_qubits < 2:
+        raise ValueError(
+            "Number of qubits is required for standalone routing. Set PipelineParams.num_qubits (2 or more), "
+            "or run the pipeline with an OpenQASM circuit so topology and qubit count are derived from the circuit."
+        )
     script_dir = params.script_dir
     routing_json = params.routing_json()
+    n_qubits = params.num_qubits
     if params.routing_method == "rl":
-        cmd = [sys.executable, os.path.join(script_dir, "routing_rl.py"), "-o", routing_json, "--qubits", "3"]
+        cmd = [sys.executable, os.path.join(script_dir, "routing_rl.py"), "-o", routing_json, "--qubits", str(n_qubits)]
     else:
-        cmd = [sys.executable, os.path.join(script_dir, "routing_qubo_qaoa.py"), "-o", routing_json]
+        cmd = [sys.executable, os.path.join(script_dir, "routing_qubo_qaoa.py"), "-o", routing_json, "--qubits", str(n_qubits)]
         if params.hardware:
             cmd.append("--hardware")
         if params.fast:

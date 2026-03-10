@@ -48,10 +48,13 @@ class LocalComputeAdapter(ComputeAdapter):
         if task_type == "routing":
             out_json = work_dir / "routing.json"
             use_rl = (config.get("routing_method") or "qaoa") == "rl"
+            n_qubits = config.get("num_qubits")
+            if n_qubits is None or n_qubits < 2:
+                return {}, "num_qubits is required for routing when no circuit is provided. Use the circuit-driven pipeline (OpenQASM) to derive topology and qubit count from the circuit, or set num_qubits in config (2 or more)."
             if use_rl:
-                cmd = [sys.executable, str(engineering / "routing_rl.py"), "-o", str(out_json), "--qubits", "3"]
+                cmd = [sys.executable, str(engineering / "routing_rl.py"), "-o", str(out_json), "--qubits", str(n_qubits)]
             else:
-                cmd = [sys.executable, str(engineering / "routing_qubo_qaoa.py"), "-o", str(out_json)]
+                cmd = [sys.executable, str(engineering / "routing_qubo_qaoa.py"), "-o", str(out_json), "--qubits", str(n_qubits)]
                 if config.get("fast"):
                     cmd.append("--fast")
             code, _, err = _run_cmd(cmd, cwd=REPO_ROOT, timeout=300)

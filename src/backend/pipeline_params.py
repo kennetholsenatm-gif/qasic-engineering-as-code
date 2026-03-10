@@ -32,6 +32,7 @@ class PipelineParams:
     parasitic: bool = False
     meep_verify: bool = False
     packaging: bool = False
+    num_qubits: Optional[int] = None  # Required for standalone routing (no circuit). Circuit-driven pipeline derives from OpenQASM.
     # Resolved at runtime (repo root, script_dir)
     repo_root: str = ""
     script_dir: str = ""

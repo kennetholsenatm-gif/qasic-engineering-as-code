@@ -744,8 +744,8 @@ def validate_qasm_api(body: ValidateQasmRequest = Body(...)):
         }
     try:
         from src.core_compute.asic.qasm_loader import interaction_graph_from_qasm_string
-        interaction_graph_from_qasm_string(qasm_string, decompose_to_asic=body.decompose_to_asic)
-        return {"valid": True}
+        G = interaction_graph_from_qasm_string(qasm_string, decompose_to_asic=body.decompose_to_asic)
+        return {"valid": True, "qubit_count": G.number_of_nodes(), "edge_count": G.number_of_edges()}
     except ImportError:
         raise HTTPException(
             status_code=503,
@@ -787,7 +787,12 @@ def circuit_topology_api(body: ValidateQasmRequest = Body(...)):
     edges = []
     for i, (u, v) in enumerate(G.edges()):
         edges.append({"id": f"e{u}-{v}", "source": f"q{u}", "target": f"q{v}"})
-    return {"nodes": nodes, "edges": edges}
+    return {
+        "nodes": nodes,
+        "edges": edges,
+        "qubit_count": G.number_of_nodes(),
+        "edge_count": G.number_of_edges(),
+    }
 
 
 @app.get("/api/pipeline/dag")
@@ -1172,11 +1177,16 @@ async def websocket_job_status(websocket: WebSocket, job_id: str):
 @app.post("/api/run/routing")
 @limit_heavy
 def run_routing(request: Request, req: RunRoutingRequest):
-    """Run QUBO routing (QAOA or RL) on sim or IBM hardware."""
+    """Run QUBO routing (QAOA or RL) on sim or IBM hardware. Requires qubits when no circuit is provided."""
     if not _engineering_available():
         raise HTTPException(
             status_code=503,
             detail="Routing requires the engineering (worker) environment. Use control plane with workers or run routing via pipeline task.",
+        )
+    if req.qubits is None or req.qubits < 2:
+        raise HTTPException(
+            status_code=400,
+            detail="qubits is required for standalone routing. Specify the number of qubits (2 or more), or use the Run pipeline page with an OpenQASM circuit so topology and qubit count are derived from the circuit.",
         )
     use_hardware = req.backend == "hardware"
     use_rl = (req.routing_method or "qaoa") == "rl"
@@ -1188,13 +1198,14 @@ def run_routing(request: Request, req: RunRoutingRequest):
                 sys.executable,
                 str(ENGINEERING_DIR / "routing_rl.py"),
                 "-o", out_path,
-                "--qubits", str(req.qubits if req.qubits is not None else 3),
+                "--qubits", str(req.qubits),
             ]
         else:
             cmd = [
                 sys.executable,
                 str(ENGINEERING_DIR / "routing_qubo_qaoa.py"),
                 "-o", out_path,
+                "--qubits", str(req.qubits),
             ]
             if use_hardware:
                 cmd.append("--hardware")
@@ -1202,8 +1213,6 @@ def run_routing(request: Request, req: RunRoutingRequest):
                 cmd.append("--fast")
             if req.topology:
                 cmd.extend(["--topology", req.topology])
-            if req.qubits is not None:
-                cmd.extend(["--qubits", str(req.qubits)])
             if req.hub is not None and req.topology == "star":
                 cmd.extend(["--hub", str(req.hub)])
         code, err = _run(cmd)

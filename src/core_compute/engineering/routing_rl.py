@@ -84,11 +84,13 @@ def improve_routing(
 def main() -> int:
     parser = argparse.ArgumentParser(description="RL-style routing (swap-based local search)")
     parser.add_argument("-o", "--output", type=str, default=None, help="Write routing JSON here")
-    parser.add_argument("--qubits", "-n", type=int, default=3, help="Number of logical qubits")
+    parser.add_argument("--qubits", "-n", type=int, default=None, metavar="N", help="Number of logical qubits (required for standalone routing; circuit-driven pipeline derives from OpenQASM)")
     parser.add_argument("--steps", type=int, default=500, help="Local search steps")
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--decoherence-file", type=str, default=None, help="JSON with per-node rates")
     args = parser.parse_args()
+    if args.qubits is None or args.qubits < 2:
+        parser.error("--qubits N is required (2 or more). Use the circuit-driven pipeline to derive from OpenQASM, or specify --qubits N for standalone routing.")
 
     num_logical = args.qubits
     num_physical = num_logical

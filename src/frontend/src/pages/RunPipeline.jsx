@@ -467,6 +467,9 @@ export default function RunPipeline({ apiBase, initialProjectId }) {
             </span>
           )}
         </p>
+        <p className="mb-2 text-xs text-slate-500">
+          Computation time and resource use scale with qubit count; for large circuits consider starting with smaller tests.
+        </p>
         <div className="space-y-2">
           <div
             {...dropzone.getRootProps()}
@@ -521,7 +524,12 @@ export default function RunPipeline({ apiBase, initialProjectId }) {
             {validationResult && (
               <span className="flex items-center gap-1.5 text-sm">
                 {validationResult.valid ? (
-                  <><CheckCircle className="h-4 w-4 text-emerald-500" aria-hidden /> Valid</>
+                  <>
+                    <CheckCircle className="h-4 w-4 text-emerald-500" aria-hidden /> Valid
+                    {validationResult.qubit_count != null && (
+                      <span className="text-slate-400">({validationResult.qubit_count} qubits — runtime may increase with qubit count)</span>
+                    )}
+                  </>
                 ) : (
                   <><AlertCircle className="h-4 w-4 text-red-400" aria-hidden /> Invalid</>
                 )}

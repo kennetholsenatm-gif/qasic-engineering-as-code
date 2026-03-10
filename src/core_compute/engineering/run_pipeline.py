@@ -93,6 +93,13 @@ def main() -> int:
         help="Routing method: qaoa (QUBO/QAOA) or rl (RL-style local search).",
     )
     parser.add_argument(
+        "--qubits",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Number of logical qubits for standalone routing (required when not using a circuit). When pipeline is run with an OpenQASM circuit, topology and qubit count are derived from the circuit.",
+    )
+    parser.add_argument(
         "--heac",
         action="store_true",
         help="After inverse design, compile phases.npy to HEaC geometry manifest (requires meta-atom library).",
@@ -161,6 +168,12 @@ def main() -> int:
     )
     args = parser.parse_args()
 
+    if not args.skip_routing and args.qubits is None:
+        parser.error(
+            "--qubits N is required when running routing without a circuit. "
+            "Provide an OpenQASM circuit (circuit-driven pipeline) to derive topology and qubit count from the circuit, or specify --qubits N for standalone routing."
+        )
+
     # Resolve paths from repo root or cwd
     script_dir = os.path.dirname(os.path.abspath(__file__))
     repo_root = os.path.dirname(script_dir)
@@ -193,6 +206,7 @@ def main() -> int:
                 parasitic=args.parasitic,
                 meep_verify=args.meep_verify,
                 packaging=args.packaging,
+                num_qubits=args.qubits,
                 script_dir=script_dir,
                 repo_root=repo_root,
             )
@@ -212,7 +226,7 @@ def main() -> int:
                 sys.executable,
                 os.path.join(script_dir, "routing_rl.py"),
                 "-o", routing_json,
-                "--qubits", "3",
+                "--qubits", str(args.qubits),
             ]
             log.info("Running routing (RL local search)...")
         else:
@@ -220,6 +234,7 @@ def main() -> int:
                 sys.executable,
                 os.path.join(script_dir, "routing_qubo_qaoa.py"),
                 "-o", routing_json,
+                "--qubits", str(args.qubits),
             ]
             if args.hardware:
                 routing_cmd.append("--hardware")

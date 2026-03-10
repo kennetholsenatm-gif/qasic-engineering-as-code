@@ -95,8 +95,8 @@ class Topology:
         return f"Topology(n={self._n}, edges={set(self.edges)})"
 
 
-# Reference topology for validation/demos only. Production ASIC topology is built from
-# openQASM via interaction_graph -> build_topology_from_interaction_graph (qasm_to_asic).
+# Reference topology for validation/demos only. Pipeline ASIC topology is built from
+# OpenQASM (any qubit count) via interaction_graph -> build_topology_from_interaction_graph (qasm_to_asic).
 # Linear chain 0 - 1 - 2: supports teleport (0,1,2) and commitment (0,1)
 DEFAULT_TOPOLOGY = Topology(
     n_qubits=3,

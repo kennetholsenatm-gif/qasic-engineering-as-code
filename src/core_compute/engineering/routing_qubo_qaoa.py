@@ -362,9 +362,9 @@ def main() -> None:
         "--qubits",
         "-n",
         type=int,
-        default=3,
+        default=None,
         metavar="N",
-        help="Number of logical qubits (default: 3).",
+        help="Number of logical qubits (required for standalone routing; circuit-driven pipeline derives from OpenQASM).",
     )
     parser.add_argument(
         "--hub",
@@ -391,6 +391,8 @@ def main() -> None:
         help="Scale factor for decoherence linear terms in QUBO (default: 1.0).",
     )
     args = parser.parse_args()
+    if args.qubits is None or args.qubits < 2:
+        parser.error("--qubits N is required (2 or more). Use the circuit-driven pipeline to derive from OpenQASM, or specify --qubits N for standalone routing.")
 
     # Apply --fast preset
     maxiter = 20 if args.fast else args.maxiter

@@ -15,10 +15,14 @@ export default function RunRouting({ apiBase }) {
     setLoading(true)
     setResult(null)
     setError(null)
-    const body = { backend, fast }
-    if (topology) body.topology = topology
     const q = parseInt(qubits, 10)
-    if (topology && !isNaN(q) && q >= 2) body.qubits = q
+    if (isNaN(q) || q < 2) {
+      setError('Please enter the number of qubits (2 or more). For circuit-driven runs, use the Run pipeline page with an OpenQASM circuit.')
+      setLoading(false)
+      return
+    }
+    const body = { backend, fast, qubits: q }
+    if (topology) body.topology = topology
     const h = parseInt(hub, 10)
     if (topology === 'star' && !isNaN(h) && h >= 0) body.hub = h
     try {
@@ -40,7 +44,15 @@ export default function RunRouting({ apiBase }) {
   return (
     <>
       <h1>Run routing</h1>
+      <p className="text-sm text-slate-500 mb-2">
+        Standalone routing requires a qubit count. For circuit-driven runs (topology and qubit count from OpenQASM), use the Run pipeline page with a circuit.
+      </p>
       <form onSubmit={handleSubmit}>
+        <label>
+          Qubits (required)
+          <input type="number" min={2} max={32} value={qubits} onChange={e => setQubits(e.target.value)} placeholder="e.g. 3" required aria-required="true" />
+        </label>
+        <span className="text-xs text-slate-500">Computation time scales with qubit count.</span>
         <label>
           Backend
           <select value={backend} onChange={e => setBackend(e.target.value)}>
@@ -61,11 +73,8 @@ export default function RunRouting({ apiBase }) {
             <option value="repeater_chain">repeater_chain</option>
           </select>
         </label>
-        {topology && (
-          <>
-            <label>Qubits <input type="number" min={2} max={8} value={qubits} onChange={e => setQubits(e.target.value)} placeholder="3" /></label>
-            {topology === 'star' && <label>Hub index <input type="number" min={0} value={hub} onChange={e => setHub(e.target.value)} placeholder="0" /></label>}
-          </>
+        {topology === 'star' && (
+          <label>Hub index <input type="number" min={0} value={hub} onChange={e => setHub(e.target.value)} placeholder="0" /></label>
         )}
         <button type="submit" disabled={loading}>{loading ? 'Running…' : 'Run'}</button>
       </form>

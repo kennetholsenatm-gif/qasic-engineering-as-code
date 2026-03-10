@@ -665,7 +665,7 @@ function WorkflowsInner({ apiBase }) {
           <textarea
             value={qasmString}
             onChange={(e) => setQasmString(e.target.value)}
-            placeholder={'OPENQASM 2.0;\ninclude "qelib1.inc";\nqreg q[3];\n...'}
+            placeholder={'OpenQASM 2 or 3; any qubit count (e.g. OPENQASM 2.0;\ninclude "qelib1.inc";\nqreg q[3];\n...)'}
             rows={6}
             className="w-full rounded border border-slate-600 bg-slate-800 px-2 py-1.5 font-mono text-sm text-slate-100 placeholder:text-slate-500"
           />

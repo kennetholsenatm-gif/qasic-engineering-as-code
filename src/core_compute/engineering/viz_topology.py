@@ -122,7 +122,7 @@ def main() -> int:
         type=int,
         default=None,
         metavar="N",
-        help="Number of logical qubits (default: from routing JSON or 3).",
+        help="Number of logical qubits (default: from routing JSON or 3, reference).",
     )
     parser.add_argument(
         "--hub",
