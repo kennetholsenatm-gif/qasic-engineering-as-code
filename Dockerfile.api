@@ -1,8 +1,14 @@
 # syntax=docker/dockerfile:1
-# QASIC Engineering-as-Code: Control plane (slim API image).
-# FastAPI + uvicorn + Celery client only; no Qiskit/PyTorch/engineering in this image.
-# Heavy compute runs in workers; see Dockerfile.worker for the data-plane image.
+# QASIC Engineering-as-Code: API image with full engineering stack pre-built.
+# FastAPI + uvicorn + Celery client; includes qiskit, qiskit-qasm3-import so in-API
+# validation (e.g. OpenQASM 3 parsing) and light checks work in the container.
+# Heavy pipeline execution still runs in the Celery worker; see Dockerfile.worker.
 FROM python:3.11-slim
+
+# System deps for torch/scipy (OpenMP and optional native builds)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -18,7 +24,7 @@ COPY apps/ apps/
 
 # Use BuildKit cache mount so pip reuses downloaded wheels across builds (no full re-download on every code change).
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install .[app]
+    pip install .[app,engineering]
 
 # Run as unprivileged user (DevSecOps: no root in container)
 RUN adduser --disabled-password --gecos "" appuser && chown -R appuser:appuser /app

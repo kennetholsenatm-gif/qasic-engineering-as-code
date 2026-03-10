@@ -147,9 +147,16 @@ def _qasm3_to_ops_via_qiskit(qasm_text: str, *, decompose_to_asic: bool = False)
     try:
         from qiskit.qasm3 import loads as qasm3_loads
     except ImportError as e:
+        err_msg = str(e).lower()
+        if "qiskit" in err_msg and "qasm3" not in err_msg:
+            install_hint = "pip install qiskit qiskit-qasm3-import"
+            requirement = "qiskit and qiskit-qasm3-import"
+        else:
+            install_hint = "pip install qiskit-qasm3-import"
+            requirement = "qiskit-qasm3-import"
         raise QasmParseError(
-            "OpenQASM 3.0 parsing requires qiskit-qasm3-import. "
-            "Install with: pip install qiskit-qasm3-import"
+            f"OpenQASM 3.0 parsing requires {requirement} in this environment. "
+            f"Install with: {install_hint}"
         ) from e
     try:
         circuit = qasm3_loads(qasm_text)
@@ -165,9 +172,16 @@ def _qasm3_to_ops_from_path(path: str, *, decompose_to_asic: bool = False) -> li
     try:
         from qiskit.qasm3 import load as qasm3_load
     except ImportError as e:
+        err_msg = str(e).lower()
+        if "qiskit" in err_msg and "qasm3" not in err_msg:
+            install_hint = "pip install qiskit qiskit-qasm3-import"
+            requirement = "qiskit and qiskit-qasm3-import"
+        else:
+            install_hint = "pip install qiskit-qasm3-import"
+            requirement = "qiskit-qasm3-import"
         raise QasmParseError(
-            "OpenQASM 3.0 parsing requires qiskit-qasm3-import. "
-            "Install with: pip install qiskit-qasm3-import"
+            f"OpenQASM 3.0 parsing requires {requirement} in this environment. "
+            f"Install with: {install_hint}"
         ) from e
     try:
         circuit = qasm3_load(path)

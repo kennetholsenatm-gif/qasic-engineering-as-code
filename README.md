@@ -32,7 +32,7 @@ cd qasic-engineering-as-code
 docker compose up -d --build
 ```
 
-- **What you get:** Web UI (frontend), API, Celery worker, Redis, and Postgres. This is the full WUI experience: Run Pipeline, Workflows, Projects, async task streaming, and Results. The stack uses a **two-image setup**: the API is a slim control-plane image (FastAPI, Celery client only; no Qiskit/PyTorch in the API process). The Celery worker uses a separate image with the full engineering stack (`.[app,engineering]`). Pipeline and protocol runs execute in workers; the API enqueues tasks and returns results. BuildKit and a pip cache mount speed up rebuilds; see [Dockerfile.api](Dockerfile.api) and [Dockerfile.worker](Dockerfile.worker).
+- **What you get:** Web UI (frontend), API, Celery worker, Redis, and Postgres. This is the full WUI experience: Run Pipeline, Workflows, Projects, async task streaming, and Results. The API container includes the **full engineering stack** (qiskit, qiskit-qasm3-import, etc.) so validation and OpenQASM 3 parsing run in the container with pre-built deps; pipeline execution still runs in the Celery worker. Running the backend via Docker is the recommended way so Python runs inside the container with all requirements pre-built (no local `pip install .[engineering]` needed for the API). BuildKit and a pip cache mount speed up rebuilds; see [Dockerfile.api](Dockerfile.api) and [Dockerfile.worker](Dockerfile.worker).
 - **Environment:** The core stack sets `DATABASE_URL`, `CELERY_BROKER_URL`, and Postgres inside `docker-compose.yml`; you do not need to edit `.env` for a basic run. Copying `.env.example` to `.env` is only so the file exists. Optionally set `IBM_QUANTUM_TOKEN` in `.env` if you use IBM Quantum from the app.
 
 Open the frontend at **http://localhost** (port 80). API docs: **http://localhost:8000/docs**.
@@ -88,7 +88,7 @@ cd src/frontend && npm install && npm run dev
 
 Then open **http://localhost:5173** (Vite dev server). The API is at **http://localhost:8000**. See [src/frontend/README.md](src/frontend/README.md) for frontend details.
 
-**Note:** This path does not start Celery, Redis, or Postgres. The UI will load, but pipeline runs use the **synchronous** API (no live task log or Stop button), and project workspaces / MLflow integration are unavailable. For the full WUI (async runs, projects, task streaming), use Docker above.
+**Note:** This path does not start Celery, Redis, or Postgres. The UI will load, but pipeline runs use the **synchronous** API (no live task log or Stop button), and project workspaces / MLflow integration are unavailable. For the full WUI (async runs, projects, task streaming), use Docker above. For OpenQASM 3 validation and circuit-driven pipeline features in the API, install the engineering extras locally: `pip install -e ".[app,engineering]"`, or use Docker so the backend runs in the container with deps pre-built.
 
 **Optional extras:**
 
