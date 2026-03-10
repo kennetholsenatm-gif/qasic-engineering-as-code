@@ -58,6 +58,7 @@ engineering = [
   "torch>=1.13.0",
   "matplotlib>=3.5.0",
   "scipy>=1.7.0",
+  "gdsfactory>=8.0",
 ]
 ibm-functions = [
   "qiskit-ibm-catalog>=0.4",

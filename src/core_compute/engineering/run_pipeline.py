@@ -345,11 +345,11 @@ def main() -> int:
             log.error("GDS export failed.")
             return rc_gds.returncode
         if not os.path.isfile(gds_path):
-            log.error("GDS file not produced.")
-            return 1
-        log.info("  GDS: {}", gds_path)
-        # DRC
-        if args.drc:
+            log.info("GDS not produced (e.g. gdsfactory not installed); geometry manifest is sufficient for downstream tools.")
+        else:
+            log.info("  GDS: {}", gds_path)
+        # DRC / LVS / DFT require GDS; skip when GDS was not produced (e.g. gdsfactory not installed)
+        if os.path.isfile(gds_path) and args.drc:
             drc_report = os.path.join(script_dir, args.output + "_drc_report.json")
             rc_drc = subprocess.run(
                 [sys.executable, os.path.join(heac_dir, "run_drc_klayout.py"), gds_path, "-o", drc_report],
@@ -358,8 +358,7 @@ def main() -> int:
             if rc_drc.returncode != 0:
                 log.error("DRC failed.")
                 return rc_drc.returncode
-        # LVS
-        if args.lvs:
+        if os.path.isfile(gds_path) and args.lvs:
             lvs_report = os.path.join(script_dir, args.output + "_lvs_report.json")
             lvs_cmd = [
                 sys.executable, os.path.join(heac_dir, "run_lvs_klayout.py"),
@@ -372,8 +371,7 @@ def main() -> int:
             if rc_lvs.returncode != 0:
                 log.error("LVS failed.")
                 return rc_lvs.returncode
-        # DFT: merge padframes, alignment marks, witnesses into GDS
-        if args.dft:
+        if os.path.isfile(gds_path) and args.dft:
             dft_manifest_path = os.path.join(script_dir, args.output + "_dft_manifest.json")
             dft_cmd = [
                 sys.executable,

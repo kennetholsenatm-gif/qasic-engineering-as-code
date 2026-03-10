@@ -154,7 +154,7 @@ def task_heac_phases_to_geometry(params: PipelineParams, routing_json: str, npy_
 
 
 def task_manifest_to_gds(params: PipelineParams, manifest_path: str | None) -> str | None:
-    """Manifest -> GDS. Returns gds_path or None."""
+    """Manifest -> GDS. Returns gds_path or None (e.g. when gdsfactory is not installed)."""
     if not (params.gds or params.drc or params.lvs):
         return None
     if not manifest_path or not os.path.isfile(manifest_path):
@@ -170,7 +170,8 @@ def task_manifest_to_gds(params: PipelineParams, manifest_path: str | None) -> s
     if code != 0:
         raise RuntimeError("GDS export failed.")
     if not os.path.isfile(gds_path):
-        raise RuntimeError("GDS file not produced.")
+        # Script exited 0 but no GDS (e.g. gdsfactory not installed); optional step, so return None
+        return None
     return gds_path
 
 

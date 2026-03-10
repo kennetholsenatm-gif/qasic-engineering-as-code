@@ -37,4 +37,4 @@ scipy>=1.7.0
 # Optional: Meep for real unit-cell sweep (engineering/heac/meep_unit_cell_sweep.py); else synthetic library
 # pymeep
 # Optional: GDSII export from geometry manifest (engineering/heac/manifest_to_gds.py)
-# gdsfactory
+gdsfactory>=8.0

@@ -3,34 +3,19 @@ import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { FolderPlus, FolderOpen, Loader2, Pencil, Trash2, LayoutGrid } from 'lucide-react'
 
-// #region agent log
-function _ingest(payload) {
-  fetch('http://127.0.0.1:7610/ingest/8e7447a5-506a-4460-a41a-7b63d5e55b2a', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '0ce9c5' }, body: JSON.stringify({ ...payload, sessionId: '0ce9c5', timestamp: Date.now() }) }).catch(() => {})
-}
-// #endregion
 function fetchProjects(apiBase) {
   return fetch(`${apiBase}/api/projects`).then(async (r) => {
-    // #region agent log
-    _ingest({ location: 'Projects.jsx:fetchProjects', message: 'GET /api/projects response', data: { status: r.status, ok: r.ok }, hypothesisId: 'D' })
-    // #endregion
     if (!r.ok) return { projects: [] }
     return r.json()
   })
 }
 
 function createProjectApi(apiBase, body) {
-  // #region agent log
-  const url = `${apiBase || ''}/api/projects`
-  _ingest({ location: 'Projects.jsx:createProjectApi', message: 'POST /api/projects request', data: { url, name: body?.name }, hypothesisId: 'E' })
-  // #endregion
   return fetch(`${apiBase}/api/projects`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   }).then(async (r) => {
-    // #region agent log
-    _ingest({ location: 'Projects.jsx:createProjectApi', message: 'POST /api/projects response', data: { status: r.status, ok: r.ok }, hypothesisId: 'E' })
-    // #endregion
     const data = await r.json().catch(() => ({}))
     if (!r.ok) throw new Error(data.detail || r.statusText)
     return data

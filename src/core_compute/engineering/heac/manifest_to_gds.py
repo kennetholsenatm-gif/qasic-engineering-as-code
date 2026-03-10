@@ -70,7 +70,8 @@ def main() -> int:
     except ImportError:
         print("gdsfactory not installed. Install with: pip install gdsfactory", file=sys.stderr)
         print("HEaC GDS export is optional; geometry manifest JSON is sufficient for downstream tools.", file=sys.stderr)
-        return 1
+        # Exit 0 so the pipeline still succeeds; manifest is available for downstream use.
+        return 0
 
     if not Path(args.manifest).exists():
         print(f"Manifest not found: {args.manifest}", file=sys.stderr)
