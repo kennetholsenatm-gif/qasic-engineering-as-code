@@ -253,6 +253,18 @@ class UpdateProjectRequest(BaseModel):
     description: str | None = None
 
 
+class CreateCircuitRequest(BaseModel):
+    name: str
+    content: str  # QASM string
+    description: str | None = None
+
+
+class UpdateCircuitRequest(BaseModel):
+    name: str | None = None
+    content: str | None = None
+    description: str | None = None
+
+
 @app.get("/api/projects")
 def list_projects_api():
     """List all projects (project-based workspace)."""
@@ -347,6 +359,122 @@ def delete_project_api(project_id: int):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=_sanitize_detail(e, "Failed to delete project."))
+
+
+@app.get("/api/projects/{project_id}/circuits")
+def list_project_circuits_api(project_id: int, limit: int = 100):
+    """List saved circuits for a project."""
+    try:
+        from storage.db import list_circuits, get_project, is_enabled
+        if not is_enabled():
+            return {"circuits": []}
+        proj = get_project(project_id)
+        if not proj:
+            raise HTTPException(status_code=404, detail="Project not found.")
+        return {"circuits": list_circuits(project_id, limit=limit)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=_sanitize_detail(e, "Failed to list circuits."))
+
+
+@app.post("/api/projects/{project_id}/circuits")
+def create_project_circuit_api(project_id: int, req: CreateCircuitRequest):
+    """Save a quantum circuit (QASM) to the project."""
+    try:
+        from storage.db import create_circuit, get_project, is_enabled
+        if not is_enabled():
+            raise HTTPException(status_code=503, detail="Database not configured.")
+        proj = get_project(project_id)
+        if not proj:
+            raise HTTPException(status_code=404, detail="Project not found.")
+        name = (req.name or "").strip()
+        content = (req.content or "").strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="Circuit name is required.")
+        if not content:
+            raise HTTPException(status_code=400, detail="Circuit content (QASM) is required.")
+        cid = create_circuit(project_id, name, content, req.description)
+        if cid is None:
+            raise HTTPException(status_code=500, detail="Failed to save circuit.")
+        from storage.db import get_circuit
+        return get_circuit(cid) or {"id": cid, "project_id": project_id, "name": name, "content": content}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=_sanitize_detail(e, "Failed to save circuit."))
+
+
+@app.get("/api/projects/{project_id}/circuits/{circuit_id}")
+def get_project_circuit_api(project_id: int, circuit_id: int):
+    """Get a single saved circuit."""
+    try:
+        from storage.db import get_circuit, get_project, is_enabled
+        if not is_enabled():
+            raise HTTPException(status_code=503, detail="Database not configured.")
+        proj = get_project(project_id)
+        if not proj:
+            raise HTTPException(status_code=404, detail="Project not found.")
+        circuit = get_circuit(circuit_id)
+        if not circuit or circuit.get("project_id") != project_id:
+            raise HTTPException(status_code=404, detail="Circuit not found.")
+        return circuit
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=_sanitize_detail(e, "Failed to get circuit."))
+
+
+@app.put("/api/projects/{project_id}/circuits/{circuit_id}")
+def update_project_circuit_api(project_id: int, circuit_id: int, req: UpdateCircuitRequest):
+    """Update a saved circuit's name, content, or description."""
+    try:
+        from storage.db import get_circuit, update_circuit, get_project, is_enabled
+        if not is_enabled():
+            raise HTTPException(status_code=503, detail="Database not configured.")
+        proj = get_project(project_id)
+        if not proj:
+            raise HTTPException(status_code=404, detail="Project not found.")
+        circuit = get_circuit(circuit_id)
+        if not circuit or circuit.get("project_id") != project_id:
+            raise HTTPException(status_code=404, detail="Circuit not found.")
+        name = req.name.strip() if req.name is not None else None
+        content = req.content.strip() if req.content is not None else None
+        if name is not None and not name:
+            raise HTTPException(status_code=400, detail="Circuit name cannot be empty.")
+        if content is not None and not content:
+            raise HTTPException(status_code=400, detail="Circuit content (QASM) cannot be empty.")
+        ok = update_circuit(circuit_id, name=name, content=content, description=req.description)
+        if not ok:
+            raise HTTPException(status_code=500, detail="Failed to update circuit.")
+        return get_circuit(circuit_id) or circuit
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=_sanitize_detail(e, "Failed to update circuit."))
+
+
+@app.delete("/api/projects/{project_id}/circuits/{circuit_id}")
+def delete_project_circuit_api(project_id: int, circuit_id: int):
+    """Delete a saved circuit."""
+    try:
+        from storage.db import get_circuit, delete_circuit, get_project, is_enabled
+        if not is_enabled():
+            raise HTTPException(status_code=503, detail="Database not configured.")
+        proj = get_project(project_id)
+        if not proj:
+            raise HTTPException(status_code=404, detail="Project not found.")
+        circuit = get_circuit(circuit_id)
+        if not circuit or circuit.get("project_id") != project_id:
+            raise HTTPException(status_code=404, detail="Circuit not found.")
+        ok = delete_circuit(circuit_id)
+        if not ok:
+            raise HTTPException(status_code=500, detail="Failed to delete circuit.")
+        return {"ok": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=_sanitize_detail(e, "Failed to delete circuit."))
 
 
 @app.get("/api/projects/{project_id}/runs")

@@ -124,6 +124,17 @@ def get_engine():
                         UNIQUE(run_id, node_id)
                     )
                 """))
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS project_circuits (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                        name VARCHAR(256) NOT NULL,
+                        description TEXT,
+                        content TEXT NOT NULL,
+                        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+                    )
+                """))
             else:
                 conn.execute(text("""
                     CREATE TABLE IF NOT EXISTS projects (
@@ -187,6 +198,17 @@ def get_engine():
                     outputs JSONB,
                     error_message TEXT,
                     UNIQUE(run_id, node_id)
+                )
+            """))
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS project_circuits (
+                    id SERIAL PRIMARY KEY,
+                    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                    name VARCHAR(256) NOT NULL,
+                    description TEXT,
+                    content TEXT NOT NULL,
+                    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT (NOW() AT TIME ZONE 'utc'),
+                    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT (NOW() AT TIME ZONE 'utc')
                 )
             """))
             conn.commit()
@@ -524,6 +546,140 @@ def update_project_mlflow_experiment(project_id: int, mlflow_experiment_id: str)
                 text("UPDATE projects SET mlflow_experiment_id = :eid, updated_at = :now WHERE id = :id"),
                 {"eid": mlflow_experiment_id, "now": datetime.now(timezone.utc), "id": project_id},
             )
+            conn.commit()
+        return True
+    except Exception:
+        return False
+
+
+# --- Project circuits (save/load quantum circuits per project) ---
+
+
+def create_circuit(project_id: int, name: str, content: str, description: str | None = None) -> int | None:
+    """Save a circuit (QASM content) to a project. Returns circuit id or None."""
+    engine = get_engine()
+    if engine is None:
+        return None
+    try:
+        from sqlalchemy import text
+        now = datetime.now(timezone.utc)
+        with engine.connect() as conn:
+            r = conn.execute(
+                text("""
+                    INSERT INTO project_circuits (project_id, name, description, content, created_at, updated_at)
+                    VALUES (:pid, :name, :desc, :content, :now, :now)
+                    RETURNING id
+                """),
+                {"pid": project_id, "name": name, "desc": description or "", "content": content, "now": now},
+            )
+            row = r.fetchone()
+            conn.commit()
+            return row[0] if row else None
+    except Exception:
+        return None
+
+
+def list_circuits(project_id: int, limit: int = 100) -> list[dict[str, Any]]:
+    """List circuits for a project, most recent first."""
+    engine = get_engine()
+    if engine is None:
+        return []
+    try:
+        from sqlalchemy import text
+        with engine.connect() as conn:
+            r = conn.execute(
+                text("""
+                    SELECT id, project_id, name, description, content, created_at, updated_at
+                    FROM project_circuits
+                    WHERE project_id = :pid
+                    ORDER BY updated_at DESC
+                    LIMIT :lim
+                """),
+                {"pid": project_id, "lim": limit},
+            )
+            rows = r.fetchall()
+        return [
+            {
+                "id": row[0],
+                "project_id": row[1],
+                "name": row[2],
+                "description": row[3] or "",
+                "content": row[4],
+                "created_at": row[5].isoformat() if hasattr(row[5], "isoformat") else str(row[5]),
+                "updated_at": row[6].isoformat() if hasattr(row[6], "isoformat") else str(row[6]),
+            }
+            for row in rows
+        ]
+    except Exception:
+        return []
+
+
+def get_circuit(circuit_id: int) -> dict[str, Any] | None:
+    """Get a single circuit by id."""
+    engine = get_engine()
+    if engine is None:
+        return None
+    try:
+        from sqlalchemy import text
+        with engine.connect() as conn:
+            r = conn.execute(
+                text("""
+                    SELECT id, project_id, name, description, content, created_at, updated_at
+                    FROM project_circuits WHERE id = :id
+                """),
+                {"id": circuit_id},
+            )
+            row = r.fetchone()
+        if not row:
+            return None
+        return {
+            "id": row[0],
+            "project_id": row[1],
+            "name": row[2],
+            "description": row[3] or "",
+            "content": row[4],
+            "created_at": row[5].isoformat() if hasattr(row[5], "isoformat") else str(row[5]),
+            "updated_at": row[6].isoformat() if hasattr(row[6], "isoformat") else str(row[6]),
+        }
+    except Exception:
+        return None
+
+
+def update_circuit(circuit_id: int, name: str | None = None, content: str | None = None, description: str | None = None) -> bool:
+    """Update a circuit's name, content, and/or description."""
+    engine = get_engine()
+    if engine is None:
+        return False
+    try:
+        from sqlalchemy import text
+        updates = ["updated_at = :now"]
+        params: dict[str, Any] = {"id": circuit_id, "now": datetime.now(timezone.utc)}
+        if name is not None:
+            updates.append("name = :name")
+            params["name"] = name
+        if content is not None:
+            updates.append("content = :content")
+            params["content"] = content
+        if description is not None:
+            updates.append("description = :desc")
+            params["desc"] = description
+        with engine.connect() as conn:
+            conn.execute(text(f"UPDATE project_circuits SET {', '.join(updates)} WHERE id = :id"), params)
+            conn.commit()
+        return True
+    except Exception:
+        return False
+
+
+def delete_circuit(circuit_id: int) -> bool:
+    """Delete a circuit."""
+    engine = get_engine()
+    if engine is None:
+        return False
+    try:
+        from sqlalchemy import text
+        with engine.connect() as conn:
+            conn.execute(text("DELETE FROM project_circuits WHERE id = :id"), {"id": circuit_id})
             conn.commit()
         return True
     except Exception:

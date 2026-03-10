@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { Loader2, Terminal, CheckCircle, AlertCircle, Square, Trash2, FileUp, Download, ExternalLink } from 'lucide-react'
+import { Loader2, Terminal, CheckCircle, AlertCircle, Square, Trash2, FileUp, Download, ExternalLink, Save } from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
 import Editor from '@monaco-editor/react'
 import PipelineDag from '../components/PipelineDag'
@@ -29,6 +29,14 @@ function fetchProjects(apiBase) {
 function fetchCapabilities(apiBase) {
   return fetch(`${apiBase}/api/capabilities`).then(async (r) => {
     if (!r.ok) return { openqasm_3_available: true }
+    const d = await r.json()
+    return d
+  })
+}
+
+function fetchCircuits(apiBase, projectId) {
+  return fetch(`${apiBase}/api/projects/${projectId}/circuits`).then(async (r) => {
+    if (!r.ok) return { circuits: [] }
     const d = await r.json()
     return d
   })
@@ -90,6 +98,42 @@ export default function RunPipeline({ apiBase, initialProjectId }) {
     staleTime: 30_000,
   })
   const projects = projectsData?.projects || []
+
+  const { data: circuitsData, refetch: refetchCircuits } = useQuery({
+    queryKey: ['circuits', apiBase, projectId],
+    queryFn: () => fetchCircuits(apiBase, projectId),
+    enabled: !!projectId,
+    staleTime: 10_000,
+  })
+  const circuits = circuitsData?.circuits || []
+
+  const saveCircuitMutation = useMutation({
+    mutationFn: async ({ name, content, description }) => {
+      const res = await fetch(`${apiBase}/api/projects/${projectId}/circuits`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, content, description: description || null }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.detail || res.statusText)
+      return data
+    },
+    onSuccess: () => {
+      refetchCircuits()
+    },
+  })
+
+  const deleteCircuitMutation = useMutation({
+    mutationFn: async (circuitId) => {
+      const res = await fetch(`${apiBase}/api/projects/${projectId}/circuits/${circuitId}`, { method: 'DELETE' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.detail || res.statusText)
+      return data
+    },
+    onSuccess: () => {
+      refetchCircuits()
+    },
+  })
 
   const submitMutation = useMutation({
     mutationFn: async (body) => {
@@ -647,6 +691,57 @@ export default function RunPipeline({ apiBase, initialProjectId }) {
             ))}
           </select>
         </div>
+        {projectId && (
+          <div className="rounded-xl border border-slate-600 bg-slate-800/40 px-4 py-3 space-y-3">
+            <h3 className="text-sm font-medium text-slate-300">Saved circuits</h3>
+            {qasmString.trim() && (
+              <button
+                type="button"
+                onClick={() => saveCircuitMutation.mutate({
+                  name: circuitName.trim() || 'Unnamed circuit',
+                  content: qasmString.trim(),
+                  description: circuitName.trim() || undefined,
+                })}
+                disabled={saveCircuitMutation.isPending}
+                className="inline-flex items-center gap-2 rounded-lg border border-sky-600 bg-sky-900/40 px-3 py-1.5 text-sm text-sky-200 hover:bg-sky-800/50 disabled:opacity-60"
+              >
+                {saveCircuitMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                Save current circuit
+              </button>
+            )}
+            {saveCircuitMutation.isError && <p className="text-sm text-red-400">{saveCircuitMutation.error.message}</p>}
+            <ul className="space-y-1.5">
+              {circuits.length === 0 && !circuitsData ? (
+                <li className="text-sm text-slate-500">Loading…</li>
+              ) : circuits.length === 0 ? (
+                <li className="text-sm text-slate-500">No saved circuits. Save one above when you have QASM in the editor.</li>
+              ) : (
+                circuits.map((c) => (
+                  <li key={c.id} className="flex items-center gap-2 text-sm">
+                    <span className="text-slate-300 truncate flex-1 min-w-0" title={c.name}>{c.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => { setQasmString(c.content || ''); setCircuitName(c.name || ''); }}
+                      className="rounded border border-slate-500 bg-slate-700 px-2 py-1 text-slate-200 hover:bg-slate-600"
+                    >
+                      Load
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => deleteCircuitMutation.mutate(c.id)}
+                      disabled={deleteCircuitMutation.isPending}
+                      className="rounded border border-red-800 bg-red-900/40 p-1 text-red-300 hover:bg-red-800/50 disabled:opacity-60"
+                      title="Delete circuit"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </li>
+                ))
+              )}
+            </ul>
+            {deleteCircuitMutation.isError && <p className="text-sm text-red-400">{deleteCircuitMutation.error.message}</p>}
+          </div>
+        )}
         <div>
           <label htmlFor="backend" className="mb-1.5 block text-sm font-medium text-slate-300">
             Backend
