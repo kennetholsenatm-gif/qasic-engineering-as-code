@@ -1,5 +1,7 @@
 # Toy Protocol Descriptions
 
+The **pipeline** (OpenQASM → digital-twin ASIC) accepts **any OpenQASM 2 or 3 file and any qubit count**; topology is derived from the circuit. The protocols below are **examples/reference** for teleportation, tamper-evidence, and commitment.
+
 ## 1. Entanglement and teleportation
 
 - **Bell pair:** \(| \Phi^+ \rangle = (|00\rangle + |11\rangle)/\sqrt{2}\). Created by H on qubit 0, then CNOT(0,1).

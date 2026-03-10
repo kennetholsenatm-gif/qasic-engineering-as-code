@@ -14,7 +14,7 @@
 ## 1. Problem Statement & Motivation
 
 ### Current State (Alpha)
-- ✅ Can design a 3-qubit linear chain from QASM to GDS
+- ✅ Pipeline accepts any OpenQASM 2/3, any qubit count; topology from circuit; output is digital-twin ASIC (e.g. GDS). Computation time scales with qubit count.
 - ❌ Takes 2-3 weeks per design iteration (manual validation loops)
 - ❌ No integrated thermal/mechanical validation
 - ❌ Yield prediction separate from design (manual Monte Carlo)
@@ -153,7 +153,7 @@ All designs start with a single **project manifest** that drives the entire plat
 - Topology validation (linear chain? 2D grid? connectivity check)
 
 #### Feature 1.2: Template Library (CLI + GUI)
-- Pre-built templates: 3-qubit, 8-qubit linear, 16-qubit 2D grid, 64-qubit production
+- Pre-built templates (examples): 3-qubit, 8-qubit linear, 16-qubit 2D grid, 64-qubit. Pipeline input is any OpenQASM / any qubit count.
 - Load template → edit parameters (frequency, qubit count, gate set)
 - One-click deploy: `qasic-create --template 8q-linear --output design.json`
 
@@ -631,7 +631,7 @@ jobs:
 | **Cryogenic thermal model incomplete** | Collaborate with materials/cryo expert; validate against dilution fridge measurements | Quantum Specialist + Infra |
 | **Yield prediction overoptimistic** | Conservative Monte Carlo (worst-case corner emphasis); post-tapeout correlation | QA |
 | **Performance bottleneck (>1 hour for 64-qubit)** | GPU acceleration for MEEP + FEA; hierarchical mesh refinement; early exit on SLA failures | Eng. Pipeline + Infra |
-| **Workflow adoption (prefer manual CAD/sim)** | Early wins (3-qubit golden path); showcase 2-3× speedup in digital-twin loop | Documentation |
+| **Workflow adoption (prefer manual CAD/sim)** | Early wins (small-circuit path, e.g. 3–8 qubits) for quick validation; showcase 2-3× speedup in digital-twin loop | Documentation |
 
 ### Success Criteria (Q3 2026 Launch)
 

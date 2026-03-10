@@ -25,7 +25,7 @@ flowchart TB
   hardware -->|"steered RF"| apps
 ```
 
-**Data flow (left to right):** The protocol layer defines the minimal topology and gate set (e.g., 3-qubit linear chain for teleportation). The routing stage (QUBO + QAOA) assigns logical qubits to physical nodes and writes a mapping to JSON. The inverse-design stage consumes that topology and produces a continuous phase profile for the meta-atoms. The hardware layer (rf-SQUIDs, BAW resonators, Cryo-CMOS) applies those phases to steer microwave photons. The same stack scales to macroscopic applications: SATCOM with radiative cooling and quantum illumination.
+**Data flow (left to right):** Topology and gate set come from the circuit (e.g., interaction graph); protocol demos may use a minimal 3-qubit linear example. The routing stage (QUBO + QAOA) assigns logical qubits to physical nodes and writes a mapping to JSON. The inverse-design stage consumes that topology and produces a continuous phase profile for the meta-atoms. The hardware layer (rf-SQUIDs, BAW resonators, Cryo-CMOS) applies those phases to steer microwave photons. The same stack scales to macroscopic applications: SATCOM with radiative cooling and quantum illumination.
 
 ## Orchestration and deployment
 

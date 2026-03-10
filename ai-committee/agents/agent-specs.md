@@ -13,7 +13,7 @@ An AI committee of 8 specialized agents working collaboratively to execute the Q
 - Quantum entanglement and teleportation
 - Quantum Key Distribution (BB84, E91)
 - Bit commitment schemes and toy protocols
-- 3-qubit ASIC topology (0—1—2 linear chain)
+- ASIC topology (pipeline: any qubit count from OpenQASM; reference: 0—1—2 linear chain)
 - Error correction and channel noise modeling
 - Protocol implementation and verification
 
@@ -25,7 +25,7 @@ An AI committee of 8 specialized agents working collaboratively to execute the Q
 - Document quantum protocols and demos (demos/ directory)
 
 ### Example Tasks
-- "Design a Bell pair preparation circuit for 3-qubit linear chain"
+- "Design a Bell pair preparation circuit (e.g. for reference 3-qubit linear chain)"
 - "What protocol modifications are needed if qubit 1 has 2% dephasing?"
 - "Review the teleportation implementation for correctness"
 
@@ -326,5 +326,5 @@ ollama pull dolphin-mixtral  # Strong at planning
 - Each agent respects ALPHA_SCOPE.md constraints
 - Model choices balance speed (neural-chat) vs reasoning (mistral)
 - Customize system prompts in `orchestrator.py` for your specific needs
-- All agents have context about the 3-qubit ASIC topology and metasurface pipeline
+- All agents have context about the ASIC pipeline (any OpenQASM, any qubit count) and metasurface pipeline
 - Committee decisions are logged and traceable

@@ -125,7 +125,7 @@ Optional tools (SQDMetal, JosephsonCircuits.jl, BeamProp) support RF scattering,
 
 ### 5.1 QUBO and QAOA Routing
 
-Mapping logical qubits to physical nodes to minimize gate depth and SWAP count is NP-hard. It is formulated as a Quadratic Unconstrained Binary Optimization (QUBO): binary variables and a cost function that penalizes inefficient wiring. The Quantum Approximate Optimization Algorithm (QAOA) is used as a hybrid quantum-classical solver. The system is initialized in the ground state of a Mixing Hamiltonian *H*_M = Σ_i σ_i^x (all routing configurations in superposition), then alternates evolution under a Problem Hamiltonian *H*_P (encoding the QUBO cost) and *H*_M to tunnel out of local minima. Implementations use IBM Qiskit and OpenQAOA; classical optimizers adjust angles (β, γ). On IBM hardware (e.g., `ibm_fez`), the 3-qubit minimal topology has achieved an optimized logical-to-physical mapping with objective penalty 4.0.
+Mapping logical qubits to physical nodes to minimize gate depth and SWAP count is NP-hard. It is formulated as a Quadratic Unconstrained Binary Optimization (QUBO): binary variables and a cost function that penalizes inefficient wiring. The Quantum Approximate Optimization Algorithm (QAOA) is used as a hybrid quantum-classical solver. The system is initialized in the ground state of a Mixing Hamiltonian *H*_M = Σ_i σ_i^x (all routing configurations in superposition), then alternates evolution under a Problem Hamiltonian *H*_P (encoding the QUBO cost) and *H*_M to tunnel out of local minima. Implementations use IBM Qiskit and OpenQAOA; classical optimizers adjust angles (β, γ). On IBM hardware (e.g., `ibm_fez`), an example minimal topology (e.g. 3-qubit) has achieved an optimized logical-to-physical mapping with objective penalty 4.0. The pipeline supports any OpenQASM and any qubit count.
 
 ### 5.2 DNN Inverse Design and Phase Synthesis
 
@@ -147,7 +147,7 @@ The following are **applications enabled by** the code-defined Quantum ASIC and 
 
 ### 6.1 On-Chip Quantum Bus
 
-The metasurface realizes dynamic all-to-all connectivity on a planar chip without static waveguides. Protocol validation (teleportation, tamper-evident “Thief” circuit, bit commitment) runs in simulation and, with hardware, would use the same minimal topology and gate set; the metasurface schedule realizes the required connectivity at each time step.
+The metasurface realizes dynamic all-to-all connectivity on a planar chip without static waveguides. Protocol validation (teleportation, tamper-evident “Thief” circuit, bit commitment) runs in simulation and, with hardware, would use the same minimal topology and gate set; the metasurface schedule realizes the required connectivity at each time step. The EaC pipeline accepts any OpenQASM and any qubit count; topology is derived from the circuit.
 
 ### 6.2 SATCOM: Weather-Resilient Microwave QKD
 

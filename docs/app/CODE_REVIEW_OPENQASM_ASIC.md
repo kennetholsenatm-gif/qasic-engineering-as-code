@@ -1,6 +1,6 @@
 # Code Review: ASIC Circuit Always openQASM-Derivative
 
-**Goal:** Ensure the quantum circuit for the ASIC is never statically defined in code; it should always be derivable from openQASM (OpenQASM 2.0 or 3.0).
+**Goal:** Ensure the quantum circuit for the ASIC is never statically defined in code; it should always be derivable from openQASM (OpenQASM 2.0 or 3.0). The **circuit-driven** pipeline builds topology from OpenQASM (any qubit count); `DEFAULT_TOPOLOGY` is for demos/fallback only.
 
 ---
 

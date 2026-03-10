@@ -35,11 +35,13 @@ pip install -e ".[dev]"
 
 ### 1. Create a Design
 
+The main repo pipeline accepts **any OpenQASM 2 or 3 file and any qubit count**; topology is derived from the circuit. Computation time scales with qubit count (see main repo docs). Example templates:
+
 ```bash
-# Create an 8-qubit linear chain design
+# Create an 8-qubit linear chain design (example)
 qasic-create --template 8qubit_linear --output my_design.json
 
-# Create a 16-qubit 2D grid design
+# Create a 16-qubit 2D grid design (example)
 qasic-create --template 16qubit_grid --output grid_design.json
 ```
 
@@ -94,6 +96,8 @@ All designs use a unified JSON schema with the following main sections:
   }
 }
 ```
+
+In the main repo pipeline, topology can be derived from the circuit (OpenQASM interaction graph) for any qubit count.
 
 ## Simulation Engines
 

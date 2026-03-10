@@ -18,10 +18,10 @@ Documentation and whitepapers for **QASIC Engineering-as-Code** ([GitHub](https:
 | [architecture_overview.md](architecture_overview.md) | Full-stack diagram: protocol layer → routing → inverse design → hardware → applications |
 | [NEXT_STEPS_ROADMAP.md](NEXT_STEPS_ROADMAP.md) | **Next steps / maturity roadmap:** Tapeout (superconducting extraction, DFT, Monte Carlo), control/HIL (QICK, HIL CI), cryogenic (thermal→decoherence, Cryo-CMOS), interop (OpenQASM/QIR, GDS–MEEP pipeline), cryo packaging (2D→3D CAD, FEA, flex routing, magnetic shielding), metasurface physics (full-wave macro-sim, physics-informed GNN, cryogenic materials, active/spatiotemporal metasurfaces), control methodologies (GRAPE/CRAB, MIMO cancellation, System ID, dynamic metasurface control), fault tolerance & noise (QEC-aware routing, correlated error/TLS, Purcell filters, Stim/PyMatching LER) |
 | [QKD.md](QKD.md) | **QKD:** Pedagogical BB84 and E91 (basis angles, CHSH); code and API |
-| [QUANTUM_ASIC.md](QUANTUM_ASIC.md) | Quantum ASIC spec: minimal topology (0–1–2), gate set (H, X, Z, CNOT), protocol mapping |
+| [QUANTUM_ASIC.md](QUANTUM_ASIC.md) | Quantum ASIC reference spec (minimal topology, gate set) and pipeline (any OpenQASM, any qubit count) |
 | [OPENQASM_TO_ASIC_PIPELINE.md](OPENQASM_TO_ASIC_PIPELINE.md) | **OpenQASM 2/3 → ASIC:** Pipeline stages (parse → gate set → topology → geometry → extraction → manifest → routing → HEaC → GDS), file paths, pain points; 2.0 supported, 3.0 when qiskit-qasm3-import installed |
 | [QISKIT_FUNCTIONS_IBM.md](QISKIT_FUNCTIONS_IBM.md) | **Run on IBM and Qiskit Functions:** Extending Run on IBM with Qiskit Functions for error mitigation and workload summaries; link to IBM blog and catalog |
-| [OPENQASM_TO_ASIC_WUI_WALKTHROUGH.md](OPENQASM_TO_ASIC_WUI_WALKTHROUGH.md) | **OpenQASM 3.0 → ASIC (WUI only):** Step-by-step web UI walkthrough and pain points for taking an OpenQASM file to Quantum ASIC |
+| [OPENQASM_TO_ASIC_WUI_WALKTHROUGH.md](OPENQASM_TO_ASIC_WUI_WALKTHROUGH.md) | **OpenQASM 2/3 → digital-twin ASIC (WUI):** Step-by-step walkthrough for taking any OpenQASM 2/3 file (any qubit count) to digital-twin Quantum ASIC |
 | [WHITEPAPER_Holographic_Metasurfaces_Quantum_SATCOM.md](WHITEPAPER_Holographic_Metasurfaces_Quantum_SATCOM.md) | Main whitepaper (Markdown): vision, protocol layer, roadmap, §10 supporting code |
 | [WHITEPAPER_Holographic_Metasurfaces_Quantum_SATCOM.tex](WHITEPAPER_Holographic_Metasurfaces_Quantum_SATCOM.tex) | Short LaTeX paper + math appendix (QAOA, DNN phase synthesis) |
 | [Cryogenic_Metamaterial_Architectures_Quantum_SATCOM.md](Cryogenic_Metamaterial_Architectures_Quantum_SATCOM.md) | **Markdown:** Cryogenic metamaterials, rf-SQUIDs, BAW, Cryo-CMOS, SATCOM (GitHub-friendly) |
@@ -40,7 +40,7 @@ Documentation and whitepapers for **QASIC Engineering-as-Code** ([GitHub](https:
 | [TOPOLOGY_BUILDER.md](TOPOLOGY_BUILDER.md) | Named topologies (linear, star, repeater), viz_topology, get_topology API |
 | [ROADMAP_STATUS.md](ROADMAP_STATUS.md) | Roadmap implementation status (done vs scaffold vs future) |
 | **Program and roadmap** | |
-| [ALPHA_SCOPE.md](ALPHA_SCOPE.md) | **Alpha scope:** In/out for Alpha; single golden path (3-qubit → routing → inverse → HEaC → GDS); parked items |
+| [ALPHA_SCOPE.md](ALPHA_SCOPE.md) | **Alpha scope:** In/out for Alpha; pipeline: any OpenQASM 2/3, any qubit count → digital-twin ASIC; computation-time warnings; parked items |
 | [ALPHA_CUSTOMER.md](ALPHA_CUSTOMER.md) | **Alpha focus:** Primary use case (digital-twin pipeline, solo developer) |
 | [ROADMAP_SCHEDULE.md](ROADMAP_SCHEDULE.md) | **Roadmap schedule:** Phases 3–4 timeline, dependencies, owners (TBD) |
 | [PROGRAM_ACTION_ITEMS.md](PROGRAM_ACTION_ITEMS.md) | **Action items and prioritization:** Deliverables and next steps |

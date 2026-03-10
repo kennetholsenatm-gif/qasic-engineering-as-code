@@ -8,7 +8,7 @@ See also [ALPHA_SCOPE.md](ALPHA_SCOPE.md) and [PROGRAM_ACTION_ITEMS.md](PROGRAM_
 
 ## Alpha focus: Digital-twin pipeline (solo developer + AI agents)
 
-**Alpha targets the single golden path** (circuit → routing → inverse design → HEaC → GDS) for the solo developer's digital-twin pipeline, with prioritization on pipeline stability, runbooks, and reproducibility.
+**Alpha targets the pipeline:** any OpenQASM 2/3 file, any qubit size → digital-twin Quantum ASIC (circuit → routing → inverse design → HEaC → GDS). Prioritization on pipeline stability and reproducibility; computation-time warnings by qubit count.
 
 **Implications:** Prioritize pipeline stability, GDS success rate, runbooks, and integration with the simulation/digital-twin workflow. No external customers or team; development is solo with AI coding agents for support.
 

@@ -10,7 +10,7 @@
 ### 1. 26 Tapeout Recommendations Document
 **Location**: [ai-committee/TAPEOUT_RECOMMENDATIONS.md](ai-committee/TAPEOUT_RECOMMENDATIONS.md)
 
-Comprehensive improvement roadmap from Alpha (3-qubit) to larger digital-twin scope (64-qubit):
+Comprehensive improvement roadmap from Alpha (any OpenQASM, any qubit count; computation-time warnings) to larger digital-twin scope:
 - **Category A (7 items)**: Tapeout readiness (superconducting extraction, DFT, yield, thermal closure, fab integration, control backends, HIL CI)
 - **Category B (6 items)**: Physics fidelity (full-wave FDTD, GNN DRC-aware loss, GDS↔MEEP pipeline, cryogenic materials, Purcell filters, QuTiP integration)
 - **Category C (7 items)**: Scalability (3D CAD, FEA, flex routing, magnetic shields, system ID, GRAPE/CRAB optimal control, QEC-aware routing)
@@ -46,8 +46,8 @@ One integrated platform that enables a developer to go from a blank design to a 
 5. **Output & Feedback**: GDS, CAD STEP, control bitstreams, validation report, sign-off
 
 **Performance Targets**:
-- 8-qubit design: <10 min full-stack validation (currently 2-3 weeks)
-- 64-qubit design: <45 min (with GPU + caching)
+- Example: 8-qubit design <10 min full-stack validation (currently 2-3 weeks). Any qubit count supported; runtimes scale with size.
+- Example: 64-qubit design <45 min (with GPU + caching).
 - Cache hit speedup: 2nd iteration 50% faster (MEEP/FEA reuse)
 - Predicted yield accuracy: within ±5% of post-fab measurements (when/if such data exists; digital-twin only for this project)
 
@@ -112,7 +112,7 @@ qasic-promote results/best --tag production-candidate
 - Build orchestrator + unified input processing
 - Integrate Phase 2 engines (GNN → MEEP → QuTiP → thermal)
 - Create Jupyter notebooks 01-05
-- **Gate**: `qasic-validate design.json --full-stack` on 8-qubit in <10 min ✓
+- **Gate**: `qasic-validate design.json --full-stack` (e.g. 8-qubit in <10 min) ✓
 
 ---
 
@@ -138,7 +138,7 @@ qasic-promote results/best --tag production-candidate
 2. **ai-committee/DIGITAL_TWIN_PLATFORM_SPEC.md** — Full platform architecture + roadmap
 
 ### Existing Context Documents
-- `docs/app/ALPHA_SCOPE.md` — Current Alpha (3-qubit linear, canvas→GDS)
+- `docs/app/ALPHA_SCOPE.md` — Current Alpha: any OpenQASM 2/3 → digital-twin ASIC (canvas→GDS); topology from circuit
 - `docs/app/ALPHA_CUSTOMER.md` — Alpha focus (digital-twin pipeline, solo developer)
 - `docs/app/NEXT_STEPS_ROADMAP.md` — Technical roadmap (source of 26 recommendations)
 - `docs/app/ROADMAP_SCHEDULE.md` — Phase 3-4 timeline (TBD; maintained by solo developer)

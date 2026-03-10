@@ -8,7 +8,7 @@
 
 | Agent | Model | Key Domains | Shortcut |
 |-------|-------|-------------|----------|
-| **Quantum Protocol Specialist** | neural-chat | Entanglement, QKD, 3-qubit ASIC circuits | `Ctrl+Shift+Alt+P` |
+| **Quantum Protocol Specialist** | neural-chat | Entanglement, QKD, ASIC (any qubit count; e.g. 3-qubit reference) | `Ctrl+Shift+Alt+P` |
 | **Engineering Pipeline Expert** | mistral | Routing, inverse design, HEaC, GDS, DRC | `Ctrl+Shift+Alt+E` |
 | **Backend/API Developer** | openchat | FastAPI, Celery, dispatcher, async orchestration | - |
 | **Frontend Developer** | openchat | React, Vite, WebSocket streaming, UI/UX | - |
@@ -96,7 +96,7 @@ from orchestrator import CommitteeOrchestrator, AgentRole
 orch = CommitteeOrchestrator()
 result = orch.query_agent(
     AgentRole.QUANTUM_PROTOCOL,
-    "Explain the 3-qubit ASIC topology"
+    "Explain ASIC topology (pipeline supports any qubit count; e.g. 3-qubit reference)"
 )
 print(result)
 ```

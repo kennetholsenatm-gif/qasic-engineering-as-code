@@ -8,7 +8,7 @@ This document tracks **prioritization and deliverables** for the solo developer.
 
 | Theme | Deliverable | Doc |
 |-------|-------------|-----|
-| **Scope management / "everything" problem** | Define Alpha scope; single golden path; list what is parked. | [ALPHA_SCOPE.md](ALPHA_SCOPE.md) |
+| **Scope management / "everything" problem** | Define Alpha scope; pipeline scope: any OpenQASM 2/3, any qubit count → digital-twin ASIC; list what is parked. | [ALPHA_SCOPE.md](ALPHA_SCOPE.md) |
 | **Roadmap as checklist, not schedule** | Add timeline, dependencies, and owners for Phases 3–4. | [ROADMAP_SCHEDULE.md](ROADMAP_SCHEDULE.md) |
 | **Alpha focus** | Define primary use case for Alpha (digital-twin pipeline, solo dev). | [ALPHA_CUSTOMER.md](ALPHA_CUSTOMER.md). **Done:** Digital-twin pipeline for solo dev (see ALPHA_CUSTOMER). |
 

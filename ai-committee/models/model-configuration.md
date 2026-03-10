@@ -233,7 +233,7 @@ from orchestrator import CommitteeOrchestrator, AgentRole
 orch = CommitteeOrchestrator()
 result = orch.query_agent(
     AgentRole.QUANTUM_PROTOCOL,
-    "Explain Bell pair preparation for the QASIC 3-qubit chain"
+    "Explain Bell pair preparation for the QASIC ASIC (pipeline: any qubit count; e.g. 3-qubit reference)"
 )
 print(result)
 ```

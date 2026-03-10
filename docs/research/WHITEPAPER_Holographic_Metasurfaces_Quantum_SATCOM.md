@@ -96,7 +96,7 @@ Conversely, **entangled microwave photons**—generated via Cooper pair splittin
 
 ## 5. Protocol Layer: Minimal Topology and the Quantum ASIC
 
-The metasurface-mediated quantum bus does not merely provide all-to-all connectivity in the abstract; it can be **programmed to implement the minimal topology and gate set** required for specific quantum protocols. This "Quantum ASIC" view reduces the control problem to a well-defined set of operations.
+The metasurface-mediated quantum bus does not merely provide all-to-all connectivity in the abstract; it can be **programmed to implement the minimal topology and gate set** required for specific quantum protocols. This "Quantum ASIC" view reduces the control problem to a well-defined set of operations. The **EaC pipeline** accepts any OpenQASM and any qubit count and derives topology from the circuit; the "minimal" spec in this section is a reference for certain protocols (e.g. teleportation).
 
 **Minimal resource specification (illustrative):**
 
@@ -260,7 +260,7 @@ python engineering/viz_routing_phase.py pipeline_result_routing.json --inverse p
 - **Quantum wiring and heat load:** National and industrial roadmaps (e.g., DOE, NSF, industry consortia) on scaling superconducting and spin qubits; dilution refrigerator thermal budgets.
 - **Micius satellite:** Space-based entanglement distribution and quantum teleportation over optical links; motivation for RF/weather-resilient alternatives.
 - **Cooper pair splitting / entangled microwave photons:** Solid-state sources of correlated RF photons for on-chip and link applications.
-- **Quantum ASIC and minimal topology:** Protocol-level minimal gate set and linear topology (see repo: `docs/QUANTUM_ASIC.md`, `PROTOCOLS.md`) for teleportation, tamper-evidence, and commitment.
+- **Quantum ASIC and minimal topology:** Protocol-level minimal gate set and linear topology (see repo: `docs/QUANTUM_ASIC.md`, `PROTOCOLS.md`) for teleportation, tamper-evidence, and commitment. The pipeline accepts any OpenQASM and any qubit count; topology is derived from the circuit.
 - **Tamper-evidence and no-cloning:** Foundational QKD and quantum communication literature; "Thief" and intercept models in pedagogical simulators (e.g., Quirk).
 - **Quantum radar:** Theoretical and experimental work on entangled-photon radar and correlation-based detection; phased-array extensions.
 - **Supporting code:** QASIC Engineering-as-Code repo: `engineering/README.md`, `engineering/routing_qubo_qaoa.py`, `engineering/metasurface_inverse_net.py`; BQTC QRNG API pattern (`IBM_QUANTUM_TOKEN`, `ibm_quantum_platform`).

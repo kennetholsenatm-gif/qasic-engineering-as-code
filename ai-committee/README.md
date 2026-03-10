@@ -114,7 +114,7 @@ Should display:
 🏛️ QASIC AI Committee Roster:
 
   • Quantum Protocol Specialist (neural-chat)
-    Expertise: Quantum protocols, 3-qubit ASIC
+    Expertise: Quantum protocols, ASIC (pipeline: any OpenQASM, any qubit count; e.g. 3-qubit reference)
     
   • Engineering Pipeline Expert (mistral)
     Expertise: Metasurface routing, inverse design
@@ -136,7 +136,7 @@ orch = CommitteeOrchestrator()
 # Ask Quantum Specialist
 result = orch.query_agent(
     AgentRole.QUANTUM_PROTOCOL,
-    "Design a teleporation circuit for the 3-qubit ASIC"
+    "Design a teleportation circuit (e.g. for the reference 3-qubit ASIC)"
 )
 print(result)
 ```
@@ -249,7 +249,7 @@ for task in tasks:
 ```python
 # Pass context to inform agent decisions
 context = {
-    "current_alpha_scope": "3-qubit linear chain only",
+    "current_alpha_scope": "any OpenQASM 2/3, any qubit count → digital-twin ASIC",
     "timeline": "Alpha MVP in 6 weeks",
     "constraints": ["No DRC/LVS for Alpha", "Simulation only"]
 }

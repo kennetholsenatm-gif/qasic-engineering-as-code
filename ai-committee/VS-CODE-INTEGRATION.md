@@ -225,7 +225,7 @@ export function activate(context: vscode.ExtensionContext) {
         async () => {
             const query = await vscode.window.showInputBox({
                 prompt: 'Ask the QASIC Committee',
-                placeHolder: 'e.g., Design a Bell pair circuit for the 3-qubit ASIC'
+                placeHolder: 'e.g., Design a Bell pair circuit (pipeline supports any qubit count)'
             });
             
             if (!query) return;
@@ -366,7 +366,7 @@ export function deactivate() {}
                 "# Edit the question below and run\n",
                 "result = orch.query_agent(\n",
                 "    AgentRole.QUANTUM_PROTOCOL,\n",
-                "    \"Design a Bell pair preparation circuit for the 3-qubit linear chain (0-1-2)\"\n",
+                "    \"Design a Bell pair preparation circuit (e.g. reference 3-qubit linear chain)\"\n",
                 ")\n",
                 "print(result)"
             ]

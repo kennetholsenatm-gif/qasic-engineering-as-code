@@ -1,6 +1,6 @@
 # Theoretical Applications of the Quantum ASIC
 
-This document summarizes **theoretical applications** of the Quantum ASIC—the minimal 3-qubit linear topology and gate set (H, X, Z, CNOT) described in [QUANTUM_ASIC.md](QUANTUM_ASIC.md). It maps each concept to existing protocols, demos, and documentation in the repo.
+This document summarizes **theoretical applications** of the Quantum ASIC—the reference minimal topology (e.g. 3-qubit linear) and gate set (H, X, Z, CNOT) described in [QUANTUM_ASIC.md](QUANTUM_ASIC.md). The pipeline accepts any OpenQASM and any qubit count. This doc maps each concept to existing protocols, demos, and documentation in the repo.
 
 ## Quantum ASIC recap
 

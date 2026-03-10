@@ -1,6 +1,6 @@
 # QASIC Alpha → Tapeout Improvement Recommendations
 
-**Document**: Strategic recommendations for transitioning QASIC from Alpha (3-qubit linear chain production-ready) to Phase 3-4 (full tape-out capable system).
+**Document**: Strategic recommendations for transitioning QASIC from Alpha (OpenQASM, any qubit count → digital-twin ASIC; computation-time scaling) to Phase 3-4 (full tape-out capable system).
 
 **Based on**: Roadmap analysis, Alpha scope definition, Alpha focus (digital-twin pipeline, solo developer), and engineering-as-code principles.
 
@@ -10,7 +10,7 @@
 
 ## Executive Summary
 
-QASIC is well-positioned for Alpha delivery (3-qubit linear OpenQASM → GDS). To reach production tapeout with 8-64 qubits in a superconducting metasurface ASIC, **26 prioritized recommendations** span 4 domains:
+QASIC is well-positioned for Alpha delivery (any OpenQASM 2/3, any qubit count → digital-twin ASIC / GDS). To reach production tapeout with larger qubit counts in a superconducting metasurface ASIC, **26 prioritized recommendations** span 4 domains:
 
 1. **Tapeout Readiness (7 items)**: DFT, yield analysis, fab integration, thermal closure
 2. **Physics Fidelity (6 items)**: Superconducting extraction, cryogenic materials, full-wave validation
@@ -247,7 +247,7 @@ These ensure designs meet physics specs before fab and manufacturing.
 
 ### **CATEGORY C: Scalability & Automation (P1 Priority)**
 
-These enable scaling from 3-qubit Alpha to 8–64 qubit production designs with minimal manual iteration.
+These enable scaling to larger qubit counts (with computation-time and resource warnings) with minimal manual iteration.
 
 #### **C1: Parametric 3D CAD Generation (CadQuery/build123d for Packaging)** 
 **Problem**: Sample holder, RF pucks, and shield geometries are manually designed via CAD tools. Scaling to larger dies or different qubit counts requires hand-edits. Goal: **Packaging-as-Code**.
@@ -399,7 +399,7 @@ These ensure long-term maintainability and pipeline velocity for the solo develo
 
 **Recommendation**:
 - Extend `docs/PIPELINE_METRICS.md` (already scaffolded) with:
-  - **SLA targets**: 95% success rate for 3-qubit golden path, <5 min latency, zero DRC failures on first pass.
+  - **SLA targets**: 95% success rate for pipeline golden path (e.g. small circuits <5 min latency), zero DRC failures on first pass.
   - **Dashboarding**: CI/CD pipeline publishes metrics (success rate, latency, DRC violations, thermal budget headroom) to a simple dashboard (Markdown table in GitHub Actions artifacts or a static HTML page).
   - **Trend tracking**: Weekly rollup of metrics in a CSV; plot failures per week, latency trends, etc.
 - Integrate into Hardware CI: each pipeline run logs timestamps, resource usage, pass/fail to a metrics database (JSON lines file in git-lfs or cloud storage).
@@ -422,7 +422,7 @@ These ensure long-term maintainability and pipeline velocity for the solo develo
 
 **Lead Agent**: Engineering Pipeline Expert
 **Effort**: P1 (2-3 weeks parameterization + validation)
-**Reference**: Phase 3 scope extension (beyond single 3-qubit chain)
+**Reference**: Phase 3 scope extension (arbitrary qubit count)
 
 ---
 
@@ -431,7 +431,7 @@ These ensure long-term maintainability and pipeline velocity for the solo develo
 
 **Recommendation**:
 - Create `demos/design_exploration.ipynb`: Jupyter notebook with:
-  - Load a reference design (3-qubit chain) from GDS/manifest.
+  - Load a reference design (e.g. small circuit) from GDS/manifest.
   - Interactive plots: S-parameters, meta-atom geometry, thermal map, qubit placement.
   - Widgets: Slider for key parameters (frequency, phase range), live re-compute S-params, visualize changes.
   - Export capability: Download modified geometry as new manifest/GDS.
@@ -555,7 +555,7 @@ Use the committee to drive these recommendations:
 
 ✅ **Phase 3 Gateway (Q1 2025)**:
 1. A1–A5, B1–B3, C1–C2 complete and validated.
-2. First 8-qubit digital-twin design producing fab-ready artifacts (simulation only; no physical fab in this project).
+2. First digital-twin run at chosen qubit count (e.g. 8 qubits) producing fab-ready artifacts (simulation only; any qubit count supported; no physical fab in this project).
 3. Pipeline SLA >95% success, <5 min latency.
 4. Zero first-pass DRC violations on production designs.
 5. Predicted yield within 10% of historical tapeout data.

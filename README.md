@@ -2,7 +2,7 @@
 
 **Repository:** [github.com/kennetholsenatm-gif/qasic-engineering-as-code](https://github.com/kennetholsenatm-gif/qasic-engineering-as-code)
 
-**Quantum ASIC and Engineering-as-Code (EaC):** protocols, routing, inverse design, quantum illumination, and CV quantum radar—with a **web app** for flow-based workflows, deployment, and hybrid compute. **Alpha** focuses on a single golden path (3-qubit linear chain → routing → inverse design → HEaC → GDS) for the digital-twin pipeline (solo developer + AI agents); broader protocols and applications remain in the repo but are parked for Alpha. See [docs/app/ALPHA_SCOPE.md](docs/app/ALPHA_SCOPE.md) and [docs/app/ALPHA_CUSTOMER.md](docs/app/ALPHA_CUSTOMER.md) for scope and focus.
+**Quantum ASIC and Engineering-as-Code (EaC):** protocols, routing, inverse design, quantum illumination, and CV quantum radar—with a **web app** for flow-based workflows, deployment, and hybrid compute. **Alpha** focuses on the pipeline: **any OpenQASM 2 or 3 file of any qubit size** goes through routing → inverse design → HEaC → GDS to produce a **digital-twin Quantum ASIC** (solo developer + AI agents). Computation time scales with qubit count—warnings apply for large circuits (see [docs/app/OPENQASM_TO_ASIC_PIPELINE.md](docs/app/OPENQASM_TO_ASIC_PIPELINE.md)). Broader protocols and applications remain in the repo but are parked for Alpha. See [docs/app/ALPHA_SCOPE.md](docs/app/ALPHA_SCOPE.md) and [docs/app/ALPHA_CUSTOMER.md](docs/app/ALPHA_CUSTOMER.md) for scope and focus.
 
 ---
 
@@ -12,7 +12,7 @@ The main way to use the stack is the **QASIC web app**: FastAPI backend, React f
 
 | Feature | Description |
 |--------|--------------|
-| **Run Pipeline** (Alpha focus) | **Primary path:** Fixed metasurface pipeline (routing → inverse design → HEaC → GDS → DRC/LVS). A **project and circuit are required**—no default project or circuit. Run from the app (Run Pipeline: project + circuit, full pipeline with HEaC) or CLI. See [docs/app/ALPHA_SCOPE.md](docs/app/ALPHA_SCOPE.md). |
+| **Run Pipeline** (Alpha focus) | **Primary path:** Provide any OpenQASM 2 or 3 circuit (any qubit count); topology is derived from the circuit. Pipeline: routing → inverse design → HEaC → GDS → DRC/LVS → digital-twin Quantum ASIC. A **project and circuit are required**—no default project or circuit. Computation time may be long for large qubit counts. Run from the app or CLI. See [docs/app/ALPHA_SCOPE.md](docs/app/ALPHA_SCOPE.md). |
 | **Flow-based workflow (FBP)** | **Workflows** page: drag-and-drop task types from the Task Registry onto a canvas, connect edges to form a DAG, then **Deploy / Run**. Task types show a compute badge (Sim, FDTD, QPU, EKS). *Out of Alpha scope (parked until core pipeline is stable).* |
 | **Hybrid DAG orchestrator** | Backend parses each node, resolves compute resource via `dispatcher.py`, and routes jobs to local executor, IBM Quantum, or (future) EKS. See [src/backend/README.md](src/backend/README.md). |
 | **Deploy** | **Deploy** page: pick a target (Local, VM, AWS, GCP, Azure, OpenNebula) and get generated commands (Docker Compose, OpenTofu, Helm). For full infra DAG control, use the **IaC Orchestrator** under `platform/iac-orchestrator/`. *Out of Alpha scope (parked).* |
@@ -157,7 +157,7 @@ qasic-engineering-as-code/
 | **3-qubit bit-flip code** | Minimal QEC on the ASIC linear chain. |
 | **QKD (BB84 / E91)** | Pedagogical prepare-and-measure and entanglement-based key distribution. |
 
-**Quantum ASIC spec:** 3 qubits, linear chain `0 — 1 — 2`; gates H, X, Z, CNOT. See [docs/app/QUANTUM_ASIC.md](docs/app/QUANTUM_ASIC.md) and `python demos/demo_asic.py`. For topologies (star, repeater): `src/core_compute/asic/topology_builder` and [docs/app/TOPOLOGY_BUILDER.md](docs/app/TOPOLOGY_BUILDER.md).
+**Quantum ASIC:** The **pipeline** accepts any OpenQASM 2 or 3 and any qubit count and derives topology from the circuit (interaction graph). The **reference/demo** spec is a minimal 3-qubit linear example (gates H, X, Z, CNOT). See [docs/app/QUANTUM_ASIC.md](docs/app/QUANTUM_ASIC.md) for the reference spec and [docs/app/TOPOLOGY_BUILDER.md](docs/app/TOPOLOGY_BUILDER.md) for derived topologies; `python demos/demo_asic.py` for the demo.
 
 **More demos:** `python demos/demo_noise.py`, `demo_bitflip_code.py`, `demo_bb84.py`, `demo_e91.py`. **Security (toy):** No unconditional security; see [docs/app/CHANNEL_NOISE.md](docs/app/CHANNEL_NOISE.md) and [docs/app/CV_QUANTUM_RADAR.md](docs/app/CV_QUANTUM_RADAR.md).
 

@@ -2,12 +2,14 @@
 
 Concept: **simplify quantum hardware to the minimum** needed for the toy protocols—teleportation, tamper-evidence, and bit commitment. One fixed topology and a small gate set, like an ASIC that only implements the circuits we care about.
 
+**Pipeline vs reference spec:** The **pipeline** (OpenQASM → ASIC) accepts **any OpenQASM 2 or 3 file and any qubit count** and derives topology from the circuit's interaction graph. This document describes the **reference/demo** minimal spec (3 qubits, linear chain, minimal gate set) used in demos and protocol validation; it is not a limit on pipeline input.
+
 ## Spec summary
 
 | Resource | Specification |
 |----------|----------------|
-| **Qubits** | 3 |
-| **Topology** | Linear chain: `0 — 1 — 2`. Only adjacent pairs can interact. |
+| **Qubits** | 3 (reference/demo). Pipeline: any qubit count; topology from circuit. |
+| **Topology** | Linear chain: `0 — 1 — 2`. Only adjacent pairs can interact. (This table = reference/demo spec.) |
 | **1-qubit gates** | H, X, Z. Optional: Rx(θ) for tamper model. |
 | **2-qubit gates** | CNOT only, on edges (0,1) or (1,2). |
 

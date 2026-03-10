@@ -1,6 +1,6 @@
-# OpenQASM 3.0 → Quantum ASIC: WUI-Only Walkthrough and Pain Points
+# OpenQASM 2/3 → Digital-Twin Quantum ASIC: WUI Walkthrough and Pain Points
 
-This document walks through the **web UI (WUI) only** path for taking an OpenQASM 3.0 file to a Quantum ASIC using [qasic-engineering-as-code](https://github.com/kennetholsenatm-gif/qasic-engineering-as-code). Every step and **pain point** is noted so product and engineering can improve the flow.
+This document walks through the **web UI (WUI)** path for taking **any OpenQASM 2 or 3 file (any qubit count)** to a **digital-twin Quantum ASIC** using [qasic-engineering-as-code](https://github.com/kennetholsenatm-gif/qasic-engineering-as-code). Every step and **pain point** is noted so product and engineering can improve the flow. For large circuits, expect longer pipeline runs; see [OPENQASM_TO_ASIC_PIPELINE.md](OPENQASM_TO_ASIC_PIPELINE.md) for computation-time guidance.
 
 ---
 
@@ -36,10 +36,14 @@ This document walks through the **web UI (WUI) only** path for taking an OpenQAS
 
 ---
 
-## Step 3: Provide your OpenQASM 3.0 circuit
+## Step 3: Provide your OpenQASM 2 or 3 circuit
 
-1. **Option A — Paste:** Paste your OpenQASM 3.0 source into the editor. The first line must be `OPENQASM 3.0;` (version is auto-detected).
+**Any qubit count is supported.** Topology is derived from the circuit; the pipeline produces a digital-twin Quantum ASIC from your input.
+
+1. **Option A — Paste:** Paste your OpenQASM 2.0 or 3.0 source into the editor. The first line must be `OPENQASM 2.0;` or `OPENQASM 3.0;` (version is auto-detected).
 2. **Option B — File:** Click **Upload .qasm file** or drag-and-drop a `.qasm` / `.qasm2` file onto the editor. The file content replaces the editor content; the UI shows "File loaded: &lt;name&gt;".
+
+For large circuits, runtimes may be long; see [OPENQASM_TO_ASIC_PIPELINE.md](OPENQASM_TO_ASIC_PIPELINE.md) for computation time vs qubit count.
 
 **Pain points:**
 - **File extension:** Both 2.0 and 3.0 often use `.qasm`. Version is determined by the first declaration line, not the extension. The UI does not explain this.
@@ -123,6 +127,7 @@ This document walks through the **web UI (WUI) only** path for taking an OpenQAS
 | 8 | Options | HEaC, routing method, and other API options not exposed on Run Pipeline form. |
 | 9 | Artifacts | No "Download GDS" / "Download manifest" on Run Pipeline page; must use Results or API. |
 | 10 | Circuit topology tab | No message when validation fails explaining why topology is not shown. |
+| 11 | Computation time | No in-app guidance on computation time vs qubit count; see [OPENQASM_TO_ASIC_PIPELINE.md](OPENQASM_TO_ASIC_PIPELINE.md). |
 
 ---
 
@@ -130,7 +135,7 @@ This document walks through the **web UI (WUI) only** path for taking an OpenQAS
 
 1. **Start stack:** `docker compose up -d --build` → open http://localhost  
 2. **Navigate:** Home → **Run full pipeline**  
-3. **Input:** Paste OpenQASM 3.0 (or 2.0) or upload `.qasm` file  
+3. **Input:** Paste OpenQASM 2 or 3 (any qubit count) or upload `.qasm` file  
 4. **Validate:** Wait for **Valid** (fix errors if **Invalid**)  
 5. **Optional:** Switch to **Circuit Topology (EaC)** to see qubit interaction graph  
 6. **Options:** Leave **Circuit-driven pipeline** checked for full pipeline, or uncheck for circuit-to-ASIC only  

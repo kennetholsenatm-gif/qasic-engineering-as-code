@@ -65,7 +65,7 @@ INFO:__main__:✓ Connected to Ollama at http://localhost:11434
 
 Successfully queried **Quantum Protocol Specialist** with:
 ```
-"Briefly explain the 3-qubit ASIC linear chain topology for the QASIC project"
+"Briefly explain the ASIC pipeline (any OpenQASM, any qubit count) and the reference 3-qubit topology for the QASIC project"
 ```
 
 Status: **Processing** → Agents are responsive and generating responses

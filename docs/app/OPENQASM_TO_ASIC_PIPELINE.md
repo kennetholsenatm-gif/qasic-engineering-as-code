@@ -1,6 +1,6 @@
 # OpenQASM to Quantum ASIC Pipeline
 
-This document describes the **step-by-step process** from an OpenQASM file to a Quantum ASIC, with file paths and **pain points** to expect. It aligns with the plan "OpenQASM 3.0 to Quantum ASIC: Step-by-Step Process and Pain Points."
+This document describes the **step-by-step process** from an OpenQASM file to a Quantum ASIC, with file paths and **pain points** to expect. The pipeline accepts **any OpenQASM 2 or 3 file and any qubit count**; topology is built from the circuit's interaction graph; the result is a **digital-twin Quantum ASIC**.
 
 ## Supported versions
 
@@ -35,11 +35,18 @@ End-to-end entry: **Algorithm-to-ASIC** → `run_qasm_to_asic` (QASM string or p
 | **Input** | OpenQASM 3.0 requires `qiskit-qasm3-import`. Without it, 3.0 source raises a clear `QasmParseError`. File extension is often `.qasm` for both 2.0 and 3.0; version is determined by the first declaration line. |
 | **Gates** | ASIC supports only **H, X, Z, Rx, CNOT**. Unsupported gates (T, S, Rz, U3, etc.) cause rejection unless `decompose_to_asic=True` is used (Qiskit path only). Decomposition can increase depth and 2-qubit count. |
 | **Parsing** | OpenQASM 3.0 has multiple parsers (QE-Compiler, Shipyard, Qiskit). This repo uses `qiskit.qasm3` when `qiskit-qasm3-import` is installed. Not all 3.0 language features (e.g. `defcal`, full control flow) may be supported by every parser. |
-| **Topology** | Topology is derived from the **circuit’s interaction graph** (which pairs have 2-qubit gates). There is no built-in “fixed hardware graph + minimal SWAP” layout synthesis; for a fixed chip connectivity, external layout synthesis (e.g. ML-SABRE, EDA-Q) would be needed. |
+| **Topology** | Topology is derived from the **circuit’s interaction graph** (any qubit count; which pairs have 2-qubit gates). There is no built-in “fixed hardware graph + minimal SWAP” layout synthesis; for a fixed chip connectivity, external layout synthesis (e.g. ML-SABRE, EDA-Q) would be needed. |
+| **Computation time** | Runtime and resource use scale with qubit count. Document or display warnings for large circuits (e.g. n > 8 or n > 16) so users expect longer runs or higher resource needs. See "Computation time and qubit count" below. |
 | **Pulses** | Gate-based pulse path exists (`pulse/compiler.py`). OpenQASM 3.0 `defcal` and vendor control stacks (e.g. Zurich via Shipyard) are separate ecosystems. |
 | **GDS / packaging** | Pipeline produces 2D GDS. 3D packaging (cryogenic sample holder, flex routing, shielding) is documented in roadmap §5 and implemented as stubs or separate modules. |
 | **Verification** | No single end-to-end formal equivalence check from OpenQASM to GDS. Validation relies on the chain (parse → gate set → topology → geometry → extraction → GDS) plus separate thermal/EM runs. |
 | **Ops** | Full circuit-driven pipeline in the app (run_mode=circuit_pipeline) uses Celery/Redis; configuration and environment must be set for async execution. |
+
+---
+
+## Computation time and qubit count
+
+Runtime and resource use (routing, inverse design, HEaC, etc.) generally increase with the number of qubits. Users should expect longer runs and higher memory/CPU for large circuits (e.g. >8 or >16 qubits); specific thresholds can be documented as the pipeline is tuned. The UI or CLI may surface warnings for large qubit counts.
 
 ---
 
