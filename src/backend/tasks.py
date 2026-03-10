@@ -45,6 +45,15 @@ def _run_cmd(cmd: list[str], cwd: Path | None = None, timeout: int = 3600) -> tu
     return r.returncode, (r.stdout or "").strip(), (r.stderr or "").strip()
 
 
+def _pipeline_failure_error(heac: bool, stderr: str, stdout: str) -> str:
+    """Build a user-facing error message for pipeline/HEaC failures."""
+    detail = (stderr or stdout or "Pipeline failed.").strip()
+    if heac:
+        hint = "HEaC/GDS step failed. Common causes: gdsfactory not installed, or HEaC meta-atom library missing.\n\n"
+        return hint + detail
+    return detail
+
+
 def _publish_progress(task_id: str | None, message: str, step: str | None = None, done: bool = False):
     """Publish progress to Redis for SSE streaming. No-op if Redis not available."""
     if not task_id:
@@ -108,7 +117,8 @@ def run_pipeline_task(self, output_base: str = "pipeline_result", fast: bool = F
             update_pipeline_run(task_id=task_id, status="failed", error_message=err or out)
         except Exception:
             pass
-        return {"success": False, "exit_code": code, "stderr": err, "stdout": out}
+        error_msg = _pipeline_failure_error(heac, err, out)
+        return {"success": False, "exit_code": code, "error": error_msg, "stderr": err, "stdout": out}
     _publish_progress(task_id, "Pipeline completed", step="manifest_to_gds", done=True)
     try:
         from storage.db import update_pipeline_run
@@ -326,7 +336,8 @@ def run_pipeline_with_circuit_task(
             update_pipeline_run(task_id=task_id, status="failed", error_message=err or out)
         except Exception:
             pass
-        return {"success": False, "exit_code": code, "stderr": err, "stdout": out, "circuit_to_asic": _circuit_to_asic_result_serializable(raw)}
+        error_msg = _pipeline_failure_error(heac, err, out)
+        return {"success": False, "exit_code": code, "error": error_msg, "stderr": err, "stdout": out, "circuit_to_asic": _circuit_to_asic_result_serializable(raw)}
     _publish_progress(task_id, "Pipeline completed", step="manifest_to_gds", done=True)
     if run_id is not None:
         try:

@@ -140,8 +140,9 @@ export default function RunPipeline({ apiBase, initialProjectId }) {
     if (!taskId || !taskData) return
     if (taskData.status === 'SUCCESS' && taskData.result) {
       if (taskData.result.success === false) {
-        setError(taskData.result.error || 'Pipeline failed')
-        setResult(null)
+        const r = taskData.result
+        setError(r.error || r.stderr || r.stdout || 'Pipeline failed')
+        setResult(r) // keep failed result so UI can show stderr/stdout in details
       } else {
         setResult(taskData.result)
       }
@@ -150,6 +151,7 @@ export default function RunPipeline({ apiBase, initialProjectId }) {
     }
     if (taskData.status === 'FAILURE') {
       setError(taskData.error || 'Pipeline failed')
+      setResult(null)
       setTaskId(null)
       workspaceCanvas?.setTaskId?.(null)
     }
@@ -739,15 +741,26 @@ export default function RunPipeline({ apiBase, initialProjectId }) {
           <span>Task ID: {taskId} — {statusLabel}</span>
         </div>
       )}
-      {error && <p className="mt-4 text-sm text-red-400">{error}</p>}
-      {result && (
+      {error && (
+        <div className="mt-4">
+          <p className="text-sm text-red-400 whitespace-pre-wrap">{error}</p>
+          {result && (result.stderr || result.stdout) && (
+            <details className="mt-2">
+              <summary className="cursor-pointer text-sm text-slate-400 hover:text-slate-300">Show pipeline output (stderr/stdout)</summary>
+              <pre className="mt-2 overflow-auto rounded-lg border border-slate-700 bg-slate-900/80 p-3 text-xs text-slate-300 whitespace-pre-wrap">
+                {[result.stderr, result.stdout].filter(Boolean).join('\n\n')}
+              </pre>
+            </details>
+          )}
+        </div>
+      )}
+      {result && resultSuccess && (
         <section className="mt-6 rounded-xl border border-slate-700/60 bg-slate-800/60 p-4">
           <h2 className="text-lg font-medium text-slate-100">Result</h2>
           <pre className="mt-2 overflow-auto rounded-lg bg-slate-900/80 p-4 text-sm text-slate-300">
             {JSON.stringify(result, null, 2)}
           </pre>
-          {resultSuccess && (
-            <div className="mt-4 flex flex-wrap items-center gap-4">
+          <div className="mt-4 flex flex-wrap items-center gap-4">
               <button
                 type="button"
                 onClick={handleDownloadGds}
@@ -766,7 +779,6 @@ export default function RunPipeline({ apiBase, initialProjectId }) {
               </Link>
               {gdsError && <span className="text-sm text-amber-400">{gdsError}</span>}
             </div>
-          )}
         </section>
       )}
     </>
