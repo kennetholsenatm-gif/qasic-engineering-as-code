@@ -41,9 +41,9 @@ Documentation and whitepapers for **QASIC Engineering-as-Code** ([GitHub](https:
 | [ROADMAP_STATUS.md](ROADMAP_STATUS.md) | Roadmap implementation status (done vs scaffold vs future) |
 | **Program and roadmap** | |
 | [ALPHA_SCOPE.md](ALPHA_SCOPE.md) | **Alpha scope:** In/out for Alpha; single golden path (3-qubit → routing → inverse → HEaC → GDS); parked items |
-| [ALPHA_CUSTOMER.md](ALPHA_CUSTOMER.md) | **Alpha customer:** Primary user for Alpha (internal vs external vs hybrid); implications for prioritization |
-| [ROADMAP_SCHEDULE.md](ROADMAP_SCHEDULE.md) | **Roadmap schedule:** Phases 3–4 timeline, dependencies, owners (TBD until workshop) |
-| [PROGRAM_ACTION_ITEMS.md](PROGRAM_ACTION_ITEMS.md) | **Program action items:** TPM feedback index → deliverables and 45-min kickoff next steps |
+| [ALPHA_CUSTOMER.md](ALPHA_CUSTOMER.md) | **Alpha focus:** Primary use case (digital-twin pipeline, solo developer) |
+| [ROADMAP_SCHEDULE.md](ROADMAP_SCHEDULE.md) | **Roadmap schedule:** Phases 3–4 timeline, dependencies, owners (TBD) |
+| [PROGRAM_ACTION_ITEMS.md](PROGRAM_ACTION_ITEMS.md) | **Action items and prioritization:** Deliverables and next steps |
 | **Architecture and risk** | |
 | [ARCHITECTURE_CONTROL_VS_DATA_PLANE.md](ARCHITECTURE_CONTROL_VS_DATA_PLANE.md) | **Control vs data plane:** Proposal to split slim API (control) and heavy workers (data); current state and benefits |
 | [ARCHITECTURE_MODULARIZATION_PROPOSAL.md](ARCHITECTURE_MODULARIZATION_PROPOSAL.md) | **Modularization:** Proposal for qasic-ui, qasic-orchestrator, qasic-compute-workers; deploy boundaries and migration path |

@@ -1,6 +1,6 @@
 # Simulation–Fabrication Validation Strategy
 
-This document outlines how we plan to **validate** our FDTD (MEEP) and thermal-to-decoherence models against **real physical data** (e.g. first silicon, test structures). Closing the sim–fabrication gap is a top technical risk for hardware programs.
+This document outlines how we plan to **validate** FDTD (MEEP) and thermal-to-decoherence models against **real physical data** when/if such data exists (e.g. first silicon, test structures). This is a digital-twin project with no lab or fab; "first silicon" and measured data are hypothetical/future—the validation strategy applies when refining the digital twin against any future measured data. Closing the sim–fabrication gap remains a technical consideration for the pipeline.
 
 See [ROADMAP_STATUS.md](ROADMAP_STATUS.md) and [HEaC_opensource_Meep.md](HEaC_opensource_Meep.md) for the current pipeline and HEaC stack.
 
@@ -29,14 +29,14 @@ Without a validation plan, we cannot quantify or reduce this gap.
 
 ---
 
-## 3. Mitigation: validation plan (TBD in workshop)
+## 3. Mitigation: validation plan (TBD when refined)
 
 **Objectives:**
 
 1. **First silicon / test structures:** Define which test structures (e.g. standalone resonators, single JJs, small circuits) will be fabricated and measured. Align with [ROADMAP_STATUS.md](ROADMAP_STATUS.md) (e.g. DFT witness structures, 1.2).
 2. **Data collection:** Specify what will be measured (S-params, T1/T2, linewidth, Ic/Rn) and in what format. Store in a known location (e.g. calibration DB or artifact store) for comparison.
 3. **Comparison criteria:** Define how we compare sim to measured (e.g. S-parameter error norm, T1/T2 within X%, resonance frequency within Y MHz). Set targets for “sim validated” (e.g. within 20% on key metrics).
-4. **Timeline:** Assign target dates (e.g. first silicon by quarter X, first comparison report by Y). **To be confirmed in the cross-functional roadmap workshop** (Hardware, Software, Quantum).
+4. **Timeline:** Assign target dates (e.g. first silicon by quarter X, first comparison report by Y) when the validation plan is refined.
 
 **Output:** A short **validation runbook** (or section in this doc) that lists: test structures, measurement protocol, comparison script or pipeline, and ownership. Update [ROADMAP_SCHEDULE.md](ROADMAP_SCHEDULE.md) with validation milestones once agreed.
 

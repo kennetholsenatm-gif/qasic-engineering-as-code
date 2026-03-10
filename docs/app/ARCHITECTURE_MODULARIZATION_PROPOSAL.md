@@ -1,6 +1,6 @@
 # Architecture: Modularization Proposal
 
-This document proposes splitting the current monorepo deployment into **distinct services** (e.g. qasic-ui, qasic-orchestrator, qasic-compute-workers) so software and hardware teams can operate and deploy independently. It builds on [ARCHITECTURE_CONTROL_VS_DATA_PLANE.md](ARCHITECTURE_CONTROL_VS_DATA_PLANE.md).
+This document proposes splitting the current monorepo deployment into **distinct services** (e.g. qasic-ui, qasic-orchestrator, qasic-compute-workers) so the solo developer can deploy and operate distinct services (e.g. UI, orchestrator, compute workers) independently. It builds on [ARCHITECTURE_CONTROL_VS_DATA_PLANE.md](ARCHITECTURE_CONTROL_VS_DATA_PLANE.md).
 
 ---
 

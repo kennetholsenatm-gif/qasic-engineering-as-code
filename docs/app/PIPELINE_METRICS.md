@@ -1,6 +1,6 @@
-# Pipeline Metrics and Bi-Weekly Review
+# Pipeline Metrics
 
-This document defines **metrics to track** for pipeline execution and a **bi-weekly summary** template. It supports the TPM feedback loop: review pipeline success rates, latency, and failure reasons on a regular cadence.
+This document defines **metrics to track** for pipeline execution. Metrics the developer can use to monitor pipeline health (GDS success rate, latency, failure reasons). An optional summary template is included for periodic self-review.
 
 No code changes are required by this doc; instrumentation can be added as a follow-up task.
 
@@ -24,13 +24,13 @@ No code changes are required by this doc; instrumentation can be added as a foll
 - **API logs:** Request path, status code, duration. Add structured logging or use existing access logs.
 - **storage.db pipeline runs:** If [record_pipeline_run](../../src/backend/main.py) and [update_pipeline_run](../../src/backend/tasks.py) are used with DB enabled, runs and status are stored; can query for success/failure and timestamps.
 
-Instrumentation follow-up: centralize task outcome and duration (e.g. in DB or a small metrics endpoint) so bi-weekly reports do not require scraping raw logs.
+Instrumentation follow-up: centralize task outcome and duration (e.g. in DB or a small metrics endpoint) so periodic reports do not require scraping raw logs.
 
 ---
 
-## 3. Bi-weekly summary template
+## 3. Optional summary template
 
-Use this template (or a short written summary) every two weeks.
+Use this template (or a short written summary) for periodic self-review.
 
 | Field | Example |
 |-------|--------|
@@ -42,7 +42,7 @@ Use this template (or a short written summary) every two weeks.
 | **Action items** | e.g. Increase timeout for MEEP; document qubit limit in UI |
 | **Next review** | e.g. 2026-03-28 |
 
-Store summaries in a shared doc or in `docs/app/` (e.g. `PIPELINE_METRICS_SUMMARY_YYYY-MM-DD.md`) for traceability.
+Store summaries in `docs/app/` (e.g. `PIPELINE_METRICS_SUMMARY_YYYY-MM-DD.md`) for traceability.
 
 ---
 
@@ -50,4 +50,4 @@ Store summaries in a shared doc or in `docs/app/` (e.g. `PIPELINE_METRICS_SUMMAR
 
 - [CELERY_TROUBLESHOOTING.md](CELERY_TROUBLESHOOTING.md) — Worker and queue diagnostics.
 - [COMPUTE_COST_ASSESSMENT.md](COMPUTE_COST_ASSESSMENT.md) — Cost and margin (complementary to operational metrics).
-- [PROGRAM_ACTION_ITEMS.md](PROGRAM_ACTION_ITEMS.md) — TPM feedback and bi-weekly cadence.
+- [PROGRAM_ACTION_ITEMS.md](PROGRAM_ACTION_ITEMS.md) — Action items and pipeline metrics.

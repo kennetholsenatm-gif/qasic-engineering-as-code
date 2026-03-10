@@ -2,7 +2,7 @@
 
 **Repository:** [github.com/kennetholsenatm-gif/qasic-engineering-as-code](https://github.com/kennetholsenatm-gif/qasic-engineering-as-code)
 
-**Quantum ASIC and Engineering-as-Code (EaC):** protocols, routing, inverse design, quantum illumination, and CV quantum radar—with a **web app** for flow-based workflows, deployment, and hybrid compute. **Alpha** focuses on a single golden path (3-qubit linear chain → routing → inverse design → HEaC → GDS) for the internal hardware team; broader protocols and applications remain in the repo but are parked for Alpha. See [docs/app/ALPHA_SCOPE.md](docs/app/ALPHA_SCOPE.md) and [docs/app/ALPHA_CUSTOMER.md](docs/app/ALPHA_CUSTOMER.md) for scope and customer.
+**Quantum ASIC and Engineering-as-Code (EaC):** protocols, routing, inverse design, quantum illumination, and CV quantum radar—with a **web app** for flow-based workflows, deployment, and hybrid compute. **Alpha** focuses on a single golden path (3-qubit linear chain → routing → inverse design → HEaC → GDS) for the digital-twin pipeline (solo developer + AI agents); broader protocols and applications remain in the repo but are parked for Alpha. See [docs/app/ALPHA_SCOPE.md](docs/app/ALPHA_SCOPE.md) and [docs/app/ALPHA_CUSTOMER.md](docs/app/ALPHA_CUSTOMER.md) for scope and focus.
 
 ---
 
@@ -51,7 +51,7 @@ Open the frontend at **http://localhost** (port 80). API docs: **http://localhos
 
 ### Platform: Helm and OpenTofu
 
-For production, use **Kubernetes** and the Helm chart under [platform/deploy/](platform/deploy/). Provision infra (e.g. AWS EKS, RDS, ElastiCache) with OpenTofu in [platform/infra/tofu/](platform/infra/tofu/). The app’s **Deploy** page generates the exact commands; see [platform/deploy/README.md](platform/deploy/README.md).
+For production-style deployment, use **Kubernetes** and the Helm chart under [platform/deploy/](platform/deploy/). Provision infra (e.g. AWS EKS, RDS, ElastiCache) with OpenTofu in [platform/infra/tofu/](platform/infra/tofu/). The app’s **Deploy** page generates the exact commands; see [platform/deploy/README.md](platform/deploy/README.md).
 
 ---
 
@@ -202,7 +202,7 @@ Optional: install `.[engineering]` for routing and inverse-design tests. Hardwar
 
 | If you want… | Read… |
 |--------------|--------|
-| **Alpha scope and customer** | [docs/app/ALPHA_SCOPE.md](docs/app/ALPHA_SCOPE.md), [docs/app/ALPHA_CUSTOMER.md](docs/app/ALPHA_CUSTOMER.md) |
+| **Alpha scope and focus** | [docs/app/ALPHA_SCOPE.md](docs/app/ALPHA_SCOPE.md), [docs/app/ALPHA_CUSTOMER.md](docs/app/ALPHA_CUSTOMER.md) |
 | **Program action items and roadmap** | [docs/app/PROGRAM_ACTION_ITEMS.md](docs/app/PROGRAM_ACTION_ITEMS.md), [docs/app/ROADMAP_SCHEDULE.md](docs/app/ROADMAP_SCHEDULE.md) |
 | **Control plane vs data plane** | [docs/app/ARCHITECTURE_CONTROL_VS_DATA_PLANE.md](docs/app/ARCHITECTURE_CONTROL_VS_DATA_PLANE.md) |
 | **Vision, protocols, roadmap** | [docs/research/WHITEPAPER_Holographic_Metasurfaces_Quantum_SATCOM.md](docs/research/WHITEPAPER_Holographic_Metasurfaces_Quantum_SATCOM.md) |

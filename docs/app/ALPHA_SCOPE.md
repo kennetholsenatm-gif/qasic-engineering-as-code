@@ -2,7 +2,7 @@
 
 This document defines what is **in scope** and **out of scope** for the Alpha milestone of QASIC Engineering-as-Code. It supports predictable execution by limiting scope to a single golden path until the core pipeline is stable.
 
-See also [ALPHA_CUSTOMER.md](ALPHA_CUSTOMER.md) (who Alpha is for) and [PROGRAM_ACTION_ITEMS.md](PROGRAM_ACTION_ITEMS.md) (TPM feedback index).
+See also [ALPHA_CUSTOMER.md](ALPHA_CUSTOMER.md) (Alpha focus) and [PROGRAM_ACTION_ITEMS.md](PROGRAM_ACTION_ITEMS.md) (action items index).
 
 ---
 
@@ -24,7 +24,7 @@ See also [ALPHA_CUSTOMER.md](ALPHA_CUSTOMER.md) (who Alpha is for) and [PROGRAM_
 
 ## Out of scope (parked)
 
-The following are explicitly **not** part of Alpha. They remain in the repo but are not required for Alpha sign-off.
+The following are explicitly **not** part of Alpha. They remain in the repo but are not required for the Alpha milestone.
 
 | Item | Rationale |
 |------|-----------|
@@ -44,4 +44,4 @@ The following are explicitly **not** part of Alpha. They remain in the repo but 
 3. **Documentation:** This scope doc, Alpha customer doc, and a short runbook for the golden path (or link to [OPENQASM_TO_ASIC_WUI_WALKTHROUGH.md](OPENQASM_TO_ASIC_WUI_WALKTHROUGH.md)).
 4. **Stability:** Pipeline success rate and latency tracked per [PIPELINE_METRICS.md](PIPELINE_METRICS.md); no blocking bugs on the golden path.
 
-Criteria will be confirmed and refined in the Alpha kickoff (45-min workshop).
+Criteria can be refined as the pipeline matures.
