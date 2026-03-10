@@ -27,6 +27,24 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+# #region agent log
+def _debug_log(message: str, data: dict | None = None, hypothesis_id: str | None = None):
+    import time
+    payload = {"id": f"log_{int(time.time()*1000)}", "timestamp": int(time.time() * 1000), "location": "main.py", "message": message, "data": data or {}, "sessionId": "0ce9c5"}
+    if hypothesis_id:
+        payload["hypothesisId"] = hypothesis_id
+    try:
+        log_path = REPO_ROOT / "debug-0ce9c5.log"
+        with open(log_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(payload) + "\n")
+    except Exception:
+        pass
+    try:
+        print(f"[debug 0ce9c5] {message} {data or {}}", flush=True)
+    except Exception:
+        pass
+# #endregion
+
 try:
     from config.logger import get_logger
     log = get_logger(__name__)
@@ -256,6 +274,9 @@ class UpdateProjectRequest(BaseModel):
 @app.get("/api/projects")
 def list_projects_api():
     """List all projects (project-based workspace)."""
+    # #region agent log
+    _debug_log("GET /api/projects entered", {"route": "list_projects"}, "A")
+    # #endregion
     try:
         from storage.db import list_projects, is_enabled
         if not is_enabled():
@@ -268,11 +289,23 @@ def list_projects_api():
 @app.post("/api/projects")
 def create_project_api(req: CreateProjectRequest):
     """Create a project. Returns project id and mlflow_experiment_id when MLflow is configured."""
+    # #region agent log
+    _debug_log("POST /api/projects entered", {"name": getattr(req, "name", None)}, "B")
+    # #endregion
     try:
         from storage.db import create_project, get_project, update_project_mlflow_experiment, is_enabled
+        # #region agent log
+        _debug_log("create_project_api: about to check is_enabled", {}, "C")
+        # #endregion
         if not is_enabled():
             raise HTTPException(status_code=503, detail="Database not configured (set DATABASE_URL).")
+        # #region agent log
+        _debug_log("create_project_api: about to create_project", {"name": req.name}, "D")
+        # #endregion
         pid = create_project(req.name, req.description, req.config)
+        # #region agent log
+        _debug_log("create_project_api: create_project returned", {"pid": pid}, "E")
+        # #endregion
         if pid is None:
             raise HTTPException(status_code=400, detail="Project name may already exist.")
         proj = get_project(pid)
@@ -1392,35 +1425,55 @@ def run_pipeline_async(request: Request, req: RunPipelineRequest):
     return {"task_id": task.id, "status": "PENDING", "message": "Circuit-to-ASIC task enqueued"}
 
 
+def _is_redis_backend_error(e: Exception) -> bool:
+    """True if exception is from Redis/Celery backend connection failure."""
+    t = type(e)
+    mod = (t.__module__ or "").lower()
+    msg = str(e).lower()
+    return "redis" in mod or "connection" in msg or "redis" in msg
+
+
 @app.get("/api/tasks/{task_id}")
 def get_task_status(task_id: str):
-    """Get Celery task status and result (if ready)."""
+    """Get Celery task status and result (if ready). Returns 503 if Redis/Celery backend unavailable."""
     if not _celery_available():
         raise HTTPException(status_code=503, detail="Celery/Redis not configured")
     from src.backend.celery_app import get_celery_app
     from celery.result import AsyncResult
-    celery_app = get_celery_app()
-    ar = AsyncResult(task_id, app=celery_app)
-    out = {"task_id": task_id, "status": ar.status }
-    if ar.ready():
-        if ar.successful():
-            out["result"] = ar.result
-        else:
-            out["error"] = str(ar.result) if ar.result else "Task failed"
-    return out
+    try:
+        celery_app = get_celery_app()
+        ar = AsyncResult(task_id, app=celery_app)
+        out = {"task_id": task_id, "status": ar.status}
+        if ar.ready():
+            if ar.successful():
+                out["result"] = ar.result
+            else:
+                out["error"] = str(ar.result) if ar.result else "Task failed"
+        return out
+    except HTTPException:
+        raise
+    except Exception as e:
+        if _is_redis_backend_error(e):
+            raise HTTPException(status_code=503, detail="Celery result backend unavailable (Redis connection failed).")
+        raise HTTPException(status_code=503, detail=_sanitize_detail(e, "Task status unavailable."))
 
 
 @app.post("/api/tasks/{task_id}/cancel")
 def cancel_task_api(task_id: str):
-    """Revoke a Celery task (abort if pending or running)."""
+    """Revoke a Celery task (abort if pending or running). Returns 503 if Redis/Celery backend unavailable."""
     if not _celery_available():
         raise HTTPException(status_code=503, detail="Celery/Redis not configured")
     from src.backend.celery_app import get_celery_app
     from celery.result import AsyncResult
-    celery_app = get_celery_app()
-    ar = AsyncResult(task_id, app=celery_app)
-    ar.revoke(terminate=True)
-    return {"task_id": task_id, "message": "Cancel requested"}
+    try:
+        celery_app = get_celery_app()
+        ar = AsyncResult(task_id, app=celery_app)
+        ar.revoke(terminate=True)
+        return {"task_id": task_id, "message": "Cancel requested"}
+    except Exception as e:
+        if _is_redis_backend_error(e):
+            raise HTTPException(status_code=503, detail="Celery result backend unavailable (Redis connection failed).")
+        raise HTTPException(status_code=503, detail=_sanitize_detail(e, "Cancel failed."))
 
 
 # Sync pipeline timeout when API enqueues and waits (slim/control-plane mode)
