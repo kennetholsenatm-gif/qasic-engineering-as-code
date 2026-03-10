@@ -9,8 +9,7 @@ services:
       dockerfile: Dockerfile.api
       cache_from:
         - type=local,src=.buildcache
-      cache_to:
-        - type=local,dest=.buildcache,mode=max
+      # cache_to omitted: on Windows, writing to .buildcache can fail with "file is being used by another process"
     ports:
       - "8000:8000"
     environment:
@@ -38,8 +37,7 @@ services:
       dockerfile: Dockerfile.worker
       cache_from:
         - type=local,src=.buildcache
-      cache_to:
-        - type=local,dest=.buildcache,mode=max
+      # cache_to omitted: avoids Windows "file in use" errors when writing .buildcache
     command: celery -A src.backend.celery_app worker -l info
     environment:
       - CELERY_BROKER_URL=redis://redis:6379/0
@@ -59,8 +57,7 @@ services:
       dockerfile: Dockerfile.frontend
       cache_from:
         - type=local,src=.buildcache
-      cache_to:
-        - type=local,dest=.buildcache,mode=max
+      # cache_to omitted: avoids Windows "file in use" errors when writing .buildcache
     ports:
       - "80:8080"
     depends_on:
