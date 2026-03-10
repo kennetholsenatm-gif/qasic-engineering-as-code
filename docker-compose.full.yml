@@ -6,6 +6,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.api
+      cache_from:
+        - type=local,src=.buildcache
+      cache_to:
+        - type=local,dest=.buildcache,mode=max
     ports:
       - "8000:8000"
     environment:
@@ -36,6 +40,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.api
+      cache_from:
+        - type=local,src=.buildcache
+      cache_to:
+        - type=local,dest=.buildcache,mode=max
     command: celery -A src.backend.celery_app worker -l info
     environment:
       - CELERY_BROKER_URL=redis://redis:6379/0
@@ -57,6 +65,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.frontend
+      cache_from:
+        - type=local,src=.buildcache
+      cache_to:
+        - type=local,dest=.buildcache,mode=max
     ports:
       - "80:8080"
     depends_on:

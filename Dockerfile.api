@@ -1,8 +1,6 @@
 # syntax=docker/dockerfile:1
 # QASIC Engineering-as-Code: API image with full engineering stack pre-built.
-# FastAPI + uvicorn + Celery client; includes qiskit, qiskit-qasm3-import so in-API
-# validation (e.g. OpenQASM 3 parsing) and light checks work in the container.
-# Heavy pipeline execution still runs in the Celery worker; see Dockerfile.worker.
+# Deps layer (requirements-docker.txt) is cached; only code layer rebuilds on Python/YAML changes.
 FROM python:3.11-slim
 
 # System deps for torch/scipy (OpenMP and optional native builds)
@@ -12,19 +10,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Dependency and package metadata first (maximize layer cache: only reinstall when these change)
-COPY pyproject.toml README.md MANIFEST.in ./
+# Deps layer: cached until requirements-docker.txt changes (no re-download on code change)
+COPY requirements-docker.txt ./
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --no-cache-dir -r requirements-docker.txt
 
-# Package directories required by setuptools (pyproject.toml [tool.setuptools.packages.find])
+# Code layer: rebuilds only when app source changes
+COPY pyproject.toml README.md MANIFEST.in ./
 COPY src/ src/
 COPY config/ config/
 COPY storage/ storage/
 COPY dashboard/ dashboard/
 COPY apps/ apps/
-
-# Use BuildKit cache mount so pip reuses downloaded wheels across builds (no full re-download on every code change).
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install .[app,engineering]
+RUN pip install -e . --no-deps
 
 # Run as unprivileged user (DevSecOps: no root in container)
 RUN adduser --disabled-password --gecos "" appuser && chown -R appuser:appuser /app

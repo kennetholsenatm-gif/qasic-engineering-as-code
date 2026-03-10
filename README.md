@@ -32,7 +32,7 @@ cd qasic-engineering-as-code
 docker compose up -d --build
 ```
 
-- **What you get:** Web UI (frontend), API, Celery worker, Redis, and Postgres. This is the full WUI experience: Run Pipeline, Workflows, Projects, async task streaming, and Results. The API container includes the **full engineering stack** (qiskit, qiskit-qasm3-import, etc.) so validation and OpenQASM 3 parsing run in the container with pre-built deps; pipeline execution still runs in the Celery worker. Running the backend via Docker is the recommended way so Python runs inside the container with all requirements pre-built (no local `pip install .[engineering]` needed for the API). BuildKit and a pip cache mount speed up rebuilds; see [Dockerfile.api](Dockerfile.api) and [Dockerfile.worker](Dockerfile.worker).
+- **What you get:** Web UI (frontend), API, Celery worker, Redis, and Postgres. This is the full WUI experience: Run Pipeline, Workflows, Projects, async task streaming, and Results. The stack is **100% containerized**: only Docker (and Docker Compose) is required; no local Python or Node. The API container includes the full engineering stack (qiskit, qiskit-qasm3-import, etc.); pipeline execution runs in the Celery worker. Builds use a **persistent cache** (`.buildcache`): the first build may be large/slow; later builds only rebuild the delta (deps re-download only when `requirements-docker.txt` or `package.json`/lock change). To clear the cache, remove `.buildcache` or use `docker compose build --no-cache`. When you change [pyproject.toml](pyproject.toml) dependencies, regenerate the lockfile with `make requirements-docker` (or `bash scripts/generate-requirements-docker.sh`). See [Dockerfile.api](Dockerfile.api), [Dockerfile.worker](Dockerfile.worker), [Dockerfile.frontend](Dockerfile.frontend).
 - **Environment:** The core stack sets `DATABASE_URL`, `CELERY_BROKER_URL`, and Postgres inside `docker-compose.yml`; you do not need to edit `.env` for a basic run. Copying `.env.example` to `.env` is only so the file exists. Optionally set `IBM_QUANTUM_TOKEN` in `.env` if you use IBM Quantum from the app.
 
 Open the frontend at **http://localhost** (port 80). API docs: **http://localhost:8000/docs**.
@@ -55,51 +55,21 @@ For production-style deployment, use **Kubernetes** and the Helm chart under [pl
 
 ---
 
-## Installation and quick start (dev)
+## Installation and quick start
 
-**Prerequisites:** Python 3.10+ (use `py` or `python` as on your system). For the web app frontend you also need **Node.js 18+** and **npm**.
+**Prerequisites:** Docker and Docker Compose. No local Python or Node is required to run the app; everything runs in containers.
 
-Run from **repo root**:
-
-```bash
-git clone https://github.com/kennetholsenatm-gif/qasic-engineering-as-code.git
-cd qasic-engineering-as-code
-pip install -e .
-```
-
-**Demos** (protocols and ASIC; no app required):
+**Demos** (protocols and ASIC) inside the API container:
 
 ```bash
-python demos/demo_teleport.py
-python demos/demo_thief.py
-python demos/demo_commitment.py
-python demos/demo_asic.py
+docker compose run --rm api python demos/demo_teleport.py
+docker compose run --rm api python demos/demo_thief.py
+docker compose run --rm api python demos/demo_commitment.py
+docker compose run --rm api python demos/demo_asic.py
 ```
 
-**Web app** (backend + frontend, no Docker):
-
-```bash
-pip install -e ".[app]"
-# Terminal 1 – backend:
-uvicorn src.backend.main:app --reload
-# Terminal 2 – frontend (requires Node.js and npm):
-cd src/frontend && npm install && npm run dev
-```
-
-Then open **http://localhost:5173** (Vite dev server). The API is at **http://localhost:8000**. See [src/frontend/README.md](src/frontend/README.md) for frontend details.
-
-**Note:** This path does not start Celery, Redis, or Postgres. The UI will load, but pipeline runs use the **synchronous** API (no live task log or Stop button), and project workspaces / MLflow integration are unavailable. For the full WUI (async runs, projects, task streaming), use Docker above. For OpenQASM 3 validation and circuit-driven pipeline features in the API, install the engineering extras locally: `pip install -e ".[app,engineering]"`, or use Docker so the backend runs in the container with deps pre-built.
-
-**Optional extras:**
-
-```bash
-pip install -e ".[dashboard]"    # CLI dashboard (python -m dashboard)
-pip install -e ".[engineering]"  # Routing, inverse design, HEaC (Qiskit, PyTorch)
-pip install -e ".[test]"         # Pytest and test deps
-pip install -e ".[all]"          # All optional dependencies
-```
-
-Entry points: `qasic-dashboard`, `qasic-pulse` (pulse compile CLI). Build artifacts: `pip install build && python -m build`.
+**Optional: local Python (unsupported for normal use)**  
+If you want to run demos or the app without Docker, you need Python 3.10+ and (for the web app) Node.js 18+ and npm. Install with `pip install -e .` or `pip install -e ".[app,engineering]"` for the full stack. The supported and recommended way to run the stack is Docker (above). When Python is installed locally, entry points include `qasic-dashboard`, `qasic-pulse`; build with `pip install build && python -m build`.
 
 ---
 

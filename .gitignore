@@ -14,3 +14,6 @@ engineering/*_phases.npy
 
 # Debug session logs (agent instrumentation)
 debug-*.log
+
+# Docker build cache (persistent layer cache)
+.buildcache/

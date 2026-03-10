@@ -1,11 +1,17 @@
 # QASIC Engineering-as-Code: Frontend SPA (production build served by nginx)
-# Use slim (Debian) for builder to avoid Alpine esbuild/native-module issues; final image stays Alpine
+# Deps layer (package.json + lock) cached; only code layer rebuilds on JS/CSS changes.
 FROM node:20-slim AS builder
 
 WORKDIR /app
-# Copy entire frontend (no package-lock.json in repo; npm install uses package.json)
+
+# Deps layer: cached until package.json (and package-lock.json if present) changes
+COPY src/frontend/package.json ./
+COPY src/frontend/package-lock.json ./
+RUN npm ci 2>/dev/null || npm install
+
+# Code layer: rebuilds only when app source changes
 COPY src/frontend/ ./
-RUN npm install
+
 # Avoid OOM in constrained containers; explicit production build
 ENV NODE_ENV=production
 ENV NODE_OPTIONS=--max-old-space-size=4096

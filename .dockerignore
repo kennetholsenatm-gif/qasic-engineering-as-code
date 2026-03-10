@@ -18,3 +18,4 @@ src/frontend/dist
 *.plan.md
 docs/*.tex
 !docs/README.md
+.buildcache
