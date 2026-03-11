@@ -158,6 +158,9 @@ export default function RunPipeline({ apiBase, initialProjectId }) {
       setError(null)
       if (data.runMode) setRunMode(data.runMode)
       if (data.taskId) {
+        // #region agent log
+        fetch('http://127.0.0.1:7610/ingest/8e7447a5-506a-4460-a41a-7b63d5e55b2a',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0ce9c5'},body:JSON.stringify({sessionId:'0ce9c5',location:'RunPipeline.jsx:onSuccess',message:'Submit success with taskId',data:{taskId:data.taskId,hasSetTaskId:!!workspaceCanvas?.setTaskId},hypothesisId:'H_taskid_set',timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
         setTaskId(data.taskId)
         setLogLines([])
         workspaceCanvas?.setTaskId?.(data.taskId)
@@ -431,8 +434,16 @@ export default function RunPipeline({ apiBase, initialProjectId }) {
       const url = apiBase ? `${apiBase.replace(/\/$/, '')}/api/results/gds` : '/api/results/gds'
       const r = await fetch(url)
       if (!r.ok) {
-        if (r.status === 404) setGdsError('No GDS yet. Enable HEaC and run the full pipeline to generate GDS.')
-        else setGdsError(r.statusText || 'Download failed')
+        // #region agent log
+        if (r.status === 404) {
+          const msg = heac
+            ? 'No GDS yet. Run the full pipeline to generate GDS.'
+            : 'No GDS yet. Enable HEaC and run the full pipeline to generate GDS.'
+          fetch('http://127.0.0.1:7610/ingest/8e7447a5-506a-4460-a41a-7b63d5e55b2a',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0ce9c5'},body:JSON.stringify({sessionId:'0ce9c5',location:'RunPipeline.jsx:404',message:'GDS 404 branch',data:{heac,status:404,messageSet:msg},hypothesisId:'H_heac_message',runId:'post-fix',timestamp:Date.now()})}).catch(()=>{});
+          setGdsError(msg)
+        }
+        // #endregion
+        if (r.status !== 404) setGdsError(r.statusText || 'Download failed')
         return
       }
       const blob = await r.blob()

@@ -38,7 +38,12 @@ export default function TerminalPanel({ apiBase }) {
       {!collapsed && (
         <div className="max-h-48 overflow-y-auto font-mono text-xs text-slate-400 bg-slate-950/80 px-3 py-2">
           {logLines.length === 0 && !taskId && (
-            <p className="text-slate-500">No active run. Start a pipeline run from the Canvas to see live logs.</p>
+            <>
+              {/* #region agent log */}
+              {(() => { fetch('http://127.0.0.1:7610/ingest/8e7447a5-506a-4460-a41a-7b63d5e55b2a',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0ce9c5'},body:JSON.stringify({sessionId:'0ce9c5',location:'TerminalPanel.jsx:no-active-run',message:'Showing No active run',data:{taskId,logLinesLen:logLines.length},hypothesisId:'H_terminal_no_run',timestamp:Date.now()})}).catch(()=>{}); return null })()}
+              {/* #endregion */}
+              <p className="text-slate-500">No active run. Start a pipeline run from the Canvas to see live logs.</p>
+            </>
           )}
           {logLines.length === 0 && taskId && (
             <p className="text-slate-500">Connecting to stream…</p>
